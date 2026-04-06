@@ -1,6 +1,6 @@
 // Package engine imports required dependencies for the ForkSync engine.
 // This file ensures go.mod retains the required dependencies.
-package engine
+package main
 
 import (
 	_ "github.com/go-git/go-git/v5"
