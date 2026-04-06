@@ -19,6 +19,8 @@ const (
 	RepoStatusSynced       RepoStatus = "synced"
 	RepoStatusSyncing      RepoStatus = "syncing"
 	RepoStatusConflict     RepoStatus = "conflict"
+	RepoStatusResolving    RepoStatus = "resolving"  // agent 正在解决冲突
+	RepoStatusResolved     RepoStatus = "resolved"   // agent 解决完成，等待用户确认
 	RepoStatusError        RepoStatus = "error"
 	RepoStatusUnconfigured RepoStatus = "unconfigured"
 	RepoStatusUpToDate     RepoStatus = "up_to_date"
@@ -73,26 +75,68 @@ type ScannedRepo struct {
 
 // SyncResult 同步结果
 type SyncResult struct {
-	RepoID        string     `json:"repoId"`
-	RepoName      string     `json:"repoName"`
-	Status        RepoStatus `json:"status"`
-	CommitsPulled int        `json:"commitsPulled"`
-	ConflictFiles []string   `json:"conflictFiles,omitempty"`
-	ErrorMessage  string     `json:"errorMessage,omitempty"`
+	RepoID         string     `json:"repoId"`
+	RepoName       string     `json:"repoName"`
+	Status         RepoStatus `json:"status"`
+	CommitsPulled  int        `json:"commitsPulled"`
+	ConflictFiles  []string   `json:"conflictFiles,omitempty"`
+	ErrorMessage   string     `json:"errorMessage,omitempty"`
+	AgentUsed      string     `json:"agentUsed,omitempty"`
+	ConflictsFound int        `json:"conflictsFound,omitempty"`
+	AutoResolved   int        `json:"autoResolved,omitempty"`
+	PendingConfirm []string   `json:"pendingConfirm,omitempty"`
 }
 
-// ConflictFile 冲突文件
+// ConflictFile 冲突文件（简化版，不再包含文件内容，由 agent 自行读取）
 type ConflictFile struct {
-	Path          string `json:"path"`
-	OursContent   string `json:"oursContent"`
-	TheirsContent string `json:"theirsContent"`
-	MergedContent string `json:"mergedContent,omitempty"`
-	AIExplanation string `json:"aiExplanation,omitempty"`
+	Path string `json:"path"`
 }
+
+// --- Agent 相关类型 ---
+
+// AgentInfo Agent CLI 信息
+type AgentInfo struct {
+	Name      string `json:"name"`
+	Binary    string `json:"binary"`
+	Path      string `json:"path"`
+	Installed bool   `json:"installed"`
+	Version   string `json:"version,omitempty"`
+}
+
+// AgentSessionInfo Agent 会话信息
+type AgentSessionInfo struct {
+	ID         string    `json:"id"`
+	RepoID     string    `json:"repoId"`
+	AgentName  string    `json:"agentName"`
+	Status     string    `json:"status"`
+	CreatedAt  time.Time `json:"createdAt"`
+	LastUsedAt time.Time `json:"lastUsedAt"`
+}
+
+// AgentResolveResult Agent 解决结果
+type AgentResolveResult struct {
+	Success       bool     `json:"success"`
+	ResolvedFiles []string `json:"resolvedFiles"`
+	Diff          string   `json:"diff"`
+	Summary       string   `json:"summary"`
+	SessionID     string   `json:"sessionId"`
+}
+
+// AgentResolveRequest Agent 解决请求
+type AgentResolveRequest struct {
+	RepoID      string   `json:"repoId"`
+	Files       []string `json:"files"`
+	Strategy    string   `json:"strategy"`
+	AutoConfirm bool     `json:"autoConfirm"`
+}
+
+// --- 命令响应类型 ---
 
 // StatusData status 响应
 type StatusData struct {
-	Repos []Repo `json:"repos"`
+	Repos          []Repo      `json:"repos"`
+	Agents         []AgentInfo `json:"agents"`
+	PreferredAgent string      `json:"preferredAgent"`
 }
 
 // ScanData scan 响应
@@ -112,15 +156,21 @@ type AddData struct {
 
 // ResolveData resolve 响应
 type ResolveData struct {
-	RepoID    string         `json:"repoId"`
-	Conflicts []ConflictFile `json:"conflicts"`
+	RepoID      string              `json:"repoId"`
+	Conflicts   []ConflictFile      `json:"conflicts"`
+	AgentResult *AgentResolveResult `json:"agentResult,omitempty"`
 }
 
 // AcceptData accept 响应
 type AcceptData struct {
 	RepoID   string `json:"repoId"`
-	File     string `json:"file"`
 	Resolved bool   `json:"resolved"`
+}
+
+// RejectData reject 响应
+type RejectData struct {
+	RepoID     string `json:"repoId"`
+	RolledBack bool   `json:"rolledBack"`
 }
 
 // DoneData done 响应
@@ -128,4 +178,15 @@ type DoneData struct {
 	RepoID             string   `json:"repoId"`
 	AllResolved        bool     `json:"allResolved"`
 	RemainingConflicts []string `json:"remainingConflicts,omitempty"`
+}
+
+// AgentListData agent list 响应
+type AgentListData struct {
+	Agents    []AgentInfo `json:"agents"`
+	Preferred string      `json:"preferred"`
+}
+
+// AgentSessionsData agent sessions 响应
+type AgentSessionsData struct {
+	Sessions []AgentSessionInfo `json:"sessions"`
 }
