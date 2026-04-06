@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/github"
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -34,8 +35,16 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("%s is not a directory", dir)
 	}
 
+	// Load config for GitHub token
+	cfgMgr := config.NewManager()
+	cfg, _ := cfgMgr.Load()
+	ghToken := ""
+	if cfg != nil {
+		ghToken = cfg.GitHub.Token
+	}
+
 	gitOps := git.NewOperations()
-	ghClient := github.NewClient("") // No token for scan
+	ghClient := github.NewClient(ghToken)
 
 	var scannedRepos []types.ScannedRepo
 

@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Sync         SyncConfig         `mapstructure:"sync" yaml:"sync"`
 	AI           AIConfig           `mapstructure:"ai" yaml:"ai"`
+	GitHub       GitHubConfig       `mapstructure:"github" yaml:"github"`
 	Notification NotificationConfig `mapstructure:"notification" yaml:"notification"`
 	Proxy        ProxyConfig        `mapstructure:"proxy" yaml:"proxy"`
 }
@@ -30,6 +31,10 @@ type AIProviderConfig struct {
 	APIKey  string `mapstructure:"api_key" yaml:"api_key"`
 	Model   string `mapstructure:"model" yaml:"model"`
 	BaseURL string `mapstructure:"base_url" yaml:"base_url"`
+}
+
+type GitHubConfig struct {
+	Token string `mapstructure:"token" yaml:"token"`
 }
 
 type NotificationConfig struct {

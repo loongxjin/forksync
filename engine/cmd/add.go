@@ -32,6 +32,10 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid path: %w", err)
 	}
 
+	// Load config early for GitHub token
+	cfgMgr := config.NewManager()
+	cfg, _ := cfgMgr.Load()
+
 	gitOps := git.NewOperations()
 
 	// Verify it's a git repo
@@ -52,7 +56,11 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	// Auto-detect upstream if not provided
 	resolvedUpstream := upstreamURL
 	if resolvedUpstream == "" && originURL != "" && github.IsGitHubURL(originURL) {
-		ghClient := github.NewClient("")
+		ghToken := ""
+		if cfg != nil {
+			ghToken = cfg.GitHub.Token
+		}
+		ghClient := github.NewClient(ghToken)
 		owner, repoName, parseErr := github.ParseRepoURL(originURL)
 		if parseErr == nil {
 			result, detectErr := ghClient.DetectFork(cmd.Context(), owner, repoName)
@@ -80,12 +88,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		Status:   types.RepoStatusUnconfigured,
 	}
 
-	// Load config and store
-	cfgMgr := config.NewManager()
-	if _, err := cfgMgr.Load(); err != nil {
-		// Config load failure is non-fatal
-	}
-
+	// Load store
 	store := repo.NewJSONStore(cfgMgr.ConfigDir())
 	if err := store.Load(); err != nil {
 		return fmt.Errorf("load repo store: %w", err)
