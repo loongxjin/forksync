@@ -10,7 +10,7 @@ import (
 
 type Config struct {
 	Sync         SyncConfig         `mapstructure:"sync" yaml:"sync"`
-	AI           AIConfig           `mapstructure:"ai" yaml:"ai"`
+	Agent        AgentConfig        `mapstructure:"agent" yaml:"agent"`
 	GitHub       GitHubConfig       `mapstructure:"github" yaml:"github"`
 	Notification NotificationConfig `mapstructure:"notification" yaml:"notification"`
 	Proxy        ProxyConfig        `mapstructure:"proxy" yaml:"proxy"`
@@ -22,15 +22,13 @@ type SyncConfig struct {
 	AutoLaunch      bool   `mapstructure:"auto_launch" yaml:"auto_launch"`
 }
 
-type AIConfig struct {
-	DefaultProvider string                      `mapstructure:"default_provider" yaml:"default_provider"`
-	Providers       map[string]AIProviderConfig `mapstructure:"providers" yaml:"providers"`
-}
-
-type AIProviderConfig struct {
-	APIKey  string `mapstructure:"api_key" yaml:"api_key"`
-	Model   string `mapstructure:"model" yaml:"model"`
-	BaseURL string `mapstructure:"base_url" yaml:"base_url"`
+type AgentConfig struct {
+	Preferred           string   `mapstructure:"preferred" yaml:"preferred"`
+	Priority            []string `mapstructure:"priority" yaml:"priority"`
+	Timeout             string   `mapstructure:"timeout" yaml:"timeout"`
+	ConflictStrategy    string   `mapstructure:"conflict_strategy" yaml:"conflict_strategy"`
+	ConfirmBeforeCommit bool     `mapstructure:"confirm_before_commit" yaml:"confirm_before_commit"`
+	SessionTTL          string   `mapstructure:"session_ttl" yaml:"session_ttl"`
 }
 
 type GitHubConfig struct {
@@ -61,6 +59,14 @@ func NewManager() *Manager {
 	}
 }
 
+// NewManagerWithDir creates a Manager with a custom config directory (for testing).
+func NewManagerWithDir(dir string) *Manager {
+	return &Manager{
+		configDir: dir,
+		viper:     viper.New(),
+	}
+}
+
 func (m *Manager) ConfigDir() string {
 	return m.configDir
 }
@@ -78,6 +84,11 @@ func (m *Manager) Load() (*Config, error) {
 	m.viper.SetDefault("sync.default_interval", "30m")
 	m.viper.SetDefault("sync.sync_on_startup", true)
 	m.viper.SetDefault("sync.auto_launch", false)
+	m.viper.SetDefault("agent.priority", []string{"claude", "opencode", "droid", "codex"})
+	m.viper.SetDefault("agent.timeout", "10m")
+	m.viper.SetDefault("agent.conflict_strategy", "preserve_ours")
+	m.viper.SetDefault("agent.confirm_before_commit", true)
+	m.viper.SetDefault("agent.session_ttl", "24h")
 	m.viper.SetDefault("notification.enabled", true)
 	m.viper.SetDefault("notification.on_conflict", true)
 	m.viper.SetDefault("notification.on_sync_success", false)
@@ -97,7 +108,6 @@ func (m *Manager) Load() (*Config, error) {
 }
 
 func (m *Manager) Save(cfg *Config) error {
-	// Ensure the config directory exists
 	if err := os.MkdirAll(m.configDir, 0755); err != nil {
 		return err
 	}
