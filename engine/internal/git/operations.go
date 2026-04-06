@@ -361,6 +361,18 @@ func (o *Operations) AbortMerge(ctx context.Context, repoPath string) error {
 	return cmd.Run()
 }
 
+// CheckStaged runs `git diff --check` on staged files to detect whitespace
+// and other issues. Returns nil if clean, or an error with details.
+func (o *Operations) CheckStaged(ctx context.Context, repoPath string) error {
+	cmd := exec.CommandContext(ctx, "git", "diff", "--check", "--cached")
+	cmd.Dir = repoPath
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("whitespace/style issues detected:\n%s", string(output))
+	}
+	return nil
+}
+
 // RemoteInfo holds information about a git remote.
 type RemoteInfo struct {
 	Name string

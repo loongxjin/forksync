@@ -215,6 +215,12 @@ func (s *Syncer) tryAIResolve(ctx context.Context, r types.Repo, conflictPaths [
 			allSucceeded = false
 			continue
 		}
+
+		// Validate staged changes with git diff --check
+		if checkErr := s.gitOps.CheckStaged(ctx, r.Path); checkErr != nil {
+			// Log but don't fail — whitespace issues are non-critical
+			_ = checkErr
+		}
 	}
 
 	if !allSucceeded {

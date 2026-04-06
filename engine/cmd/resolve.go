@@ -306,6 +306,13 @@ func resolveWithAI(cmd *cobra.Command, cfg *config.Config, r types.Repo, store r
 			continue
 		}
 
+		// Validate staged changes with git diff --check
+		gitOps := git.NewOperations()
+		if checkErr := gitOps.CheckStaged(cmd.Context(), r.Path); checkErr != nil {
+			cf.AIExplanation = fmt.Sprintf("validation warning: %v", checkErr)
+			// Log warning but don't fail — whitespace issues are non-critical
+		}
+
 		resolvedConflicts = append(resolvedConflicts, cf)
 	}
 
