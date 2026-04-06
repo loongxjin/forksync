@@ -48,7 +48,7 @@ func (s *Syncer) SetNotifier(n *notify.Notifier) {
 type Result struct {
 	RepoID        string
 	RepoName      string
-	Status        string // "synced", "conflict", "up_to_date", "error"
+	Status        string // types.RepoStatus values: synced, conflict, up_to_date, error
 	CommitsPulled int
 	ConflictFiles []string
 	ErrorMessage  string
@@ -116,7 +116,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	}
 
 	if statusResult.BehindBy == 0 {
-		result.Status = "up_to_date"
+		result.Status = string(types.RepoStatusUpToDate)
 		result.CommitsPulled = 0
 		s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
 		return result

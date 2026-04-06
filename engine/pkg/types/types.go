@@ -21,6 +21,7 @@ const (
 	RepoStatusConflict     RepoStatus = "conflict"
 	RepoStatusError        RepoStatus = "error"
 	RepoStatusUnconfigured RepoStatus = "unconfigured"
+	RepoStatusUpToDate     RepoStatus = "up_to_date"
 )
 
 // Time 可序列化的 time.Time
