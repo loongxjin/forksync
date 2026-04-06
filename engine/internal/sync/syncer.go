@@ -13,6 +13,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
+	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 )
@@ -21,11 +22,12 @@ const defaultTimeout = 5 * time.Minute
 
 // Syncer handles repository synchronization.
 type Syncer struct {
-	gitOps *git.Operations
-	store  repo.Store
-	cfg    *config.Config
-	mu     sync.Mutex
-	active map[string]bool // tracks repos currently syncing
+	gitOps   *git.Operations
+	store    repo.Store
+	cfg      *config.Config
+	notifier *notify.Notifier
+	mu       sync.Mutex
+	active   map[string]bool // tracks repos currently syncing
 }
 
 // NewSyncer creates a new Syncer.
@@ -35,6 +37,11 @@ func NewSyncer(store repo.Store) *Syncer {
 		store:  store,
 		active: make(map[string]bool),
 	}
+}
+
+// SetNotifier sets the notification handler.
+func (s *Syncer) SetNotifier(n *notify.Notifier) {
+	s.notifier = n
 }
 
 // Result contains the result of syncing a single repo.
@@ -95,6 +102,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		result.Status = "error"
 		result.ErrorMessage = fmt.Sprintf("fetch failed: %v", err)
 		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
+		s.notifyResult(r.Name, result)
 		return result
 	}
 
@@ -122,6 +130,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		result.Status = "error"
 		result.ErrorMessage = fmt.Sprintf("merge failed: %v", err)
 		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
+		s.notifyResult(r.Name, result)
 		return result
 	}
 
@@ -140,12 +149,14 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		result.Status = "conflict"
 		result.ConflictFiles = mergeResult.Conflicts
 		s.updateRepoStatus(r.ID, types.RepoStatusConflict, "")
+		s.notifyResult(r.Name, result)
 		return result
 	}
 
 	// Success
 	result.Status = "synced"
 	s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
+	s.notifyResult(r.Name, result)
 	return result
 }
 
@@ -263,6 +274,23 @@ func NewSyncerFromConfig(cfg *config.Config, store repo.Store) *Syncer {
 		store:  store,
 		cfg:    cfg,
 		active: make(map[string]bool),
+	}
+}
+
+// notifyResult sends a notification based on the sync result.
+func (s *Syncer) notifyResult(repoName string, result *Result) {
+	if s.notifier == nil {
+		return
+	}
+	switch result.Status {
+	case "synced":
+		if result.CommitsPulled > 0 {
+			s.notifier.NotifySyncSuccess(repoName, result.CommitsPulled)
+		}
+	case "conflict":
+		s.notifier.NotifyConflict(repoName, len(result.ConflictFiles))
+	case "error":
+		s.notifier.NotifyError(repoName, result.ErrorMessage)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -33,6 +34,11 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	syncer := syncpkg.NewSyncerFromConfig(cfg, store)
+
+	// Set up notifier if enabled in config
+	if cfg != nil && cfg.Notification.Enabled {
+		syncer.SetNotifier(notify.NewNotifier(true))
+	}
 
 	var syncResults []types.SyncResult
 
