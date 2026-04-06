@@ -2,77 +2,49 @@ package conflict
 
 import (
 	"context"
+	"os/exec"
 	"strings"
 
-	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
-// Detector handles conflict detection and file content extraction.
-type Detector struct {
-	gitOps *git.Operations
-}
+// Detector handles conflict detection.
+type Detector struct{}
 
 // NewDetector creates a new conflict Detector.
 func NewDetector() *Detector {
-	return &Detector{gitOps: git.NewOperations()}
+	return &Detector{}
 }
 
-// GetConflictFiles extracts conflict file information from a repo.
+// GetConflictFiles returns a list of conflict file paths from a repo.
+// Unlike the previous version, this only returns file paths — the agent
+// reads file contents directly from disk.
 func (d *Detector) GetConflictFiles(ctx context.Context, repoPath string, conflictPaths []string) ([]types.ConflictFile, error) {
-	var files []types.ConflictFile
+	files := make([]types.ConflictFile, 0, len(conflictPaths))
 	for _, path := range conflictPaths {
-		cf := types.ConflictFile{Path: path}
-
-		// Get the conflicted content (with markers)
-		content, err := d.gitOps.GetConflictedContent(ctx, repoPath, path)
-		if err != nil {
-			cf.OursContent = "" // fallback
-		} else {
-			// Parse ours/theirs from conflict markers
-			ours, theirs := parseConflictSections(content)
-			cf.OursContent = ours
-			cf.TheirsContent = theirs
-		}
-
-		files = append(files, cf)
+		files = append(files, types.ConflictFile{Path: path})
 	}
 	return files, nil
 }
 
-// parseConflictSections extracts ours and theirs sections from conflict markers.
-func parseConflictSections(content string) (ours, theirs string) {
-	var oursParts, theirsParts []string
-	inOurs := false
-	inTheirs := false
-
-	for _, line := range strings.Split(content, "\n") {
-		if strings.HasPrefix(line, "<<<<<<<") {
-			inOurs = true
-			continue
-		}
-		if strings.HasPrefix(line, "=======") {
-			inOurs = false
-			inTheirs = true
-			continue
-		}
-		if strings.HasPrefix(line, ">>>>>>>") {
-			inTheirs = false
-			continue
-		}
-		if inOurs {
-			oursParts = append(oursParts, line)
-		}
-		if inTheirs {
-			theirsParts = append(theirsParts, line)
-		}
-	}
-
-	return strings.Join(oursParts, "\n"), strings.Join(theirsParts, "\n")
-}
-
 // HasConflictMarkers checks if content contains unresolved conflict markers.
 func HasConflictMarkers(content string) bool {
-	return strings.Contains(content, "<<<<<<<") ||
-		(strings.Contains(content, "=======") && strings.Contains(content, ">>>>>>>"))
+	return strings.Contains(content, "=======") && strings.Contains(content, ">>>>>>>")
+}
+
+// DetectConflicts runs git diff to find files with unresolved conflicts.
+func DetectConflicts(ctx context.Context, repoPath string) []string {
+	cmd := exec.CommandContext(ctx, "git", "diff", "--name-only", "--diff-filter=U")
+	cmd.Dir = repoPath
+	output, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, f := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if f != "" {
+			files = append(files, f)
+		}
+	}
+	return files
 }
