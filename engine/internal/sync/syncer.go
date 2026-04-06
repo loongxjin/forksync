@@ -1,0 +1,174 @@
+package sync
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/git"
+	"github.com/loongxjin/forksync/engine/internal/repo"
+	"github.com/loongxjin/forksync/engine/pkg/types"
+)
+
+const defaultTimeout = 5 * time.Minute
+
+// Syncer handles repository synchronization.
+type Syncer struct {
+	gitOps *git.Operations
+	store  repo.Store
+	mu     sync.Mutex
+	active map[string]bool // tracks repos currently syncing
+}
+
+// NewSyncer creates a new Syncer.
+func NewSyncer(store repo.Store) *Syncer {
+	return &Syncer{
+		gitOps: git.NewOperations(),
+		store:  store,
+		active: make(map[string]bool),
+	}
+}
+
+// Result contains the result of syncing a single repo.
+type Result struct {
+	RepoID        string
+	RepoName      string
+	Status        string // "synced", "conflict", "up_to_date", "error"
+	CommitsPulled int
+	ConflictFiles []string
+	ErrorMessage  string
+}
+
+// ToSyncResult converts Result to types.SyncResult for JSON output.
+func (r *Result) ToSyncResult() types.SyncResult {
+	return types.SyncResult{
+		RepoID:        r.RepoID,
+		RepoName:      r.RepoName,
+		Status:        types.RepoStatus(r.Status),
+		CommitsPulled: r.CommitsPulled,
+		ConflictFiles: r.ConflictFiles,
+		ErrorMessage:  r.ErrorMessage,
+	}
+}
+
+// SyncRepo syncs a single repository.
+func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
+	result := &Result{
+		RepoID:   r.ID,
+		RepoName: r.Name,
+	}
+
+	// Check if already syncing
+	s.mu.Lock()
+	if s.active[r.ID] {
+		s.mu.Unlock()
+		result.Status = "error"
+		result.ErrorMessage = "sync already in progress"
+		return result
+	}
+	s.active[r.ID] = true
+	defer func() {
+		s.mu.Lock()
+		delete(s.active, r.ID)
+		s.mu.Unlock()
+	}()
+	s.mu.Unlock()
+
+	// Set timeout
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	// Update status to syncing
+	r.Status = types.RepoStatusSyncing
+	_ = s.store.Update(r)
+
+	// Step 1: Fetch
+	if err := s.gitOps.Fetch(ctx, r); err != nil {
+		result.Status = "error"
+		result.ErrorMessage = fmt.Sprintf("fetch failed: %v", err)
+		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
+		return result
+	}
+
+	// Step 2: Check ahead/behind
+	statusResult, err := s.gitOps.Status(ctx, r)
+	if err != nil {
+		result.Status = "error"
+		result.ErrorMessage = fmt.Sprintf("status check failed: %v", err)
+		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
+		return result
+	}
+
+	if statusResult.BehindBy == 0 {
+		result.Status = "up_to_date"
+		result.CommitsPulled = 0
+		s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
+		return result
+	}
+
+	result.CommitsPulled = statusResult.BehindBy
+
+	// Step 3: Merge
+	mergeResult, err := s.gitOps.Merge(ctx, r)
+	if err != nil {
+		result.Status = "error"
+		result.ErrorMessage = fmt.Sprintf("merge failed: %v", err)
+		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
+		return result
+	}
+
+	if mergeResult.HasConflicts {
+		result.Status = "conflict"
+		result.ConflictFiles = mergeResult.Conflicts
+		s.updateRepoStatus(r.ID, types.RepoStatusConflict, "")
+		return result
+	}
+
+	// Success
+	result.Status = "synced"
+	s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
+	return result
+}
+
+// SyncAll syncs all managed repositories.
+func (s *Syncer) SyncAll(ctx context.Context) []*Result {
+	repos, err := s.store.List()
+	if err != nil {
+		return []*Result{{
+			Status:       "error",
+			ErrorMessage: fmt.Sprintf("list repos: %v", err),
+		}}
+	}
+
+	var results []*Result
+	for _, r := range repos {
+		if r.Upstream == "" {
+			continue // skip repos without upstream
+		}
+		result := s.SyncRepo(ctx, r)
+		results = append(results, result)
+	}
+
+	return results
+}
+
+func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg string) {
+	r, ok := s.store.Get(id)
+	if !ok {
+		return
+	}
+	r.Status = status
+	r.ErrorMessage = errMsg
+	if status == types.RepoStatusSynced {
+		now := types.Time{Time: time.Now()}
+		r.LastSync = &now
+	}
+	_ = s.store.Update(r)
+}
+
+// NewSyncerFromConfig creates a Syncer using config defaults.
+func NewSyncerFromConfig(_ *config.Config, store repo.Store) *Syncer {
+	return NewSyncer(store)
+}
