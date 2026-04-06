@@ -258,6 +258,8 @@ func resolveWithAI(cmd *cobra.Command, cfg *config.Config, r types.Repo, store r
 	provider := ai.NewOpenAIAdapter(apiKey, model, baseURL)
 
 	var resolvedConflicts []types.ConflictFile
+	allSucceeded := true
+
 	for _, cf := range conflictFiles {
 		req := ai.ConflictRequest{
 			FilePath:        cf.Path,
@@ -268,11 +270,58 @@ func resolveWithAI(cmd *cobra.Command, cfg *config.Config, r types.Repo, store r
 		resolution, err := provider.ResolveConflicts(cmd.Context(), req)
 		if err != nil {
 			cf.AIExplanation = fmt.Sprintf("AI resolution failed: %v", err)
-		} else {
-			cf.MergedContent = resolution.MergedContent
-			cf.AIExplanation = resolution.Explanation
+			allSucceeded = false
+			resolvedConflicts = append(resolvedConflicts, cf)
+			continue
 		}
+
+		cf.MergedContent = resolution.MergedContent
+		cf.AIExplanation = resolution.Explanation
+
+		// Validate: reject if conflict markers remain
+		if conflict.HasConflictMarkers(resolution.MergedContent) {
+			cf.AIExplanation = "AI output still contains conflict markers, manual review required"
+			cf.MergedContent = "" // clear so it's not written
+			allSucceeded = false
+			resolvedConflicts = append(resolvedConflicts, cf)
+			continue
+		}
+
+		// Write resolved content to file
+		fullPath := filepath.Join(r.Path, cf.Path)
+		if writeErr := os.WriteFile(fullPath, []byte(resolution.MergedContent), 0644); writeErr != nil {
+			cf.AIExplanation = fmt.Sprintf("failed to write file: %v", writeErr)
+			allSucceeded = false
+			resolvedConflicts = append(resolvedConflicts, cf)
+			continue
+		}
+
+		// Stage the file with git add
+		gitAddCmd := exec.CommandContext(cmd.Context(), "git", "add", cf.Path)
+		gitAddCmd.Dir = r.Path
+		if addOutput, addErr := gitAddCmd.CombinedOutput(); addErr != nil {
+			cf.AIExplanation = fmt.Sprintf("git add failed: %s: %v", string(addOutput), addErr)
+			allSucceeded = false
+			resolvedConflicts = append(resolvedConflicts, cf)
+			continue
+		}
+
 		resolvedConflicts = append(resolvedConflicts, cf)
+	}
+
+	// If all conflicts resolved, complete the merge
+	if allSucceeded && len(resolvedConflicts) > 0 {
+		commitCmd := exec.CommandContext(cmd.Context(), "git", "commit", "-m", "Merge upstream (AI-resolved conflicts)")
+		commitCmd.Dir = r.Path
+		if commitOutput, commitErr := commitCmd.CombinedOutput(); commitErr != nil {
+			outputText("⚠️  Files staged but commit failed: %s", string(commitOutput))
+			outputText("Run 'forksync resolve %s --done' to complete manually.", r.Name)
+		} else {
+			// Update repo status
+			r.Status = types.RepoStatusSynced
+			r.ErrorMessage = ""
+			_ = store.Update(r)
+		}
 	}
 
 	if isJSON() {
@@ -280,16 +329,25 @@ func resolveWithAI(cmd *cobra.Command, cfg *config.Config, r types.Repo, store r
 	} else {
 		outputText("AI resolved %d conflicts:", len(resolvedConflicts))
 		for _, cf := range resolvedConflicts {
-			status := "✅ resolved"
+			status := "✅ resolved & staged"
 			if cf.MergedContent == "" {
 				status = "❌ failed"
 			}
 			outputText("  %s %s", status, cf.Path)
+			if cf.AIExplanation != "" {
+				outputText("     %s", cf.AIExplanation)
+			}
 		}
-		outputText("")
-		outputText("Review the changes and run:")
-		outputText("  forksync resolve %s --accept <filepath> --content <content>", r.Name)
-		outputText("  forksync resolve %s --done", r.Name)
+		if allSucceeded {
+			outputText("")
+			outputText("✅ Merge completed for %s", r.Name)
+		} else {
+			outputText("")
+			outputText("⚠️  Some conflicts could not be auto-resolved.")
+			outputText("Resolve manually and run:")
+			outputText("  forksync resolve %s --accept <filepath> --content <content>", r.Name)
+			outputText("  forksync resolve %s --done", r.Name)
+		}
 	}
 
 	return nil
