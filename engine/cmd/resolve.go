@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -16,17 +18,32 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var resolveAI bool
+var (
+	resolveAI      bool
+	resolveAccept  string // filepath to accept
+	resolveContent string // merged content for --accept
+	resolveDone    bool   // mark conflicts as resolved
+)
 
 var resolveCmd = &cobra.Command{
 	Use:   "resolve <repo-name>",
 	Short: "Resolve conflicts in a repository",
-	Args:  cobra.ExactArgs(1),
-	RunE:  runResolve,
+	Long: `Resolve merge conflicts in a repository.
+
+Examples:
+  forksync resolve my-repo                    # Show conflicts
+  forksync resolve my-repo --ai               # AI-powered resolution
+  forksync resolve my-repo --accept file.txt --content "resolved content"
+  forksync resolve my-repo --done             # Mark conflicts as resolved`,
+	Args: cobra.ExactArgs(1),
+	RunE: runResolve,
 }
 
 func init() {
 	resolveCmd.Flags().BoolVar(&resolveAI, "ai", false, "use AI to resolve conflicts")
+	resolveCmd.Flags().StringVar(&resolveAccept, "accept", "", "accept resolution for a specific file (requires --content)")
+	resolveCmd.Flags().StringVar(&resolveContent, "content", "", "merged content to write (used with --accept)")
+	resolveCmd.Flags().BoolVar(&resolveDone, "done", false, "mark all conflicts as resolved and complete merge")
 	rootCmd.AddCommand(resolveCmd)
 }
 
@@ -44,6 +61,17 @@ func runResolve(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("repository %q not found", args[0])
 	}
 
+	// Handle --done: check remaining conflicts, complete merge
+	if resolveDone {
+		return runResolveDone(cmd, r, store)
+	}
+
+	// Handle --accept: write resolved content to file, git add
+	if resolveAccept != "" {
+		return runResolveAccept(cmd, r, store)
+	}
+
+	// Not in conflict state
 	if r.Status != types.RepoStatusConflict {
 		if isJSON() {
 			outputJSON(types.DoneData{RepoID: r.ID, AllResolved: true}, nil)
@@ -86,7 +114,122 @@ func runResolve(cmd *cobra.Command, args []string) error {
 			outputText("  %s", cf.Path)
 		}
 		outputText("")
-		outputText("Use --ai flag to resolve with AI, or resolve manually and run 'forksync sync %s'", r.Name)
+		outputText("Use --ai flag to resolve with AI, or resolve manually and run:")
+		outputText("  forksync resolve %s --accept <filepath> --content <content>", r.Name)
+		outputText("  forksync resolve %s --done", r.Name)
+	}
+
+	return nil
+}
+
+// runResolveAccept writes resolved content to a file and stages it with git add.
+func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store) error {
+	if resolveContent == "" {
+		// Try reading from stdin if --content is not provided
+		stat, _ := os.Stdin.Stat()
+		if (stat.Mode() & os.ModeCharDevice) != 0 {
+			return fmt.Errorf("--accept requires --content or piped stdin content")
+		}
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("read stdin: %w", err)
+		}
+		resolveContent = string(data)
+	}
+
+	// Write the resolved content to the file
+	fullPath := filepath.Join(r.Path, resolveAccept)
+	if err := os.WriteFile(fullPath, []byte(resolveContent), 0644); err != nil {
+		return fmt.Errorf("write resolved file: %w", err)
+	}
+
+	// Stage the file with git add
+	gitAddCmd := exec.CommandContext(cmd.Context(), "git", "add", resolveAccept)
+	gitAddCmd.Dir = r.Path
+	if output, err := gitAddCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git add %s: %s: %w", resolveAccept, string(output), err)
+	}
+
+	if isJSON() {
+		outputJSON(types.AcceptData{
+			RepoID:   r.ID,
+			File:     resolveAccept,
+			Resolved: true,
+		}, nil)
+	} else {
+		outputText("✅ Accepted resolution for %s", resolveAccept)
+	}
+
+	// Check if there are remaining conflicts
+	remaining := detectConflicts(cmd.Context(), r.Path)
+	if len(remaining) == 0 {
+		outputText("All conflicts resolved. Run 'forksync resolve %s --done' to complete.", r.Name)
+	}
+
+	_ = store
+	return nil
+}
+
+// runResolveDone checks for remaining conflicts and completes the merge.
+func runResolveDone(cmd *cobra.Command, r types.Repo, store repo.Store) error {
+	remaining := detectConflicts(cmd.Context(), r.Path)
+
+	if len(remaining) > 0 {
+		if isJSON() {
+			outputJSON(types.DoneData{
+				RepoID:             r.ID,
+				AllResolved:        false,
+				RemainingConflicts: remaining,
+			}, nil)
+		} else {
+			outputText("⚠️  %d conflicts still unresolved:", len(remaining))
+			for _, f := range remaining {
+				outputText("  - %s", f)
+			}
+		}
+		return nil
+	}
+
+	// No remaining conflicts — complete the merge
+	// Check if we're in a merge state
+	mergeHead := filepath.Join(r.Path, ".git", "MERGE_HEAD")
+	if _, err := os.Stat(mergeHead); err != nil {
+		// Not in a merge state, just update status
+		r.Status = types.RepoStatusSynced
+		r.ErrorMessage = ""
+		_ = store.Update(r)
+
+		if isJSON() {
+			outputJSON(types.DoneData{RepoID: r.ID, AllResolved: true}, nil)
+		} else {
+			outputText("✅ No merge in progress. Status updated.")
+		}
+		return nil
+	}
+
+	// Complete the merge with git commit
+	commitCmd := exec.CommandContext(cmd.Context(), "git", "commit", "--no-edit")
+	commitCmd.Dir = r.Path
+	output, err := commitCmd.CombinedOutput()
+	if err != nil {
+		// If --no-edit fails (e.g., no editor configured), try with a message
+		commitCmd = exec.CommandContext(cmd.Context(), "git", "commit", "-m", "Merge upstream changes (conflicts resolved)")
+		commitCmd.Dir = r.Path
+		output, err = commitCmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("git commit: %s: %w", string(output), err)
+		}
+	}
+
+	// Update repo status
+	r.Status = types.RepoStatusSynced
+	r.ErrorMessage = ""
+	_ = store.Update(r)
+
+	if isJSON() {
+		outputJSON(types.DoneData{RepoID: r.ID, AllResolved: true}, nil)
+	} else {
+		outputText("✅ Merge completed for %s", r.Name)
 	}
 
 	return nil
@@ -143,6 +286,10 @@ func resolveWithAI(cmd *cobra.Command, cfg *config.Config, r types.Repo, store r
 			}
 			outputText("  %s %s", status, cf.Path)
 		}
+		outputText("")
+		outputText("Review the changes and run:")
+		outputText("  forksync resolve %s --accept <filepath> --content <content>", r.Name)
+		outputText("  forksync resolve %s --done", r.Name)
 	}
 
 	return nil
