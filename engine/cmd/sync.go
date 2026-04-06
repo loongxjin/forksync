@@ -25,14 +25,14 @@ func init() {
 
 func runSync(cmd *cobra.Command, args []string) error {
 	cfgMgr := config.NewManager()
-	_, _ = cfgMgr.Load()
+	cfg, _ := cfgMgr.Load()
 
 	store := repo.NewJSONStore(cfgMgr.ConfigDir())
 	if err := store.Load(); err != nil {
 		return fmt.Errorf("load repo store: %w", err)
 	}
 
-	syncer := syncpkg.NewSyncer(store)
+	syncer := syncpkg.NewSyncerFromConfig(cfg, store)
 
 	var syncResults []types.SyncResult
 

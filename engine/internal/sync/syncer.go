@@ -3,9 +3,14 @@ package sync
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/loongxjin/forksync/engine/internal/ai"
+	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/repo"
@@ -18,6 +23,7 @@ const defaultTimeout = 5 * time.Minute
 type Syncer struct {
 	gitOps *git.Operations
 	store  repo.Store
+	cfg    *config.Config
 	mu     sync.Mutex
 	active map[string]bool // tracks repos currently syncing
 }
@@ -120,6 +126,17 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	}
 
 	if mergeResult.HasConflicts {
+		// Step 4: Try AI auto-resolve if conflictStrategy is "ai_resolve"
+		if r.ConflictStrategy == "ai_resolve" && s.cfg != nil {
+			resolved := s.tryAIResolve(ctx, r, mergeResult.Conflicts)
+			if resolved {
+				result.Status = "synced"
+				s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
+				return result
+			}
+			// AI resolve failed, fall through to conflict status
+		}
+
 		result.Status = "conflict"
 		result.ConflictFiles = mergeResult.Conflicts
 		s.updateRepoStatus(r.ID, types.RepoStatusConflict, "")
@@ -130,6 +147,77 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	result.Status = "synced"
 	s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
 	return result
+}
+
+// tryAIResolve attempts to resolve conflicts using AI. Returns true if all conflicts were resolved.
+func (s *Syncer) tryAIResolve(ctx context.Context, r types.Repo, conflictPaths []string) bool {
+	// Get AI provider config
+	providerName := "openai"
+	if s.cfg.AI.DefaultProvider != "" {
+		providerName = s.cfg.AI.DefaultProvider
+	}
+
+	providerCfg, ok := s.cfg.AI.Providers[providerName]
+	if !ok || providerCfg.APIKey == "" {
+		return false
+	}
+
+	provider := ai.NewOpenAIAdapter(providerCfg.APIKey, providerCfg.Model, providerCfg.BaseURL)
+	detector := conflict.NewDetector()
+
+	conflictFiles, err := detector.GetConflictFiles(ctx, r.Path, conflictPaths)
+	if err != nil {
+		return false
+	}
+
+	allSucceeded := true
+	for _, cf := range conflictFiles {
+		req := ai.ConflictRequest{
+			FilePath:        cf.Path,
+			ConflictContent: cf.OursContent,
+			Language:        detectLanguageFromPath(cf.Path),
+		}
+
+		resolution, err := provider.ResolveConflicts(ctx, req)
+		if err != nil {
+			allSucceeded = false
+			continue
+		}
+
+		// Validate: reject if conflict markers remain
+		if conflict.HasConflictMarkers(resolution.MergedContent) {
+			allSucceeded = false
+			continue
+		}
+
+		// Write resolved content
+		fullPath := filepath.Join(r.Path, cf.Path)
+		if writeErr := os.WriteFile(fullPath, []byte(resolution.MergedContent), 0644); writeErr != nil {
+			allSucceeded = false
+			continue
+		}
+
+		// Stage the file
+		gitAddCmd := exec.CommandContext(ctx, "git", "add", cf.Path)
+		gitAddCmd.Dir = r.Path
+		if addErr := gitAddCmd.Run(); addErr != nil {
+			allSucceeded = false
+			continue
+		}
+	}
+
+	if !allSucceeded {
+		return false
+	}
+
+	// Complete the merge with a commit
+	commitCmd := exec.CommandContext(ctx, "git", "commit", "-m", "Merge upstream (AI-resolved conflicts)")
+	commitCmd.Dir = r.Path
+	if commitErr := commitCmd.Run(); commitErr != nil {
+		return false
+	}
+
+	return true
 }
 
 // SyncAll syncs all managed repositories.
@@ -169,6 +257,38 @@ func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg str
 }
 
 // NewSyncerFromConfig creates a Syncer using config defaults.
-func NewSyncerFromConfig(_ *config.Config, store repo.Store) *Syncer {
-	return NewSyncer(store)
+func NewSyncerFromConfig(cfg *config.Config, store repo.Store) *Syncer {
+	return &Syncer{
+		gitOps: git.NewOperations(),
+		store:  store,
+		cfg:    cfg,
+		active: make(map[string]bool),
+	}
+}
+
+// detectLanguageFromPath detects programming language from file extension.
+func detectLanguageFromPath(path string) string {
+	ext := filepath.Ext(path)
+	switch ext {
+	case ".go":
+		return "go"
+	case ".ts", ".tsx":
+		return "typescript"
+	case ".js", ".jsx":
+		return "javascript"
+	case ".py":
+		return "python"
+	case ".rs":
+		return "rust"
+	case ".java":
+		return "java"
+	case ".rb":
+		return "ruby"
+	case ".c", ".h":
+		return "c"
+	case ".cpp", ".cc", ".cxx":
+		return "cpp"
+	default:
+		return ""
+	}
 }
