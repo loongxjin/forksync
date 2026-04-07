@@ -1,0 +1,16 @@
+appId: com.forksync.app
+productName: ForkSync
+directories:
+  output: dist
+  buildResources: resources
+extraResources:
+  - from: ../build/forksync
+    to: forksync
+mac:
+  category: public.app-category.developer-tools
+  target: dmg
+linux:
+  target: AppImage
+  category: Development
+win:
+  target: nsis

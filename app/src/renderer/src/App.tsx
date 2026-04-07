@@ -4,6 +4,7 @@ import { HashRouter, Routes, Route } from 'react-router-dom'
 import { RepoProvider } from './contexts/RepoContext'
 import { AgentProvider } from './contexts/AgentContext'
 import { SettingsProvider } from './contexts/SettingsContext'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { Dashboard } from './pages/Dashboard'
 import { Repos } from './pages/Repos'
@@ -23,23 +24,25 @@ function App(): JSX.Element {
   }, [])
 
   return (
-    <SettingsProvider>
-      <RepoProvider>
-        <AgentProvider>
-          <HashRouter>
-            <Routes>
-              <Route element={<Layout />}>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/repos" element={<Repos />} />
-                <Route path="/conflicts" element={<Conflicts />} />
-                <Route path="/conflicts/:repoId" element={<ConflictDetail />} />
-                <Route path="/settings" element={<Settings />} />
-              </Route>
-            </Routes>
-          </HashRouter>
-        </AgentProvider>
-      </RepoProvider>
-    </SettingsProvider>
+    <ErrorBoundary>
+      <SettingsProvider>
+        <RepoProvider>
+          <AgentProvider>
+            <HashRouter>
+              <Routes>
+                <Route element={<Layout />}>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/repos" element={<Repos />} />
+                  <Route path="/conflicts" element={<Conflicts />} />
+                  <Route path="/conflicts/:repoId" element={<ConflictDetail />} />
+                  <Route path="/settings" element={<Settings />} />
+                </Route>
+              </Routes>
+            </HashRouter>
+          </AgentProvider>
+        </RepoProvider>
+      </SettingsProvider>
+    </ErrorBoundary>
   )
 }
 
