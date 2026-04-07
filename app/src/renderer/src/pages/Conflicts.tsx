@@ -7,12 +7,14 @@ import { Badge } from '@/components/ui/badge'
 import type { Repo } from '@/types/engine'
 
 export function Conflicts(): JSX.Element {
-  const { repos, loading, refresh } = useRepos()
+  const { repos, loading, initialized, refresh } = useRepos()
   const navigate = useNavigate()
 
   useEffect(() => {
-    refresh()
-  }, [refresh])
+    if (!initialized) {
+      refresh()
+    }
+  }, [initialized, refresh])
 
   // Filter repos with conflict-related statuses
   const conflictRepos = repos.filter(

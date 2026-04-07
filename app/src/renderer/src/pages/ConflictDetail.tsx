@@ -10,7 +10,7 @@ import type { ResolveData } from '@/types/engine'
 export function ConflictDetail(): JSX.Element {
   const { repoId } = useParams<{ repoId: string }>()
   const navigate = useNavigate()
-  const { repos, refresh } = useRepos()
+  const { repos, initialized, refresh } = useRepos()
   const { resolve, resolveDone, resolveReject, preferred, loading } = useAgents()
 
   const [resolveResult, setResolveResult] = useState<ResolveData | null>(null)
@@ -19,8 +19,10 @@ export function ConflictDetail(): JSX.Element {
   const repo = repos.find((r) => r.name === repoId || r.id === repoId)
 
   useEffect(() => {
-    refresh()
-  }, [refresh])
+    if (!initialized) {
+      refresh()
+    }
+  }, [initialized, refresh])
 
   const handleResolve = async (): Promise<void> => {
     if (!repoId) return

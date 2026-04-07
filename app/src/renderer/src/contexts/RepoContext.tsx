@@ -7,6 +7,8 @@ import {
   useContext,
   useReducer,
   useCallback,
+  useRef,
+  useEffect,
   type ReactNode
 } from 'react'
 import type { Repo, ScannedRepo, SyncResult } from '@/types/engine'
@@ -21,12 +23,15 @@ interface RepoState {
   scannedRepos: ScannedRepo[]
   syncResults: SyncResult[]
   loading: boolean
+  initialized: boolean
   error: string | null
 }
 
 type RepoAction =
   | { type: 'SET_LOADING'; loading: boolean }
+  | { type: 'SET_INITIALIZED' }
   | { type: 'SET_REPOS'; repos: Repo[] }
+  | { type: 'SET_REPOS_SILENT'; repos: Repo[] }
   | { type: 'SET_SCANNED'; repos: ScannedRepo[] }
   | { type: 'SET_SYNC_RESULTS'; results: SyncResult[] }
   | { type: 'UPDATE_REPO'; repo: Repo }
@@ -38,6 +43,7 @@ const initialState: RepoState = {
   scannedRepos: [],
   syncResults: [],
   loading: false,
+  initialized: false,
   error: null
 }
 
@@ -45,8 +51,12 @@ function repoReducer(state: RepoState, action: RepoAction): RepoState {
   switch (action.type) {
     case 'SET_LOADING':
       return { ...state, loading: action.loading, error: null }
+    case 'SET_INITIALIZED':
+      return { ...state, initialized: true }
     case 'SET_REPOS':
-      return { ...state, repos: action.repos, loading: false }
+      return { ...state, repos: action.repos, loading: false, initialized: true }
+    case 'SET_REPOS_SILENT':
+      return { ...state, repos: action.repos }
     case 'SET_SCANNED':
       return { ...state, scannedRepos: action.repos, loading: false }
     case 'SET_SYNC_RESULTS':
@@ -87,8 +97,11 @@ const RepoContext = createContext<RepoContextValue | null>(null)
 // Provider
 // ---------------------------------------------------------------------------
 
+const AUTO_REFRESH_INTERVAL = 30_000 // 30 seconds
+
 export function RepoProvider({ children }: { children: ReactNode }): JSX.Element {
   const [state, dispatch] = useReducer(repoReducer, initialState)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const refresh = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', loading: true })
@@ -104,6 +117,29 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     }
   }, [])
 
+  // Silent refresh — updates data without changing loading state
+  const silentRefresh = useCallback(async () => {
+    try {
+      const res = await engineApi.status()
+      if (res.success) {
+        dispatch({ type: 'SET_REPOS_SILENT', repos: res.data.repos ?? [] })
+      }
+      // Ignore errors in background refresh
+    } catch {
+      // Ignore
+    }
+  }, [])
+
+  // Auto-refresh timer
+  useEffect(() => {
+    intervalRef.current = setInterval(silentRefresh, AUTO_REFRESH_INTERVAL)
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }, [silentRefresh])
+
   const syncAll = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', loading: true })
     try {
@@ -113,7 +149,6 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       } else {
         dispatch({ type: 'SET_ERROR', error: res.error })
       }
-      // Refresh repo statuses after sync
       await refresh()
     } catch (err) {
       dispatch({ type: 'SET_ERROR', error: (err as Error).message })
@@ -158,7 +193,6 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       try {
         const res = await engineApi.add(path, upstream)
         if (res.success) {
-          // Refresh full list after add
           await refresh()
         } else {
           dispatch({ type: 'SET_ERROR', error: res.error })

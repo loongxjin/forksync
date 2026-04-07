@@ -6,14 +6,16 @@ import { ScanDialog } from '@/components/ScanDialog'
 import { Button } from '@/components/ui/button'
 
 export function Repos(): JSX.Element {
-  const { repos, scannedRepos, loading, error, refresh, syncRepo, scan, addRepo, removeRepo } =
+  const { repos, scannedRepos, loading, initialized, error, refresh, syncRepo, scan, addRepo, removeRepo } =
     useRepos()
   const [showAdd, setShowAdd] = useState(false)
   const [showScan, setShowScan] = useState(false)
 
   useEffect(() => {
-    refresh()
-  }, [refresh])
+    if (!initialized) {
+      refresh()
+    }
+  }, [initialized, refresh])
 
   const handleRemove = async (name: string): Promise<void> => {
     if (confirm(`Remove "${name}" from ForkSync? The local repo won't be deleted.`)) {

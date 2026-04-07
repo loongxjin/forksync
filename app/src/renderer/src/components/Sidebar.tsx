@@ -12,13 +12,7 @@ export function Sidebar(): JSX.Element {
   const location = useLocation()
 
   return (
-    <aside className="flex h-screen w-60 flex-col border-r border-border bg-card">
-      {/* Logo */}
-      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <span className="text-lg">🔄</span>
-        <h1 className="text-base font-semibold text-foreground">ForkSync</h1>
-      </div>
-
+    <aside className="flex h-full w-60 flex-col border-r border-border bg-card">
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-2 py-3">
         {navItems.map((item) => (

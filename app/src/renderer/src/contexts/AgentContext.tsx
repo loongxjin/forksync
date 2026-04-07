@@ -7,6 +7,8 @@ import {
   useContext,
   useReducer,
   useCallback,
+  useRef,
+  useEffect,
   type ReactNode
 } from 'react'
 import type { AgentInfo, AgentSessionInfo, ResolveData, DoneData } from '@/types/engine'
@@ -21,13 +23,16 @@ interface AgentState {
   preferred: string
   sessions: AgentSessionInfo[]
   loading: boolean
+  initialized: boolean
   error: string | null
 }
 
 type AgentAction =
   | { type: 'SET_LOADING'; loading: boolean }
   | { type: 'SET_AGENTS'; agents: AgentInfo[]; preferred: string }
+  | { type: 'SET_AGENTS_SILENT'; agents: AgentInfo[]; preferred: string }
   | { type: 'SET_SESSIONS'; sessions: AgentSessionInfo[] }
+  | { type: 'SET_SESSIONS_SILENT'; sessions: AgentSessionInfo[] }
   | { type: 'SET_ERROR'; error: string | null }
 
 const initialState: AgentState = {
@@ -35,6 +40,7 @@ const initialState: AgentState = {
   preferred: '',
   sessions: [],
   loading: false,
+  initialized: false,
   error: null
 }
 
@@ -47,10 +53,19 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
         ...state,
         agents: action.agents,
         preferred: action.preferred,
-        loading: false
+        loading: false,
+        initialized: true
+      }
+    case 'SET_AGENTS_SILENT':
+      return {
+        ...state,
+        agents: action.agents,
+        preferred: action.preferred
       }
     case 'SET_SESSIONS':
-      return { ...state, sessions: action.sessions, loading: false }
+      return { ...state, sessions: action.sessions, loading: false, initialized: true }
+    case 'SET_SESSIONS_SILENT':
+      return { ...state, sessions: action.sessions }
     case 'SET_ERROR':
       return { ...state, error: action.error, loading: false }
     default:
@@ -80,8 +95,11 @@ const AgentContext = createContext<AgentContextValue | null>(null)
 // Provider
 // ---------------------------------------------------------------------------
 
+const AUTO_REFRESH_INTERVAL = 30_000 // 30 seconds
+
 export function AgentProvider({ children }: { children: ReactNode }): JSX.Element {
   const [state, dispatch] = useReducer(agentReducer, initialState)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const refreshAgents = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', loading: true })
@@ -114,6 +132,41 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
       dispatch({ type: 'SET_ERROR', error: (err as Error).message })
     }
   }, [])
+
+  // Silent background refresh — no loading state change
+  const silentRefresh = useCallback(async () => {
+    try {
+      const [agentsRes, sessionsRes] = await Promise.all([
+        engineApi.agentList(),
+        engineApi.agentSessions()
+      ])
+      if (agentsRes.success) {
+        dispatch({
+          type: 'SET_AGENTS_SILENT',
+          agents: agentsRes.data.agents ?? [],
+          preferred: agentsRes.data.preferred ?? ''
+        })
+      }
+      if (sessionsRes.success) {
+        dispatch({
+          type: 'SET_SESSIONS_SILENT',
+          sessions: sessionsRes.data.sessions ?? []
+        })
+      }
+    } catch {
+      // Ignore background refresh errors
+    }
+  }, [])
+
+  // Auto-refresh timer
+  useEffect(() => {
+    intervalRef.current = setInterval(silentRefresh, AUTO_REFRESH_INTERVAL)
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }, [silentRefresh])
 
   const resolve = useCallback(
     async (
@@ -176,7 +229,6 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
     try {
       const res = await engineApi.agentCleanup()
       if (res.success) {
-        // Refresh sessions after cleanup
         await refreshSessions()
         return res.data.removed
       }

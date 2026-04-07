@@ -9,14 +9,21 @@ import { Separator } from '@/components/ui/separator'
 import type { Repo, RepoStatus } from '@/types/engine'
 
 export function Dashboard(): JSX.Element {
-  const { repos, loading, error, refresh, syncAll } = useRepos()
-  const { agents, preferred, sessions, refreshAgents, refreshSessions } = useAgents()
+  const { repos, loading, initialized, error, refresh, syncAll } = useRepos()
+  const { agents, preferred, sessions, initialized: agentsInitialized, refreshAgents, refreshSessions } = useAgents()
 
   useEffect(() => {
-    refresh()
-    refreshAgents()
-    refreshSessions()
-  }, [refresh, refreshAgents, refreshSessions])
+    if (!initialized) {
+      refresh()
+    }
+  }, [initialized, refresh])
+
+  useEffect(() => {
+    if (!agentsInitialized) {
+      refreshAgents()
+      refreshSessions()
+    }
+  }, [agentsInitialized, refreshAgents, refreshSessions])
 
   // Count repos by status
   const statusCounts = repos.reduce<Record<RepoStatus, number>>(
