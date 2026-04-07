@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/repo"
@@ -52,42 +53,64 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Detect installed agents
+	registry := agent.NewRegistry("")
+	agents := registry.Discover()
+
+	// Determine preferred agent
+	preferredAgent := ""
+	if len(agents) > 0 {
+		preferredAgent = agents[0].Name
+	}
+
 	if isJSON() {
-		outputJSON(types.StatusData{Repos: repos}, nil)
+		outputJSON(types.StatusData{
+			Repos:          repos,
+			Agents:         agents,
+			PreferredAgent: preferredAgent,
+		}, nil)
 	} else {
 		if len(repos) == 0 {
 			outputText("No repositories managed. Use 'forksync add <path>' to add one.")
-			return nil
+		} else {
+			outputText("Managed Repositories (%d):", len(repos))
+			outputText("")
+			for _, r := range repos {
+				statusIcon := "⚪"
+				switch r.Status {
+				case types.RepoStatusSynced:
+					statusIcon = "🟢"
+				case types.RepoStatusSyncing:
+					statusIcon = "🟡"
+				case types.RepoStatusConflict:
+					statusIcon = "🔴"
+				case types.RepoStatusError:
+					statusIcon = "❌"
+				}
+
+				outputText("  %s %s", statusIcon, r.Name)
+				if r.Upstream != "" {
+					outputText("     Upstream: %s", r.Upstream)
+				}
+				if r.BehindBy > 0 {
+					outputText("     Behind by %d commits", r.BehindBy)
+				}
+				if r.AheadBy > 0 {
+					outputText("     Ahead by %d commits", r.AheadBy)
+				}
+				if r.ErrorMessage != "" {
+					outputText("     Error: %s", r.ErrorMessage)
+				}
+			}
 		}
 
-		outputText("Managed Repositories (%d):", len(repos))
-		outputText("")
-		for _, r := range repos {
-			statusIcon := "⚪"
-			switch r.Status {
-			case types.RepoStatusSynced:
-				statusIcon = "🟢"
-			case types.RepoStatusSyncing:
-				statusIcon = "🟡"
-			case types.RepoStatusConflict:
-				statusIcon = "🔴"
-			case types.RepoStatusError:
-				statusIcon = "❌"
-			}
-
-			outputText("  %s %s", statusIcon, r.Name)
-			if r.Upstream != "" {
-				outputText("     Upstream: %s", r.Upstream)
-			}
-			if r.BehindBy > 0 {
-				outputText("     Behind by %d commits", r.BehindBy)
-			}
-			if r.AheadBy > 0 {
-				outputText("     Ahead by %d commits", r.AheadBy)
-			}
-			if r.ErrorMessage != "" {
-				outputText("     Error: %s", r.ErrorMessage)
-			}
+		// Show agent detection
+		if len(agents) > 0 {
+			outputText("")
+			outputText("Agents detected: %s", preferredAgent)
+		} else {
+			outputText("")
+			outputText("No AI agents detected. Install Claude Code, OpenCode, Droid, or Codex for auto-conflict resolution.")
 		}
 	}
 
