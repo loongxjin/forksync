@@ -38,6 +38,8 @@ export interface EngineAPI {
   agentSessions(): Promise<ApiResponse<AgentSessionsData>>
   agentCleanup(): Promise<ApiResponse<AgentCleanupData>>
   history(repoName?: string, limit?: number): Promise<ApiResponse<HistoryData>>
+  /** Listen for navigation events from main process (notification click-through). Returns unsubscribe fn. */
+  onNavigate?: (callback: (path: string) => void) => () => void
 }
 
 /** Typed access to the engine API exposed via preload contextBridge */

@@ -1,5 +1,7 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import { Sidebar } from './Sidebar'
+import { engineApi } from '@/lib/api'
 
 function TitleBar(): JSX.Element {
   return (
@@ -11,6 +13,18 @@ function TitleBar(): JSX.Element {
 }
 
 export function Layout(): JSX.Element {
+  const navigate = useNavigate()
+
+  // Listen for navigation events from main process (notification click-through)
+  useEffect(() => {
+    const unsubscribe = engineApi.onNavigate?.((path: string) => {
+      navigate(path)
+    })
+    return () => {
+      unsubscribe?.()
+    }
+  }, [navigate])
+
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       <TitleBar />

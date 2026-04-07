@@ -7,6 +7,7 @@
 
 import { ipcMain } from 'electron'
 import { EngineClient } from './engine'
+import { notifySyncResults } from './notify'
 
 let engine: EngineClient | null = null
 
@@ -25,11 +26,19 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('engine:syncAll', async () => {
-    return e.syncAll()
+    const result = await e.syncAll()
+    if (result.success && result.data?.results) {
+      notifySyncResults(result.data.results)
+    }
+    return result
   })
 
   ipcMain.handle('engine:syncRepo', async (_event, name: string) => {
-    return e.syncRepo(name)
+    const result = await e.syncRepo(name)
+    if (result.success && result.data?.results) {
+      notifySyncResults(result.data.results)
+    }
+    return result
   })
 
   ipcMain.handle('engine:scan', async (_event, dir: string) => {

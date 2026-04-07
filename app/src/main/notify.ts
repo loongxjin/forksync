@@ -1,0 +1,92 @@
+/**
+ * Notification helper — Electron-native notifications with click-through
+ *
+ * Shows system notifications for sync events and navigates to the
+ * relevant page when the user clicks the notification.
+ */
+
+import { Notification, BrowserWindow } from 'electron'
+import type { SyncResult } from '../renderer/src/types/engine'
+
+/**
+ * Show Electron notifications for sync results.
+ * - Conflicts → navigate to /conflicts on click
+ * - Errors → show error detail
+ * - Success → informational only
+ */
+export function notifySyncResults(results: SyncResult[]): void {
+  if (!results || results.length === 0) return
+
+  const conflicts = results.filter(
+    (r) => r.status === 'conflict' || r.status === 'resolving'
+  )
+  const errors = results.filter((r) => r.status === 'error')
+  const synced = results.filter(
+    (r) => r.status === 'synced' || r.status === 'up_to_date'
+  )
+
+  // Conflict notification — high priority
+  if (conflicts.length > 0) {
+    const repoNames = conflicts.map((r) => r.repoName).join(', ')
+    const totalFiles = conflicts.reduce(
+      (sum, r) => sum + (r.conflictFiles?.length ?? r.conflictsFound ?? 0),
+      0
+    )
+    showNotification({
+      title: `Conflicts in ${conflicts.length} repo${conflicts.length > 1 ? 's' : ''}`,
+      body: `${repoNames} — ${totalFiles} file${totalFiles !== 1 ? 's' : ''} need resolution`,
+      navigateTo: '/conflicts'
+    })
+  }
+
+  // Error notification
+  if (errors.length > 0) {
+    const repoNames = errors.map((r) => r.repoName).join(', ')
+    showNotification({
+      title: `Sync failed for ${errors.length} repo${errors.length > 1 ? 's' : ''}`,
+      body: repoNames,
+      navigateTo: '/'
+    })
+  }
+
+  // Success summary (only if no conflicts/errors, to avoid notification spam)
+  if (conflicts.length === 0 && errors.length === 0 && synced.length > 0) {
+    const totalCommits = synced.reduce((sum, r) => sum + r.commitsPulled, 0)
+    if (totalCommits > 0) {
+      showNotification({
+        title: 'Sync complete',
+        body: `${synced.length} repo${synced.length > 1 ? 's' : ''} synced, ${totalCommits} commits pulled`,
+        navigateTo: '/'
+      })
+    }
+  }
+}
+
+interface NotifyOptions {
+  title: string
+  body: string
+  navigateTo?: string
+}
+
+function showNotification(opts: NotifyOptions): void {
+  if (!Notification.isSupported()) return
+
+  const notification = new Notification({
+    title: opts.title,
+    body: opts.body
+  })
+
+  if (opts.navigateTo) {
+    notification.on('click', () => {
+      const win = BrowserWindow.getAllWindows()[0]
+      if (win) {
+        if (win.isMinimized()) win.restore()
+        win.focus()
+        // Send navigation event to renderer
+        win.webContents.send('navigate', opts.navigateTo)
+      }
+    })
+  }
+
+  notification.show()
+}

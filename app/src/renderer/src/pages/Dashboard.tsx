@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRepos } from '@/contexts/RepoContext'
 import { useAgents } from '@/contexts/AgentContext'
 import { StatusCard, getStatusConfig } from '@/components/StatusCard'
@@ -6,11 +6,28 @@ import { AgentStatusBadge } from '@/components/AgentStatusBadge'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import type { Repo, RepoStatus } from '@/types/engine'
+import { engineApi } from '@/lib/api'
+import type { Repo, RepoStatus, SyncHistoryRecord } from '@/types/engine'
 
 export function Dashboard(): JSX.Element {
   const { repos, loading, initialized, error, refresh, syncAll } = useRepos()
   const { agents, preferred, sessions, initialized: agentsInitialized, refreshAgents, refreshSessions } = useAgents()
+  const [history, setHistory] = useState<SyncHistoryRecord[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true)
+    try {
+      const res = await engineApi.history(undefined, 20)
+      if (res.success && res.data) {
+        setHistory(res.data.records ?? [])
+      }
+    } catch {
+      // history is best-effort
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (!initialized) {
@@ -24,6 +41,11 @@ export function Dashboard(): JSX.Element {
       refreshSessions()
     }
   }, [agentsInitialized, refreshAgents, refreshSessions])
+
+  // Load history on mount and after sync
+  useEffect(() => {
+    loadHistory()
+  }, [loadHistory, loading])
 
   // Count repos by status
   const statusCounts = repos.reduce<Record<RepoStatus, number>>(
@@ -97,28 +119,18 @@ export function Dashboard(): JSX.Element {
 
       <Separator />
 
-      {/* Recent Activity */}
+      {/* Sync History Timeline */}
       <div className="rounded-lg border border-border bg-card p-4">
-        <h3 className="mb-3 text-sm font-medium text-muted-foreground">Recent Activity</h3>
-        {repos.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No repositories yet. Go to Repos to add one.
-          </p>
+        <h3 className="mb-3 text-sm font-medium text-muted-foreground">Sync History</h3>
+        {historyLoading && history.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Loading history...</p>
+        ) : history.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No sync history yet.</p>
         ) : (
-          <div className="space-y-2">
-            {repos
-              .filter((r) => r.lastSync)
-              .sort(
-                (a, b) =>
-                  new Date(b.lastSync!).getTime() - new Date(a.lastSync!).getTime()
-              )
-              .slice(0, 8)
-              .map((repo) => (
-                <RepoActivityRow key={repo.id} repo={repo} />
-              ))}
-            {repos.every((r) => !r.lastSync) && (
-              <p className="text-sm text-muted-foreground">No sync activity yet.</p>
-            )}
+          <div className="space-y-1">
+            {history.map((record) => (
+              <HistoryRow key={record.id} record={record} />
+            ))}
           </div>
         )}
       </div>
@@ -146,24 +158,54 @@ export function Dashboard(): JSX.Element {
   )
 }
 
-function RepoActivityRow({ repo }: { repo: Repo }): JSX.Element {
-  const config = getStatusConfig(repo.status)
-  const timeAgo = formatTimeAgo(repo.lastSync)
+function HistoryRow({ record }: { record: SyncHistoryRecord }): JSX.Element {
+  const config = getHistoryStatusConfig(record.status)
+  const timeAgo = formatTimeAgo(record.createdAt)
 
   return (
     <div className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 min-w-0">
         <span>{config.icon}</span>
-        <span className="font-medium">{repo.name}</span>
-        <span className="text-xs text-muted-foreground">
-          {repo.status === 'synced' || repo.status === 'up_to_date'
-            ? `synced${repo.behindBy ? `, ${repo.behindBy} behind` : ''}`
-            : repo.status}
-        </span>
+        <span className="font-medium truncate">{record.repoName}</span>
+        {record.commitsPulled > 0 && (
+          <span className="text-xs text-muted-foreground">
+            {record.commitsPulled} commit{record.commitsPulled !== 1 ? 's' : ''}
+          </span>
+        )}
+        {record.agentUsed && (
+          <Badge variant="info" className="text-[10px] px-1 py-0">
+            🤖 {record.agentUsed}
+          </Badge>
+        )}
+        {record.conflictsFound > 0 && (
+          <span className="text-xs text-orange-500">
+            {record.conflictsFound} conflict{record.conflictsFound !== 1 ? 's' : ''}
+          </span>
+        )}
+        {record.errorMessage && (
+          <span className="truncate text-xs text-red-500" title={record.errorMessage}>
+            {record.errorMessage}
+          </span>
+        )}
       </div>
-      <span className="text-xs text-muted-foreground">{timeAgo}</span>
+      <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">{timeAgo}</span>
     </div>
   )
+}
+
+function getHistoryStatusConfig(status: string): { icon: string; color: string } {
+  switch (status) {
+    case 'synced':
+      return { icon: '✅', color: '#22c55e' }
+    case 'up_to_date':
+      return { icon: '—', color: '#6b7280' }
+    case 'conflict':
+      return { icon: '⚠️', color: '#f97316' }
+    case 'error':
+      return { icon: '❌', color: '#ef4444' }
+    default:
+      return { icon: '•', color: '#6b7280' }
+  }
 }
 
 function formatTimeAgo(dateStr: string | null): string {

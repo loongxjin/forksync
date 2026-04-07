@@ -43,7 +43,13 @@ const api = {
   agentCleanup: (): Promise<ApiResponse<AgentCleanupData>> =>
     ipcRenderer.invoke('engine:agentCleanup'),
   history: (repoName?: string, limit?: number): Promise<ApiResponse<HistoryData>> =>
-    ipcRenderer.invoke('engine:history', repoName, limit)
+    ipcRenderer.invoke('engine:history', repoName, limit),
+  // Notification click-through navigation
+  onNavigate: (callback: (path: string) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, path: string): void => callback(path)
+    ipcRenderer.on('navigate', handler)
+    return () => ipcRenderer.removeListener('navigate', handler)
+  }
 }
 
 contextBridge.exposeInMainWorld('api', api)
