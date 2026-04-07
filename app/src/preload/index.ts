@@ -3,26 +3,44 @@
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
+import type {
+  ApiResponse,
+  StatusData,
+  SyncData,
+  ScanData,
+  AddData,
+  RemoveData,
+  ResolveData,
+  DoneData,
+  RejectData,
+  AgentListData,
+  AgentSessionsData,
+  AgentCleanupData
+} from '../renderer/src/types/engine'
 
 const api = {
-  status: (): Promise<void> => ipcRenderer.invoke('engine:status'),
-  syncAll: (): Promise<void> => ipcRenderer.invoke('engine:syncAll'),
-  syncRepo: (name: string): Promise<void> => ipcRenderer.invoke('engine:syncRepo', name),
-  scan: (dir: string): Promise<void> => ipcRenderer.invoke('engine:scan', dir),
-  add: (path: string, upstream?: string): Promise<void> =>
+  status: (): Promise<ApiResponse<StatusData>> => ipcRenderer.invoke('engine:status'),
+  syncAll: (): Promise<ApiResponse<SyncData>> => ipcRenderer.invoke('engine:syncAll'),
+  syncRepo: (name: string): Promise<ApiResponse<SyncData>> =>
+    ipcRenderer.invoke('engine:syncRepo', name),
+  scan: (dir: string): Promise<ApiResponse<ScanData>> => ipcRenderer.invoke('engine:scan', dir),
+  add: (path: string, upstream?: string): Promise<ApiResponse<AddData>> =>
     ipcRenderer.invoke('engine:add', path, upstream),
-  remove: (name: string): Promise<void> => ipcRenderer.invoke('engine:remove', name),
+  remove: (name: string): Promise<ApiResponse<RemoveData>> =>
+    ipcRenderer.invoke('engine:remove', name),
   resolve: (
     name: string,
     opts?: { agent?: string; noConfirm?: boolean }
-  ): Promise<void> => ipcRenderer.invoke('engine:resolve', name, opts),
-  resolveDone: (name: string): Promise<void> =>
+  ): Promise<ApiResponse<ResolveData>> => ipcRenderer.invoke('engine:resolve', name, opts),
+  resolveDone: (name: string): Promise<ApiResponse<DoneData>> =>
     ipcRenderer.invoke('engine:resolveDone', name),
-  resolveReject: (name: string): Promise<void> =>
+  resolveReject: (name: string): Promise<ApiResponse<RejectData>> =>
     ipcRenderer.invoke('engine:resolveReject', name),
-  agentList: (): Promise<void> => ipcRenderer.invoke('engine:agentList'),
-  agentSessions: (): Promise<void> => ipcRenderer.invoke('engine:agentSessions'),
-  agentCleanup: (): Promise<void> => ipcRenderer.invoke('engine:agentCleanup')
+  agentList: (): Promise<ApiResponse<AgentListData>> => ipcRenderer.invoke('engine:agentList'),
+  agentSessions: (): Promise<ApiResponse<AgentSessionsData>> =>
+    ipcRenderer.invoke('engine:agentSessions'),
+  agentCleanup: (): Promise<ApiResponse<AgentCleanupData>> =>
+    ipcRenderer.invoke('engine:agentCleanup')
 }
 
 contextBridge.exposeInMainWorld('api', api)
