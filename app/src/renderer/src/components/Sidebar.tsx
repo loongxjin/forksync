@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
+import { useSettings } from '@/contexts/SettingsContext'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '🏠' },
@@ -52,20 +53,23 @@ export function Sidebar(): JSX.Element {
 }
 
 function ThemeToggle(): JSX.Element {
-  const toggleTheme = (): void => {
-    const html = document.documentElement
-    const isDark = html.classList.contains('dark')
-    html.classList.toggle('dark', !isDark)
-    localStorage.setItem('forksync-theme', isDark ? 'light' : 'dark')
+  const { theme, setTheme } = useSettings()
+
+  const cycleTheme = (): void => {
+    const next = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark'
+    setTheme(next)
   }
+
+  const icon = theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : '💻'
+  const label = theme === 'dark' ? 'Dark' : theme === 'light' ? 'Light' : 'System'
 
   return (
     <button
-      onClick={toggleTheme}
+      onClick={cycleTheme}
       className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
     >
-      <span className="text-base">🌙</span>
-      <span>Toggle Theme</span>
+      <span className="text-base">{icon}</span>
+      <span>{label}</span>
     </button>
   )
 }
