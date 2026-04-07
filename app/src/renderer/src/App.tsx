@@ -1,17 +1,36 @@
-import { Button } from './components/ui/button'
+import './assets/main.css'
+import { useEffect } from 'react'
+import { HashRouter, Routes, Route } from 'react-router-dom'
+import { Layout } from './components/Layout'
+import { Dashboard } from './pages/Dashboard'
+import { Repos } from './pages/Repos'
+import { Conflicts } from './pages/Conflicts'
+import { ConflictDetail } from './pages/ConflictDetail'
+import { Settings } from './pages/Settings'
 
-function App(): React.ReactElement {
+function App(): JSX.Element {
+  // Initialize theme from localStorage (default: dark)
+  useEffect(() => {
+    const saved = localStorage.getItem('forksync-theme')
+    if (saved === 'light') {
+      document.documentElement.classList.remove('dark')
+    } else {
+      document.documentElement.classList.add('dark')
+    }
+  }, [])
+
   return (
-    <div className="dark min-h-screen p-8">
-      <h1 className="text-2xl font-bold mb-4">ForkSync</h1>
-      <p className="text-muted-foreground mb-4">Auto-sync fork repos with AI agent conflict resolution</p>
-      <div className="flex gap-2">
-        <Button variant="default">Default</Button>
-        <Button variant="secondary">Secondary</Button>
-        <Button variant="outline">Outline</Button>
-        <Button variant="destructive">Destructive</Button>
-      </div>
-    </div>
+    <HashRouter>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/repos" element={<Repos />} />
+          <Route path="/conflicts" element={<Conflicts />} />
+          <Route path="/conflicts/:repoId" element={<ConflictDetail />} />
+          <Route path="/settings" element={<Settings />} />
+        </Route>
+      </Routes>
+    </HashRouter>
   )
 }
 
