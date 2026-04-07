@@ -1,5 +1,7 @@
 # ForkSync
 
+**English** | [中文](./README_zh.md)
+
 <p align="center">
   <strong>Keep your GitHub fork repos in sync — automatically.</strong>
 </p>
