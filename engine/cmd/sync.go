@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
@@ -38,6 +39,13 @@ func runSync(cmd *cobra.Command, args []string) error {
 	// Set up notifier if enabled in config
 	if cfg != nil && cfg.Notification.Enabled {
 		syncer.SetNotifier(notify.NewNotifier(true))
+	}
+
+	// Set up history store
+	histStore, err := history.NewStore(cfgMgr.ConfigDir())
+	if err == nil {
+		syncer.SetHistoryStore(histStore)
+		defer histStore.Close()
 	}
 
 	syncResults := make([]types.SyncResult, 0)

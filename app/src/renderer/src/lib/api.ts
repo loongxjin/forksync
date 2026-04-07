@@ -17,7 +17,8 @@ import type {
   RejectData,
   AgentListData,
   AgentSessionsData,
-  AgentCleanupData
+  AgentCleanupData,
+  HistoryData
 } from '@/types/engine'
 
 export interface EngineAPI {
@@ -36,6 +37,7 @@ export interface EngineAPI {
   agentList(): Promise<ApiResponse<AgentListData>>
   agentSessions(): Promise<ApiResponse<AgentSessionsData>>
   agentCleanup(): Promise<ApiResponse<AgentCleanupData>>
+  history(repoName?: string, limit?: number): Promise<ApiResponse<HistoryData>>
 }
 
 /** Typed access to the engine API exposed via preload contextBridge */

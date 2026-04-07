@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	sched "github.com/loongxjin/forksync/engine/internal/scheduler"
@@ -56,6 +57,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	// Create syncer with config
 	syncer := syncpkg.NewSyncerFromConfig(cfg, store)
+
+	// Set up history store
+	histStore, err := history.NewStore(cfgMgr.ConfigDir())
+	if err == nil {
+		syncer.SetHistoryStore(histStore)
+		defer histStore.Close()
+	}
 
 	// Create notifier (enabled by default from config)
 	notifEnabled := true

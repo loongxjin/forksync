@@ -70,4 +70,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('engine:agentCleanup', async () => {
     return e.agentCleanup()
   })
+
+  ipcMain.handle('engine:history', async (_event, repoName?: string, limit?: number) => {
+    return e.history(repoName, limit)
+  })
 }

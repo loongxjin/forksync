@@ -187,6 +187,26 @@ export interface AgentSessionsData {
   sessions: AgentSessionInfo[]
 }
 
+/** `forksync history` → ApiResponse<HistoryData> */
+export interface HistoryData {
+  records: SyncHistoryRecord[]
+}
+
+/** Sync history record from SQLite */
+export interface SyncHistoryRecord {
+  id: number
+  repoId: string
+  repoName: string
+  status: string
+  commitsPulled: number
+  conflictFiles: string[]
+  agentUsed: string
+  conflictsFound: number
+  autoResolved: number
+  errorMessage: string
+  createdAt: string
+}
+
 // ---------------------------------------------------------------------------
 // Special / Non-standard Responses
 // ---------------------------------------------------------------------------
@@ -236,6 +256,7 @@ export type EngineChannel =
   | 'engine:agentList'
   | 'engine:agentSessions'
   | 'engine:agentCleanup'
+  | 'engine:history'
 
 /** EngineClient method parameter types */
 export interface ResolveOptions {

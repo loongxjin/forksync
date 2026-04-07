@@ -21,7 +21,8 @@ import type {
   RejectData,
   AgentListData,
   AgentSessionsData,
-  AgentCleanupData
+  AgentCleanupData,
+  HistoryData
 } from '../renderer/src/types/engine'
 
 /** Default timeout for engine commands (10 minutes — agent resolve can be slow) */
@@ -139,6 +140,18 @@ export class EngineClient {
   /** `forksync agent cleanup --json` */
   async agentCleanup(): Promise<ApiResponse<AgentCleanupData>> {
     return this.exec<AgentCleanupData>(['agent', 'cleanup'])
+  }
+
+  /** `forksync history [--limit N] [repo-name] --json` */
+  async history(repoName?: string, limit?: number): Promise<ApiResponse<HistoryData>> {
+    const args = ['history']
+    if (repoName) {
+      args.push(repoName)
+    }
+    if (limit) {
+      args.push('--limit', String(limit))
+    }
+    return this.exec<HistoryData>(args)
   }
 
   // -----------------------------------------------------------------------

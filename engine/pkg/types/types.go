@@ -190,3 +190,23 @@ type AgentListData struct {
 type AgentSessionsData struct {
 	Sessions []AgentSessionInfo `json:"sessions"`
 }
+
+// HistoryData history 响应
+type HistoryData struct {
+	Records []SyncHistoryRecord `json:"records"`
+}
+
+// SyncHistoryRecord 同步历史记录（从 SQLite 读取）
+type SyncHistoryRecord struct {
+	ID             int64    `json:"id"`
+	RepoID         string   `json:"repoId"`
+	RepoName       string   `json:"repoName"`
+	Status         string   `json:"status"`
+	CommitsPulled  int      `json:"commitsPulled"`
+	ConflictFiles  []string `json:"conflictFiles"`
+	AgentUsed      string   `json:"agentUsed"`
+	ConflictsFound int      `json:"conflictsFound"`
+	AutoResolved   int      `json:"autoResolved"`
+	ErrorMessage   string   `json:"errorMessage"`
+	CreatedAt      string   `json:"createdAt"`
+}

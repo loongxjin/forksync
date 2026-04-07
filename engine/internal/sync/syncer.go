@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
-	"github.com/loongxjin/forksync/engine/internal/conflict"
+		"github.com/loongxjin/forksync/engine/internal/conflict"
+	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/notify"
@@ -25,6 +26,7 @@ type Syncer struct {
 	cfg           *config.Config
 	notifier      *notify.Notifier
 	sessionMgr    *session.Manager
+	historyStore  *history.Store
 	mu            sync.Mutex
 	active        map[string]bool // tracks repos currently syncing
 }
@@ -46,6 +48,11 @@ func (s *Syncer) SetNotifier(n *notify.Notifier) {
 // SetSessionManager sets the agent session manager for auto-conflict resolution.
 func (s *Syncer) SetSessionManager(mgr *session.Manager) {
 	s.sessionMgr = mgr
+}
+
+// SetHistoryStore sets the sync history store for recording sync results.
+func (s *Syncer) SetHistoryStore(h *history.Store) {
+	s.historyStore = h
 }
 
 // Result contains the result of syncing a single repo.
@@ -177,6 +184,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	result.Status = "synced"
 	s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
 	s.notifyResult(r.Name, result)
+	s.recordHistory(result)
 	return result
 }
 
@@ -303,4 +311,23 @@ func (s *Syncer) notifyResult(repoName string, result *Result) {
 	case "error":
 		s.notifier.NotifyError(repoName, result.ErrorMessage)
 	}
+}
+
+// recordHistory saves the sync result to the history store.
+func (s *Syncer) recordHistory(result *Result) {
+	if s.historyStore == nil {
+		return
+	}
+	_ = s.historyStore.Record(history.Record{
+		RepoID:         result.RepoID,
+		RepoName:       result.RepoName,
+		Status:         result.Status,
+		CommitsPulled:  result.CommitsPulled,
+		ConflictFiles:  result.ConflictFiles,
+		AgentUsed:      result.AgentUsed,
+		ConflictsFound: result.ConflictsFound,
+		AutoResolved:   result.AutoResolved,
+		ErrorMessage:   result.ErrorMessage,
+		CreatedAt:      time.Now(),
+	})
 }

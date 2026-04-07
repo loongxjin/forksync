@@ -15,7 +15,8 @@ import type {
   RejectData,
   AgentListData,
   AgentSessionsData,
-  AgentCleanupData
+  AgentCleanupData,
+  HistoryData
 } from '../renderer/src/types/engine'
 
 const api = {
@@ -40,7 +41,9 @@ const api = {
   agentSessions: (): Promise<ApiResponse<AgentSessionsData>> =>
     ipcRenderer.invoke('engine:agentSessions'),
   agentCleanup: (): Promise<ApiResponse<AgentCleanupData>> =>
-    ipcRenderer.invoke('engine:agentCleanup')
+    ipcRenderer.invoke('engine:agentCleanup'),
+  history: (repoName?: string, limit?: number): Promise<ApiResponse<HistoryData>> =>
+    ipcRenderer.invoke('engine:history', repoName, limit)
 }
 
 contextBridge.exposeInMainWorld('api', api)
