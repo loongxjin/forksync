@@ -3,47 +3,47 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/loongxjin/forksync/engine/internal/ai"
+	"github.com/loongxjin/forksync/engine/internal/agent"
+	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
-	"github.com/loongxjin/forksync/engine/internal/conflict"
-	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
 
 var (
-	resolveAI      bool
-	resolveAccept  string // filepath to accept
-	resolveContent string // merged content for --accept
-	resolveDone    bool   // mark conflicts as resolved
+	resolveAgent     string // --agent <name>
+	resolveNoConfirm bool   // --no-confirm
+	resolveReject    bool   // --reject
+	resolveDone      bool   // --done
 )
 
 var resolveCmd = &cobra.Command{
 	Use:   "resolve <repo-name>",
-	Short: "Resolve conflicts in a repository",
-	Long: `Resolve merge conflicts in a repository.
+	Short: "Resolve conflicts using an AI agent",
+	Long: `Resolve merge conflicts in a repository using an AI coding agent.
 
 Examples:
-  forksync resolve my-repo                    # Show conflicts
-  forksync resolve my-repo --ai               # AI-powered resolution
-  forksync resolve my-repo --accept file.txt --content "resolved content"
-  forksync resolve my-repo --done             # Mark conflicts as resolved`,
+  forksync resolve my-repo                        # Auto-resolve with agent
+  forksync resolve my-repo --agent claude         # Use specific agent
+  forksync resolve my-repo --no-confirm           # Auto-commit without confirmation
+  forksync resolve my-repo --reject               # Reject last resolution (rollback)
+  forksync resolve my-repo --done                 # Mark conflicts as resolved`,
 	Args: cobra.ExactArgs(1),
 	RunE: runResolve,
 }
 
 func init() {
-	resolveCmd.Flags().BoolVar(&resolveAI, "ai", false, "use AI to resolve conflicts")
-	resolveCmd.Flags().StringVar(&resolveAccept, "accept", "", "accept resolution for a specific file (requires --content)")
-	resolveCmd.Flags().StringVar(&resolveContent, "content", "", "merged content to write (used with --accept)")
-	resolveCmd.Flags().BoolVar(&resolveDone, "done", false, "mark all conflicts as resolved and complete merge")
+	resolveCmd.Flags().StringVar(&resolveAgent, "agent", "", "specify agent to use (claude, opencode, droid, codex)")
+	resolveCmd.Flags().BoolVar(&resolveNoConfirm, "no-confirm", false, "auto-commit without user confirmation")
+	resolveCmd.Flags().BoolVar(&resolveReject, "reject", false, "reject last resolution and rollback")
+	resolveCmd.Flags().BoolVar(&resolveDone, "done", false, "mark all conflicts as resolved")
 	rootCmd.AddCommand(resolveCmd)
 }
 
@@ -61,18 +61,18 @@ func runResolve(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("repository %q not found", args[0])
 	}
 
-	// Handle --done: check remaining conflicts, complete merge
+	// Handle --done
 	if resolveDone {
 		return runResolveDone(cmd, r, store)
 	}
 
-	// Handle --accept: write resolved content to file, git add
-	if resolveAccept != "" {
-		return runResolveAccept(cmd, r, store)
+	// Handle --reject: rollback to pre-resolution state
+	if resolveReject {
+		return runResolveReject(cmd, r, store)
 	}
 
 	// Not in conflict state
-	if r.Status != types.RepoStatusConflict {
+	if r.Status != types.RepoStatusConflict && r.Status != types.RepoStatusResolved {
 		if isJSON() {
 			outputJSON(types.DoneData{RepoID: r.ID, AllResolved: true}, nil)
 		} else {
@@ -81,10 +81,7 @@ func runResolve(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Use the git module to find conflicted files
-	gitOps := git.NewOperations()
-	_, _ = gitOps.Status(cmd.Context(), r)
-
+	// Detect conflict files
 	conflictPaths := detectConflicts(cmd.Context(), r.Path)
 	if len(conflictPaths) == 0 {
 		if isJSON() {
@@ -95,78 +92,206 @@ func runResolve(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	detector := conflict.NewDetector()
-	conflictFiles, err := detector.GetConflictFiles(cmd.Context(), r.Path, conflictPaths)
-	if err != nil {
-		return fmt.Errorf("get conflict files: %w", err)
-	}
+	// Resolve with agent
+	return resolveWithAgent(cmd, cfg, r, store, conflictPaths)
+}
 
-	if resolveAI {
-		return resolveWithAI(cmd, cfg, r, store, conflictFiles)
-	}
-
-	// Manual resolve: just show conflicts
-	if isJSON() {
-		outputJSON(types.ResolveData{RepoID: r.ID, Conflicts: conflictFiles}, nil)
+// resolveWithAgent resolves conflicts using an agent CLI.
+func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, store repo.Store, conflictPaths []string) error {
+	// Determine which agent to use
+	var provider agent.AgentProvider
+	if resolveAgent != "" {
+		registry := agent.NewRegistry("")
+		var err error
+		provider, err = registry.GetByName(resolveAgent)
+		if err != nil {
+			return fmt.Errorf("agent %q not found: %w", resolveAgent, err)
+		}
 	} else {
-		outputText("Conflicts in %d files:", len(conflictFiles))
-		for _, cf := range conflictFiles {
-			outputText("  %s", cf.Path)
+		// Use preferred or first available
+		preferred := ""
+		if cfg != nil {
+			preferred = cfg.Agent.Preferred
+		}
+		reg := agent.NewRegistry(preferred)
+		var err error
+		provider, err = reg.GetPreferred()
+		if err != nil {
+			return fmt.Errorf("no agent available: %w", err)
+		}
+	}
+
+	// Create session manager
+	cfgMgr := config.NewManager()
+	sessionsDir := filepath.Join(cfgMgr.ConfigDir(), "sessions")
+	sessionStore := session.NewSessionStore(sessionsDir)
+	sessionMgr := session.NewManager(sessionStore, provider)
+
+	// Parse timeout
+	timeout := 10 * time.Minute
+	if cfg != nil && cfg.Agent.Timeout != "" {
+		if d, err := time.ParseDuration(cfg.Agent.Timeout); err == nil {
+			timeout = d
+		}
+	}
+
+	// Determine strategy
+	strategy := "preserve_ours"
+	if cfg != nil && cfg.Agent.ConflictStrategy != "" {
+		strategy = cfg.Agent.ConflictStrategy
+	}
+
+	// Update repo status to resolving
+	r.Status = types.RepoStatusResolving
+	_ = store.Update(r)
+
+	// Ensure session exists
+	if _, err := sessionMgr.CreateSessionForRepo(cmd.Context(), r.ID, r.Path); err != nil {
+		// Session might already exist, that's OK
+		_ = err
+	}
+
+	// Set timeout context
+	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
+	defer cancel()
+
+	// Resolve conflicts
+	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, conflictPaths, strategy)
+	if err != nil {
+		r.Status = types.RepoStatusConflict
+		r.ErrorMessage = fmt.Sprintf("agent resolve failed: %v", err)
+		_ = store.Update(r)
+		return fmt.Errorf("agent resolve: %w", err)
+	}
+
+	// Verify: check for remaining conflict markers
+	remaining := detectConflicts(ctx, r.Path)
+	if len(remaining) > 0 {
+		r.Status = types.RepoStatusConflict
+		r.ErrorMessage = fmt.Sprintf("agent left %d unresolved conflicts", len(remaining))
+		_ = store.Update(r)
+
+		if isJSON() {
+			outputJSON(types.ResolveData{
+				RepoID:    r.ID,
+				Conflicts: toConflictFiles(remaining),
+			}, fmt.Errorf("agent did not resolve all conflicts"))
+		} else {
+			outputText("⚠️  Agent could not resolve all conflicts (%d remaining)", len(remaining))
+		}
+		return nil
+	}
+
+	// Get diff for user confirmation
+	diffCmd := exec.CommandContext(ctx, "git", "diff")
+	diffCmd.Dir = r.Path
+	diffBytes, _ := diffCmd.Output()
+	diff := string(diffBytes)
+
+	result.Diff = diff
+	result.ResolvedFiles = conflictPaths
+
+	// Update status
+	r.Status = types.RepoStatusResolved
+	r.ErrorMessage = ""
+	_ = store.Update(r)
+
+	// Auto-confirm or wait for user
+	confirmBeforeCommit := true
+	if cfg != nil {
+		confirmBeforeCommit = cfg.Agent.ConfirmBeforeCommit
+	}
+
+	if resolveNoConfirm || !confirmBeforeCommit {
+		// Auto-commit
+		return completeAgentResolve(ctx, r, store, result)
+	}
+
+	// Show diff and wait for confirmation
+	if isJSON() {
+		outputJSON(types.ResolveData{
+			RepoID:      r.ID,
+			Conflicts:   toConflictFiles(conflictPaths),
+			AgentResult: agentResultToTypes(result),
+		}, nil)
+	} else {
+		outputText("Agent: %s (session: %s)", provider.Name(), result.SessionID)
+		outputText("Summary: %s", result.Summary)
+		outputText("")
+		if diff != "" {
+			outputText("Diff:")
+			lines := strings.Split(diff, "\n")
+			maxLines := 100
+			if len(lines) < maxLines {
+				maxLines = len(lines)
+			}
+			for i := 0; i < maxLines; i++ {
+				outputText("  %s", lines[i])
+			}
+			if len(lines) > 100 {
+				outputText("  ... (%d more lines)", len(lines)-100)
+			}
 		}
 		outputText("")
-		outputText("Use --ai flag to resolve with AI, or resolve manually and run:")
-		outputText("  forksync resolve %s --accept <filepath> --content <content>", r.Name)
-		outputText("  forksync resolve %s --done", r.Name)
+		outputText("Run 'forksync resolve %s --done' to accept, or '--reject' to rollback.", r.Name)
 	}
 
 	return nil
 }
 
-// runResolveAccept writes resolved content to a file and stages it with git add.
-func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store) error {
-	if resolveContent == "" {
-		// Try reading from stdin if --content is not provided
-		stat, _ := os.Stdin.Stat()
-		if (stat.Mode() & os.ModeCharDevice) != 0 {
-			return fmt.Errorf("--accept requires --content or piped stdin content")
+// completeAgentResolve stages files and completes the merge.
+func completeAgentResolve(ctx context.Context, r types.Repo, store repo.Store, result *agent.AgentResult) error {
+	// Stage all resolved files
+	for _, f := range result.ResolvedFiles {
+		gitAddCmd := exec.CommandContext(ctx, "git", "add", f)
+		gitAddCmd.Dir = r.Path
+		if output, err := gitAddCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("git add %s: %s: %w", f, string(output), err)
 		}
-		data, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return fmt.Errorf("read stdin: %w", err)
-		}
-		resolveContent = string(data)
 	}
 
-	// Write the resolved content to the file
-	fullPath := filepath.Join(r.Path, resolveAccept)
-	if err := os.WriteFile(fullPath, []byte(resolveContent), 0644); err != nil {
-		return fmt.Errorf("write resolved file: %w", err)
+	// Commit
+	commitMsg := fmt.Sprintf("Merge upstream (agent-resolved conflicts)")
+	commitCmd := exec.CommandContext(ctx, "git", "commit", "-m", commitMsg)
+	commitCmd.Dir = r.Path
+	if output, err := commitCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git commit: %s: %w", string(output), err)
 	}
 
-	// Stage the file with git add
-	gitAddCmd := exec.CommandContext(cmd.Context(), "git", "add", resolveAccept)
-	gitAddCmd.Dir = r.Path
-	if output, err := gitAddCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git add %s: %s: %w", resolveAccept, string(output), err)
-	}
+	// Update status
+	r.Status = types.RepoStatusSynced
+	r.ErrorMessage = ""
+	_ = store.Update(r)
 
 	if isJSON() {
-		outputJSON(types.AcceptData{
-			RepoID:   r.ID,
-			File:     resolveAccept,
-			Resolved: true,
-		}, nil)
+		outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
 	} else {
-		outputText("✅ Accepted resolution for %s", resolveAccept)
+		outputText("✅ Merge completed for %s (agent-resolved)", r.Name)
+	}
+	return nil
+}
+
+// runResolveReject rolls back agent changes using git checkout.
+func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error {
+	// Checkout all conflicted files to restore pre-resolution state
+	conflictPaths := detectConflicts(cmd.Context(), r.Path)
+	for _, f := range conflictPaths {
+		checkoutCmd := exec.CommandContext(cmd.Context(), "git", "checkout", "--", f)
+		checkoutCmd.Dir = r.Path
+		if output, err := checkoutCmd.CombinedOutput(); err != nil {
+			outputText("⚠️  checkout %s failed: %s", f, string(output))
+		}
 	}
 
-	// Check if there are remaining conflicts
-	remaining := detectConflicts(cmd.Context(), r.Path)
-	if len(remaining) == 0 {
-		outputText("All conflicts resolved. Run 'forksync resolve %s --done' to complete.", r.Name)
-	}
+	r.Status = types.RepoStatusConflict
+	r.ErrorMessage = ""
+	_ = store.Update(r)
 
-	_ = store
+	if isJSON() {
+		outputJSON(types.RejectData{RepoID: r.ID, RolledBack: true}, nil)
+	} else {
+		outputText("🔄 Rolled back agent changes for %s", r.Name)
+	}
 	return nil
 }
 
@@ -190,11 +315,9 @@ func runResolveDone(cmd *cobra.Command, r types.Repo, store repo.Store) error {
 		return nil
 	}
 
-	// No remaining conflicts — complete the merge
 	// Check if we're in a merge state
 	mergeHead := filepath.Join(r.Path, ".git", "MERGE_HEAD")
 	if _, err := os.Stat(mergeHead); err != nil {
-		// Not in a merge state, just update status
 		r.Status = types.RepoStatusSynced
 		r.ErrorMessage = ""
 		_ = store.Update(r)
@@ -207,13 +330,12 @@ func runResolveDone(cmd *cobra.Command, r types.Repo, store repo.Store) error {
 		return nil
 	}
 
-	// Complete the merge with git commit
+	// Complete the merge
 	commitCmd := exec.CommandContext(cmd.Context(), "git", "commit", "--no-edit")
 	commitCmd.Dir = r.Path
 	output, err := commitCmd.CombinedOutput()
 	if err != nil {
-		// If --no-edit fails (e.g., no editor configured), try with a message
-		commitCmd = exec.CommandContext(cmd.Context(), "git", "commit", "-m", "Merge upstream changes (conflicts resolved)")
+		commitCmd = exec.CommandContext(cmd.Context(), "git", "commit", "-m", "Merge upstream changes (agent-resolved conflicts)")
 		commitCmd.Dir = r.Path
 		output, err = commitCmd.CombinedOutput()
 		if err != nil {
@@ -221,7 +343,6 @@ func runResolveDone(cmd *cobra.Command, r types.Repo, store repo.Store) error {
 		}
 	}
 
-	// Update repo status
 	r.Status = types.RepoStatusSynced
 	r.ErrorMessage = ""
 	_ = store.Update(r)
@@ -231,135 +352,10 @@ func runResolveDone(cmd *cobra.Command, r types.Repo, store repo.Store) error {
 	} else {
 		outputText("✅ Merge completed for %s", r.Name)
 	}
-
 	return nil
 }
 
-func resolveWithAI(cmd *cobra.Command, cfg *config.Config, r types.Repo, store repo.Store, conflictFiles []types.ConflictFile) error {
-	// Get AI provider config
-	providerName := "openai"
-	if cfg != nil && cfg.AI.DefaultProvider != "" {
-		providerName = cfg.AI.DefaultProvider
-	}
-
-	var apiKey, model, baseURL string
-	if cfg != nil {
-		if p, ok := cfg.AI.Providers[providerName]; ok {
-			apiKey = p.APIKey
-			model = p.Model
-			baseURL = p.BaseURL
-		}
-	}
-
-	if apiKey == "" {
-		return fmt.Errorf("AI provider %s not configured (missing API key)", providerName)
-	}
-
-	provider := ai.NewOpenAIAdapter(apiKey, model, baseURL)
-
-	var resolvedConflicts []types.ConflictFile
-	allSucceeded := true
-
-	for _, cf := range conflictFiles {
-		req := ai.ConflictRequest{
-			FilePath:        cf.Path,
-			ConflictContent: cf.OursContent,
-			Language:        detectLanguage(cf.Path),
-		}
-
-		resolution, err := provider.ResolveConflicts(cmd.Context(), req)
-		if err != nil {
-			cf.AIExplanation = fmt.Sprintf("AI resolution failed: %v", err)
-			allSucceeded = false
-			resolvedConflicts = append(resolvedConflicts, cf)
-			continue
-		}
-
-		cf.MergedContent = resolution.MergedContent
-		cf.AIExplanation = resolution.Explanation
-
-		// Validate: reject if conflict markers remain
-		if conflict.HasConflictMarkers(resolution.MergedContent) {
-			cf.AIExplanation = "AI output still contains conflict markers, manual review required"
-			cf.MergedContent = "" // clear so it's not written
-			allSucceeded = false
-			resolvedConflicts = append(resolvedConflicts, cf)
-			continue
-		}
-
-		// Write resolved content to file
-		fullPath := filepath.Join(r.Path, cf.Path)
-		if writeErr := os.WriteFile(fullPath, []byte(resolution.MergedContent), 0644); writeErr != nil {
-			cf.AIExplanation = fmt.Sprintf("failed to write file: %v", writeErr)
-			allSucceeded = false
-			resolvedConflicts = append(resolvedConflicts, cf)
-			continue
-		}
-
-		// Stage the file with git add
-		gitAddCmd := exec.CommandContext(cmd.Context(), "git", "add", cf.Path)
-		gitAddCmd.Dir = r.Path
-		if addOutput, addErr := gitAddCmd.CombinedOutput(); addErr != nil {
-			cf.AIExplanation = fmt.Sprintf("git add failed: %s: %v", string(addOutput), addErr)
-			allSucceeded = false
-			resolvedConflicts = append(resolvedConflicts, cf)
-			continue
-		}
-
-		// Validate staged changes with git diff --check
-		gitOps := git.NewOperations()
-		if checkErr := gitOps.CheckStaged(cmd.Context(), r.Path); checkErr != nil {
-			cf.AIExplanation = fmt.Sprintf("validation warning: %v", checkErr)
-			// Log warning but don't fail — whitespace issues are non-critical
-		}
-
-		resolvedConflicts = append(resolvedConflicts, cf)
-	}
-
-	// If all conflicts resolved, complete the merge
-	if allSucceeded && len(resolvedConflicts) > 0 {
-		commitCmd := exec.CommandContext(cmd.Context(), "git", "commit", "-m", "Merge upstream (AI-resolved conflicts)")
-		commitCmd.Dir = r.Path
-		if commitOutput, commitErr := commitCmd.CombinedOutput(); commitErr != nil {
-			outputText("⚠️  Files staged but commit failed: %s", string(commitOutput))
-			outputText("Run 'forksync resolve %s --done' to complete manually.", r.Name)
-		} else {
-			// Update repo status
-			r.Status = types.RepoStatusSynced
-			r.ErrorMessage = ""
-			_ = store.Update(r)
-		}
-	}
-
-	if isJSON() {
-		outputJSON(types.ResolveData{RepoID: r.ID, Conflicts: resolvedConflicts}, nil)
-	} else {
-		outputText("AI resolved %d conflicts:", len(resolvedConflicts))
-		for _, cf := range resolvedConflicts {
-			status := "✅ resolved & staged"
-			if cf.MergedContent == "" {
-				status = "❌ failed"
-			}
-			outputText("  %s %s", status, cf.Path)
-			if cf.AIExplanation != "" {
-				outputText("     %s", cf.AIExplanation)
-			}
-		}
-		if allSucceeded {
-			outputText("")
-			outputText("✅ Merge completed for %s", r.Name)
-		} else {
-			outputText("")
-			outputText("⚠️  Some conflicts could not be auto-resolved.")
-			outputText("Resolve manually and run:")
-			outputText("  forksync resolve %s --accept <filepath> --content <content>", r.Name)
-			outputText("  forksync resolve %s --done", r.Name)
-		}
-	}
-
-	return nil
-}
-
+// detectConflicts finds files with unresolved conflicts via git diff.
 func detectConflicts(ctx context.Context, repoPath string) []string {
 	cmd := exec.CommandContext(ctx, "git", "diff", "--name-only", "--diff-filter=U")
 	cmd.Dir = repoPath
@@ -376,28 +372,25 @@ func detectConflicts(ctx context.Context, repoPath string) []string {
 	return files
 }
 
-func detectLanguage(path string) string {
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".go":
-		return "go"
-	case ".ts", ".tsx":
-		return "typescript"
-	case ".js", ".jsx":
-		return "javascript"
-	case ".py":
-		return "python"
-	case ".rs":
-		return "rust"
-	case ".java":
-		return "java"
-	case ".rb":
-		return "ruby"
-	case ".c", ".h":
-		return "c"
-	case ".cpp", ".cc", ".cxx":
-		return "cpp"
-	default:
-		return ""
+// toConflictFiles converts string paths to ConflictFile slices.
+func toConflictFiles(paths []string) []types.ConflictFile {
+	files := make([]types.ConflictFile, len(paths))
+	for i, p := range paths {
+		files[i] = types.ConflictFile{Path: p}
+	}
+	return files
+}
+
+// agentResultToTypes converts an agent.AgentResult to types.AgentResolveResult.
+func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
+	if r == nil {
+		return nil
+	}
+	return &types.AgentResolveResult{
+		Success:       r.Success,
+		ResolvedFiles: r.ResolvedFiles,
+		Diff:          r.Diff,
+		Summary:       r.Summary,
+		SessionID:     r.SessionID,
 	}
 }
