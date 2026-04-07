@@ -395,6 +395,12 @@ go test ./... -v
 
 ---
 
+## 🛠️ Development
+
+Want to contribute? Check out the [Development Guide](./docs/DEVELOPMENT.md) for setup instructions, architecture overview, and development workflows.
+
+---
+
 ## 📝 License
 
 This project is licensed under the MIT License.
