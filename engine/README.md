@@ -21,12 +21,15 @@ forksync scan ~/projects
 # 2. 添加仓库到管理（自动检测 upstream）
 forksync add ~/projects/my-fork
 
-# 3. 查看状态
+# 3. 查看状态（含 agent 检测）
 forksync status
 
 # 4. 同步
 forksync sync my-fork
 forksync sync --all
+
+# 5. 检测可用的 AI agent
+forksync agent list
 ```
 
 ## 命令参考
@@ -50,14 +53,14 @@ forksync add ~/projects/my-fork --upstream https://github.com/original/repo.git
 ```
 
 ### `status`
-显示所有已管理仓库的状态、ahead/behind 计数。
+显示所有已管理仓库的状态、ahead/behind 计数，以及检测到的 AI agent。
 
 ```bash
 forksync status
 forksync status --json
 ```
 
-状态图标：🟢 synced / 🟡 syncing / 🔴 conflict / ❌ error / ⚪ unconfigured
+状态图标：🟢 synced / 🟡 syncing / 🔴 conflict / 🟠 resolving / 🟣 resolved / ❌ error / ⚪ unconfigured
 
 ### `sync [repo-name]`
 同步 fork 与 upstream。先 fetch，再 merge。
@@ -68,23 +71,43 @@ forksync sync --all            # 同步所有仓库
 forksync sync --all --json     # JSON 输出
 ```
 
-当仓库 `conflictStrategy` 设为 `"ai_resolve"` 且配置了 AI provider 时，冲突会自动尝试 AI 解决。
+当仓库 `conflictStrategy` 设为 `"agent_resolve"` 且 `sessionMgr` 可用时，冲突会自动尝试通过 AI agent 解决。
 
 ### `resolve <repo-name>`
-解决合并冲突。
+使用 AI agent 解决合并冲突。
 
 ```bash
-# 查看冲突文件
-forksync resolve my-fork
+# 自动解决（使用首选 agent）
+forksync resolve my-repo
 
-# AI 自动解决（写文件 + git add + commit）
-forksync resolve my-fork --ai
+# 指定 agent
+forksync resolve my-repo --agent claude
 
-# 手动接受解决（写入内容 + git add）
-forksync resolve my-fork --accept path/to/file.go --content "resolved content"
+# 自动提交，无需确认
+forksync resolve my-repo --no-confirm
+
+# 拒绝上次解决结果（回滚）
+forksync resolve my-repo --reject
 
 # 标记冲突已全部解决（完成 merge commit）
-forksync resolve my-fork --done
+forksync resolve my-repo --done
+```
+
+**工作流程：**
+1. 检测冲突文件
+2. 选择 agent（显式 `--agent` 或配置中的首选）
+3. 创建/恢复 agent 会话，发送解决请求
+4. 验证冲突标记已消除
+5. 显示 diff，等待用户确认（除非 `--no-confirm`）
+6. 确认后 `git add` + `git commit`
+
+### `agent`
+管理 AI agent 集成。支持检测 Claude Code、OpenCode、Droid、Codex。
+
+```bash
+forksync agent list       # 列出所有支持的 agent 及安装状态
+forksync agent sessions   # 列出活跃的 agent 会话
+forksync agent cleanup    # 清理过期和失败的会话记录
 ```
 
 ### `remove <repo-name>`
@@ -118,13 +141,17 @@ sync:
 github:
   token: ""                  # GitHub PAT，提高 API 限流
 
-ai:
-  default_provider: "openai"
-  providers:
-    openai:
-      api_key: "sk-..."
-      model: "gpt-4"
-      base_url: ""           # 可选，自定义 API 端点
+agent:
+  preferred: ""              # 首选 agent（claude/opencode/droid/codex）
+  priority:                  # agent 优先级顺序
+    - claude
+    - opencode
+    - droid
+    - codex
+  timeout: "10m"             # agent 操作超时
+  conflict_strategy: "preserve_ours"  # 冲突解决策略
+  confirm_before_commit: true         # 提交前确认
+  session_ttl: "24h"         # 会话过期时间
 
 notification:
   enabled: true
@@ -139,6 +166,7 @@ proxy:
 数据存储在 `~/.forksync/`：
 - `config.yaml` — 配置
 - `repos.json` — 仓库列表
+- `sessions/` — Agent 会话记录（按仓库分目录）
 
 ## JSON 契约类型
 
@@ -156,11 +184,13 @@ proxy:
 |------|-----------|------|
 | `scan` | `ScanData` | `{ repos: ScannedRepo[] }` |
 | `add` | `AddData` | `{ repo: Repo }` |
-| `status` | `StatusData` | `{ repos: Repo[] }` |
+| `status` | `StatusData` | `{ repos: Repo[], agents: AgentInfo[], preferredAgent }` |
 | `sync` | `SyncData` | `{ results: SyncResult[] }` |
-| `resolve` | `ResolveData` | `{ repoId, conflicts: ConflictFile[] }` |
-| `resolve --accept` | `AcceptData` | `{ repoId, file, resolved }` |
+| `resolve` | `ResolveData` | `{ repoId, conflicts, agentResult }` |
 | `resolve --done` | `DoneData` | `{ repoId, allResolved, remainingConflicts }` |
+| `resolve --reject` | `RejectData` | `{ repoId, rolledBack }` |
+| `agent list` | `AgentListData` | `{ agents: AgentInfo[], preferred }` |
+| `agent sessions` | `AgentSessionsData` | `{ sessions: AgentSessionInfo[] }` |
 | `remove` | `{ removed }` | `{ removed: string }` |
 | `serve` | `ServeStatus` | `{ running, interval, message }` |
 
@@ -171,6 +201,8 @@ proxy:
 | `synced` | 已同步 |
 | `syncing` | 同步中 |
 | `conflict` | 有冲突 |
+| `resolving` | Agent 正在解决 |
+| `resolved` | 已解决，等待确认 |
 | `error` | 出错 |
 | `unconfigured` | 未配置 |
 | `up_to_date` | 已是最新 |
@@ -185,9 +217,10 @@ engine/
 │   ├── root.go              # 根命令 + --json + outputJSON[T]
 │   ├── scan.go              # 扫描目录
 │   ├── add.go               # 添加仓库
-│   ├── status.go            # 查看状态
+│   ├── status.go            # 查看状态（含 agent 检测）
 │   ├── sync.go              # 同步仓库
-│   ├── resolve.go           # 解决冲突 (--ai / --accept / --done)
+│   ├── resolve.go           # Agent 冲突解决 (--agent / --done / --reject)
+│   ├── agent.go             # Agent 管理 (list / sessions / cleanup)
 │   ├── remove.go            # 移除仓库
 │   └── serve.go             # 后台服务
 ├── pkg/types/               # 共享类型（JSON 契约）
@@ -196,12 +229,30 @@ engine/
     ├── repo/                # 仓库管理 (JSON 持久化, 线程安全)
     ├── git/                 # Git 操作 (go-git + CLI fallback)
     ├── github/              # GitHub API (fork 检测)
-    ├── sync/                # 同步编排 (per-repo mutex, 通知, AI)
-    ├── conflict/            # 冲突检测与解析
-    ├── ai/                  # AI 冲突解决 (OpenAI + 自定义 base_url)
+    ├── sync/                # 同步编排 (per-repo mutex, 通知, agent)
+    ├── conflict/            # 冲突检测（简化：仅返回文件路径）
+    ├── agent/               # Agent 集成
+    │   ├── provider.go      # AgentProvider 接口
+    │   ├── registry.go      # 自动发现与注册
+    │   ├── claude.go        # Claude Code 适配器
+    │   ├── opencode.go      # OpenCode 适配器
+    │   ├── droid.go         # Droid 适配器
+    │   ├── codex.go         # Codex 适配器
+    │   └── session/         # 会话管理 (创建/恢复/过期清理)
     ├── notify/              # macOS 系统通知 (osascript)
     └── scheduler/           # 定时调度 (ticker-based)
 ```
+
+## 支持的 AI Agent
+
+| Agent | Binary | 自治模式 | 会话恢复 |
+|-------|--------|----------|----------|
+| Claude Code | `claude` | `--dangerously-skip-permissions` | `--resume <id>` |
+| OpenCode | `opencode` | `--prompt <text>` | `--continue` |
+| Droid | `droid` | `--auto high` | `--resume` |
+| Codex | `codex` | `--dangerously-bypass-approvals-and-sandbox` | `resume --last` |
+
+ForkSync 自动检测 PATH 中已安装的 agent，按配置的优先级选择。
 
 ## 测试
 
@@ -212,18 +263,22 @@ go test ./internal/... -v  # 详细输出
 
 | 包 | 测试数 |
 |----|--------|
+| types | 7 |
 | config | 7 |
-| repo | 23 |
+| repo | 24 |
 | git | 14 |
-| github | 21 |
-| conflict | 25 |
+| github | 4 |
+| conflict | 5 |
 | sync | 18 |
-| **总计** | **108** |
+| agent | 28 |
+| agent/session | 15 |
+| **总计** | **122** |
 
 ## 依赖
 
 - [cobra](https://github.com/spf13/cobra) — CLI 框架
 - [viper](https://github.com/spf13/viper) — 配置管理
 - [go-git](https://github.com/go-git/go-git/v5) — Git 操作
-- [go-openai](https://github.com/sashabaranov/go-openai) — OpenAI API
 - [uuid](https://github.com/google/uuid) — ID 生成
+- [sqlite](https://gitlab.com/cznic/sqlite) — 纯 Go SQLite（无 CGO）
+- [testify](https://github.com/stretchr/testify) — 测试断言
