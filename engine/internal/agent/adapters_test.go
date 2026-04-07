@@ -47,35 +47,31 @@ func TestClaudeAdapter_BuildArgs(t *testing.T) {
 		name      string
 		sessionID string
 		prompt    string
-		wantFlags []string // check these flags appear in the args
+		wantArgs  []string // exact expected args
 	}{
 		{
 			name:      "new session",
 			sessionID: "",
 			prompt:    "resolve conflicts",
-			wantFlags: []string{"--print", "--dangerously-skip-permissions"},
+			wantArgs:  []string{"--print", "--dangerously-skip-permissions", "resolve conflicts"},
 		},
 		{
 			name:      "resume session",
 			sessionID: "sess-123",
 			prompt:    "resolve more",
-			wantFlags: []string{"--print", "--resume", "sess-123", "--dangerously-skip-permissions"},
+			wantArgs:  []string{"--print", "--dangerously-skip-permissions", "--resume", "sess-123", "resolve more"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			args := a.buildArgs(tt.sessionID, tt.prompt)
-			for _, flag := range tt.wantFlags {
-				found := false
-				for _, arg := range args {
-					if arg == flag {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("expected flag %q in args %v", flag, args)
+			if len(args) != len(tt.wantArgs) {
+				t.Fatalf("args = %v; want %v", args, tt.wantArgs)
+			}
+			for i, got := range args {
+				if got != tt.wantArgs[i] {
+					t.Errorf("args[%d] = %q; want %q", i, got, tt.wantArgs[i])
 				}
 			}
 		})
@@ -89,35 +85,31 @@ func TestOpenCodeAdapter_BuildArgs(t *testing.T) {
 		name      string
 		sessionID string
 		prompt    string
-		wantFlags []string
+		wantArgs  []string
 	}{
 		{
 			name:      "new session",
 			sessionID: "",
 			prompt:    "resolve conflicts",
-			wantFlags: []string{"--prompt"},
+			wantArgs:  []string{"run", "resolve conflicts"},
 		},
 		{
 			name:      "resume session",
 			sessionID: "sess-456",
 			prompt:    "resolve more",
-			wantFlags: []string{"--continue", "--prompt"},
+			wantArgs:  []string{"run", "--session", "sess-456", "resolve more"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			args := a.buildArgs(tt.sessionID, tt.prompt)
-			for _, flag := range tt.wantFlags {
-				found := false
-				for _, arg := range args {
-					if arg == flag {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("expected flag %q in args %v", flag, args)
+			if len(args) != len(tt.wantArgs) {
+				t.Fatalf("args = %v; want %v", args, tt.wantArgs)
+			}
+			for i, got := range args {
+				if got != tt.wantArgs[i] {
+					t.Errorf("args[%d] = %q; want %q", i, got, tt.wantArgs[i])
 				}
 			}
 		})
@@ -131,35 +123,31 @@ func TestDroidAdapter_BuildArgs(t *testing.T) {
 		name      string
 		sessionID string
 		prompt    string
-		wantFlags []string
+		wantArgs  []string
 	}{
 		{
 			name:      "new session",
 			sessionID: "",
 			prompt:    "resolve conflicts",
-			wantFlags: []string{"--auto", "high"},
+			wantArgs:  []string{"exec", "--auto", "high", "resolve conflicts"},
 		},
 		{
 			name:      "resume session",
-			sessionID: "nonempty",
+			sessionID: "sess-789",
 			prompt:    "resolve more",
-			wantFlags: []string{"--resume"},
+			wantArgs:  []string{"exec", "--auto", "high", "--session-id", "sess-789", "resolve more"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			args := a.buildArgs(tt.sessionID, tt.prompt)
-			for _, flag := range tt.wantFlags {
-				found := false
-				for _, arg := range args {
-					if arg == flag {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("expected flag %q in args %v", flag, args)
+			if len(args) != len(tt.wantArgs) {
+				t.Fatalf("args = %v; want %v", args, tt.wantArgs)
+			}
+			for i, got := range args {
+				if got != tt.wantArgs[i] {
+					t.Errorf("args[%d] = %q; want %q", i, got, tt.wantArgs[i])
 				}
 			}
 		})
@@ -170,38 +158,34 @@ func TestCodexAdapter_BuildArgs(t *testing.T) {
 	a := &CodexAdapter{binary: "codex"}
 
 	tests := []struct {
-		name      string
-		sessionID string
-		prompt    string
-		wantFlags []string
+		name     string
+		resume   bool
+		prompt   string
+		wantArgs []string
 	}{
 		{
-			name:      "new session",
-			sessionID: "",
-			prompt:    "resolve conflicts",
-			wantFlags: []string{"--dangerously-bypass-approvals-and-sandbox"},
+			name:     "new session",
+			resume:   false,
+			prompt:   "resolve conflicts",
+			wantArgs: []string{"--dangerously-bypass-approvals-and-sandbox", "resolve conflicts"},
 		},
 		{
-			name:      "resume session",
-			sessionID: "nonempty",
-			prompt:    "resolve more",
-			wantFlags: []string{"resume", "--last"},
+			name:     "resume session",
+			resume:   true,
+			prompt:   "resolve more",
+			wantArgs: []string{"resume", "--last", "--dangerously-bypass-approvals-and-sandbox", "resolve more"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args := a.buildArgs(tt.sessionID, tt.prompt)
-			for _, flag := range tt.wantFlags {
-				found := false
-				for _, arg := range args {
-					if arg == flag {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("expected flag %q in args %v", flag, args)
+			args := a.buildArgs(tt.resume, tt.prompt)
+			if len(args) != len(tt.wantArgs) {
+				t.Fatalf("args = %v; want %v", args, tt.wantArgs)
+			}
+			for i, got := range args {
+				if got != tt.wantArgs[i] {
+					t.Errorf("args[%d] = %q; want %q", i, got, tt.wantArgs[i])
 				}
 			}
 		})

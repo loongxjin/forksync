@@ -9,9 +9,10 @@ import (
 
 // OpenCodeAdapter implements AgentProvider for OpenCode CLI.
 //
-// CLI flags:
-//   - --prompt <text>: non-interactive prompt
-//   - --continue: resume existing session
+// Invocation: opencode run [--continue] [--session <id>] <message>
+//
+// OpenCode CLI uses the "run" subcommand for non-interactive execution.
+// There is no autonomous-mode flag — OpenCode executes directly without confirmation in run mode.
 type OpenCodeAdapter struct {
 	binary string
 }
@@ -68,12 +69,14 @@ func (a *OpenCodeAdapter) EndSession(ctx context.Context, sessionID string) erro
 	return nil
 }
 
+// buildArgs constructs the CLI arguments for an OpenCode invocation.
+// Uses "opencode run" for non-interactive mode.
 func (a *OpenCodeAdapter) buildArgs(sessionID, prompt string) []string {
-	args := []string{}
+	args := []string{"run"}
 	if sessionID != "" {
-		args = append(args, "--continue")
+		args = append(args, "--session", sessionID)
 	}
-	args = append(args, "--prompt", prompt)
+	args = append(args, prompt)
 	return args
 }
 

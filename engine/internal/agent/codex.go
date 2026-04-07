@@ -9,9 +9,11 @@ import (
 
 // CodexAdapter implements AgentProvider for Codex CLI (OpenAI).
 //
-// CLI flags:
-//   - --dangerously-bypass-approvals-and-sandbox: autonomous mode
-//   - resume --last: resume last session
+// Invocation:
+//   - New session:  codex --dangerously-bypass-approvals-and-sandbox <prompt>
+//   - Resume:       codex resume --last --dangerously-bypass-approvals-and-sandbox <prompt>
+//
+// Codex CLI uses "resume --last" as a subcommand to continue the last session.
 type CodexAdapter struct {
 	binary string
 }
@@ -68,9 +70,10 @@ func (a *CodexAdapter) EndSession(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-func (a *CodexAdapter) buildArgs(sessionID, prompt string) []string {
+// buildArgs constructs the CLI arguments for a Codex invocation.
+func (a *CodexAdapter) buildArgs(resume bool, prompt string) []string {
 	args := []string{}
-	if sessionID != "" {
+	if resume {
 		args = append(args, "resume", "--last")
 	}
 	args = append(args, "--dangerously-bypass-approvals-and-sandbox", prompt)
@@ -78,11 +81,7 @@ func (a *CodexAdapter) buildArgs(sessionID, prompt string) []string {
 }
 
 func (a *CodexAdapter) runCommand(ctx context.Context, resume bool, repoPath, prompt string) (string, error) {
-	sessionID := ""
-	if resume {
-		sessionID = "yes" // any non-empty string triggers resume mode
-	}
-	args := a.buildArgs(sessionID, prompt)
+	args := a.buildArgs(resume, prompt)
 	cmd := exec.CommandContext(ctx, a.binary, args...)
 	cmd.Dir = repoPath
 

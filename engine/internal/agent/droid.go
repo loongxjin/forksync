@@ -7,11 +7,13 @@ import (
 	"time"
 )
 
-// DroidAdapter implements AgentProvider for Droid CLI.
+// DroidAdapter implements AgentProvider for Droid CLI (Factory).
 //
-// CLI flags:
-//   - --auto high: autonomous mode
-//   - --resume: resume existing session
+// Invocation: droid exec --auto high [--session-id <id>] [--append-system-prompt <text>] <prompt>
+//
+// Droid CLI uses the "exec" subcommand for non-interactive execution.
+// The --auto flag controls autonomy level: low, medium, high.
+// For conflict resolution, "high" is needed to allow file modifications and git operations.
 type DroidAdapter struct {
 	binary string
 }
@@ -68,10 +70,11 @@ func (a *DroidAdapter) EndSession(ctx context.Context, sessionID string) error {
 	return nil
 }
 
+// buildArgs constructs the CLI arguments for a Droid exec invocation.
 func (a *DroidAdapter) buildArgs(sessionID, prompt string) []string {
-	args := []string{"--auto", "high"}
+	args := []string{"exec", "--auto", "high"}
 	if sessionID != "" {
-		args = append(args, "--resume")
+		args = append(args, "--session-id", sessionID)
 	}
 	args = append(args, prompt)
 	return args

@@ -245,12 +245,12 @@ engine/
 
 ## 支持的 AI Agent
 
-| Agent | Binary | 自治模式 | 会话恢复 |
-|-------|--------|----------|----------|
-| Claude Code | `claude` | `--dangerously-skip-permissions` | `--resume <id>` |
-| OpenCode | `opencode` | `--prompt <text>` | `--continue` |
-| Droid | `droid` | `--auto high` | `--resume` |
-| Codex | `codex` | `--dangerously-bypass-approvals-and-sandbox` | `resume --last` |
+| Agent | Binary | 非交互调用 | 自治模式 | 会话恢复 |
+|-------|--------|-----------|---------|----------|
+| Claude Code | `claude` | `claude --print <prompt>` | `--dangerously-skip-permissions` | `--resume <id>` |
+| OpenCode | `opencode` | `opencode run <message>` | run 模式自动执行 | `--session <id>` |
+| Droid | `droid` | `droid exec --auto high <prompt>` | `--auto high` | `--session-id <id>` |
+| Codex | `codex` | `codex <prompt>` | `--dangerously-bypass-approvals-and-sandbox` | `resume --last` |
 
 ForkSync 自动检测 PATH 中已安装的 agent，按配置的优先级选择。
 

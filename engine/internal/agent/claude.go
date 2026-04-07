@@ -9,7 +9,9 @@ import (
 
 // ClaudeAdapter implements AgentProvider for Claude Code CLI.
 //
-// CLI flags:
+// Invocation: claude --print --dangerously-skip-permissions [--resume <id>] --append-system-prompt <text> <prompt>
+//
+// Claude Code CLI flags:
 //   - --print: non-interactive output mode
 //   - --dangerously-skip-permissions: autonomous mode (no approval prompts)
 //   - --resume <session-id>: resume existing session
@@ -30,9 +32,7 @@ func (a *ClaudeAdapter) IsAvailable() bool {
 }
 
 func (a *ClaudeAdapter) StartSession(ctx context.Context, opts SessionOptions) (*Session, error) {
-	// Claude Code doesn't have an explicit "start session" command.
-	// Sessions are created implicitly on first interaction.
-	// We build context prompt and do an initial call to establish the session.
+	// Claude Code creates sessions implicitly on first interaction.
 	contextPrompt := buildContextInjectionPrompt(opts)
 	result, err := a.runCommand(ctx, "", opts.RepoPath, contextPrompt)
 	if err != nil {
