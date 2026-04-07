@@ -302,8 +302,14 @@ func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg str
 
 // NewSyncerFromConfig creates a Syncer using config defaults.
 func NewSyncerFromConfig(cfg *config.Config, store repo.Store) *Syncer {
+	var gitOps *git.Operations
+	if cfg.Proxy.Enabled && cfg.Proxy.URL != "" {
+		gitOps = git.NewOperationsWithProxy(cfg.Proxy.URL)
+	} else {
+		gitOps = git.NewOperations()
+	}
 	return &Syncer{
-		gitOps: git.NewOperations(),
+		gitOps: gitOps,
 		store:  store,
 		cfg:    cfg,
 		active: make(map[string]bool),

@@ -20,11 +20,34 @@ import (
 var errStop = errors.New("stop")
 
 // Operations provides git operations with go-git primary and CLI fallback.
-type Operations struct{}
+type Operations struct {
+	proxyURL string
+}
 
 // NewOperations creates a new Operations instance.
 func NewOperations() *Operations {
 	return &Operations{}
+}
+
+// NewOperationsWithProxy creates a new Operations instance with proxy support.
+// The proxyURL is applied to both go-git (via environment) and CLI git commands.
+func NewOperationsWithProxy(proxyURL string) *Operations {
+	return &Operations{proxyURL: proxyURL}
+}
+
+// proxyEnv returns environment variables with proxy settings for CLI git commands.
+// Sets HTTP_PROXY, HTTPS_PROXY (both cases) so all git traffic goes through the proxy.
+func (o *Operations) proxyEnv() []string {
+	env := os.Environ()
+	if o.proxyURL == "" {
+		return env
+	}
+	return append(env,
+		"HTTP_PROXY="+o.proxyURL,
+		"http_proxy="+o.proxyURL,
+		"HTTPS_PROXY="+o.proxyURL,
+		"https_proxy="+o.proxyURL,
+	)
 }
 
 // IsGitRepo checks if the given path is a valid git repository.
@@ -35,6 +58,16 @@ func (o *Operations) IsGitRepo(_ context.Context, path string) bool {
 
 // Fetch fetches from the specified remote for the given repo.
 func (o *Operations) Fetch(ctx context.Context, repo types.Repo) error {
+	// Set proxy env for go-git (it uses Go's http client which respects proxy env)
+	if o.proxyURL != "" {
+		os.Setenv("HTTP_PROXY", o.proxyURL)
+		os.Setenv("HTTPS_PROXY", o.proxyURL)
+		defer func() {
+			os.Unsetenv("HTTP_PROXY")
+			os.Unsetenv("HTTPS_PROXY")
+		}()
+	}
+
 	// Try go-git first
 	err := o.fetchGoGit(ctx, repo)
 	if err == nil {
@@ -100,6 +133,7 @@ func (o *Operations) fetchCLI(ctx context.Context, repo types.Repo) error {
 	if !remoteExists && repo.Upstream != "" {
 		cmd := exec.CommandContext(ctx, "git", "remote", "add", remoteName, repo.Upstream)
 		cmd.Dir = repo.Path
+		cmd.Env = o.proxyEnv()
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("git remote add %s: %w", remoteName, err)
 		}
@@ -107,6 +141,7 @@ func (o *Operations) fetchCLI(ctx context.Context, repo types.Repo) error {
 
 	cmd := exec.CommandContext(ctx, "git", "fetch", remoteName)
 	cmd.Dir = repo.Path
+	cmd.Env = o.proxyEnv()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git fetch %s: %s: %w", remoteName, string(output), err)
@@ -418,10 +453,10 @@ func (o *Operations) getRemotesCLI(ctx context.Context, repoPath string) ([]Remo
 		parts := strings.Fields(line)
 		if len(parts) >= 2 && strings.HasSuffix(parts[len(parts)-1], "(fetch)") {
 			name := parts[0]
-			url := parts[1]
+			remoteURL := parts[1]
 			if !seen[name] {
 				seen[name] = true
-				result = append(result, RemoteInfo{Name: name, URL: url})
+				result = append(result, RemoteInfo{Name: name, URL: remoteURL})
 			}
 		}
 	}
