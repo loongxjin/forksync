@@ -30,6 +30,7 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
 export class EngineClient {
   private binaryPath: string
   private projectRoot: string
+  private engineDir: string
 
   constructor() {
     // Production: bundled binary in resources
@@ -37,10 +38,14 @@ export class EngineClient {
     if (app.isPackaged) {
       this.binaryPath = join(process.resourcesPath, 'forksync')
       this.projectRoot = ''
+      this.engineDir = ''
     } else {
       this.binaryPath = 'go'
       // Resolve project root (where engine/ directory lives)
-      this.projectRoot = join(__dirname, '..', '..', '..', '..')
+      // __dirname = app/out/main → up 3 levels = forksync/
+      this.projectRoot = join(__dirname, '..', '..', '..')
+      // Engine module lives in engine/ subdirectory
+      this.engineDir = join(this.projectRoot, 'engine')
     }
   }
 
@@ -156,7 +161,7 @@ export class EngineClient {
       const timeout = DEFAULT_TIMEOUT_MS
 
       const child: ChildProcess = spawn(this.binaryPath, fullArgs, {
-        cwd: app.isPackaged ? undefined : this.projectRoot,
+        cwd: app.isPackaged ? undefined : this.engineDir,
         env: { ...process.env },
         stdio: ['ignore', 'pipe', 'pipe']
       })
@@ -222,7 +227,7 @@ export class EngineClient {
     if (app.isPackaged) {
       return [...engineArgs, '--json']
     }
-    return ['run', './engine/...', ...engineArgs, '--json']
+    return ['run', '.', ...engineArgs, '--json']
   }
 }
 
