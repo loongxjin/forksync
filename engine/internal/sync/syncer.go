@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
-		"github.com/loongxjin/forksync/engine/internal/conflict"
-	"github.com/loongxjin/forksync/engine/internal/history"
+	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
+	"github.com/loongxjin/forksync/engine/internal/history"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -27,6 +28,7 @@ type Syncer struct {
 	notifier      *notify.Notifier
 	sessionMgr    *session.Manager
 	historyStore  *history.Store
+	logger        *logger.Logger
 	mu            sync.Mutex
 	active        map[string]bool // tracks repos currently syncing
 }
@@ -53,6 +55,11 @@ func (s *Syncer) SetSessionManager(mgr *session.Manager) {
 // SetHistoryStore sets the sync history store for recording sync results.
 func (s *Syncer) SetHistoryStore(h *history.Store) {
 	s.historyStore = h
+}
+
+// SetLogger sets the file logger for sync operations.
+func (s *Syncer) SetLogger(l *logger.Logger) {
+	s.logger = l
 }
 
 // Result contains the result of syncing a single repo.
@@ -98,6 +105,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		s.mu.Unlock()
 		result.Status = "error"
 		result.ErrorMessage = "sync already in progress"
+		s.finalizeResult(result)
 		return result
 	}
 	s.active[r.ID] = true
@@ -122,6 +130,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		result.ErrorMessage = fmt.Sprintf("fetch failed: %v", err)
 		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
 		s.notifyResult(r.Name, result)
+		s.finalizeResult(result)
 		return result
 	}
 
@@ -131,6 +140,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		result.Status = "error"
 		result.ErrorMessage = fmt.Sprintf("status check failed: %v", err)
 		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
+		s.finalizeResult(result)
 		return result
 	}
 
@@ -138,6 +148,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		result.Status = string(types.RepoStatusUpToDate)
 		result.CommitsPulled = 0
 		s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
+		s.finalizeResult(result)
 		return result
 	}
 
@@ -150,6 +161,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		result.ErrorMessage = fmt.Sprintf("merge failed: %v", err)
 		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
 		s.notifyResult(r.Name, result)
+		s.finalizeResult(result)
 		return result
 	}
 
@@ -169,6 +181,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 				result.AutoResolved = len(mergeResult.Conflicts)
 				s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
 				s.notifyResult(r.Name, result)
+				s.finalizeResult(result)
 				return result
 			}
 			// Agent resolve failed or needs confirmation — fall through to conflict status
@@ -177,6 +190,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		result.Status = "conflict"
 		s.updateRepoStatus(r.ID, types.RepoStatusConflict, "")
 		s.notifyResult(r.Name, result)
+		s.finalizeResult(result)
 		return result
 	}
 
@@ -184,7 +198,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	result.Status = "synced"
 	s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
 	s.notifyResult(r.Name, result)
-	s.recordHistory(result)
+	s.finalizeResult(result)
 	return result
 }
 
@@ -330,4 +344,27 @@ func (s *Syncer) recordHistory(result *Result) {
 		ErrorMessage:   result.ErrorMessage,
 		CreatedAt:      time.Now(),
 	})
+}
+
+// logResult writes the sync result to the log file.
+func (s *Syncer) logResult(result *Result) {
+	if s.logger == nil {
+		return
+	}
+	switch result.Status {
+	case "synced":
+		s.logger.Info("%s: synced (%d commits pulled)", result.RepoName, result.CommitsPulled)
+	case "up_to_date":
+		s.logger.Info("%s: already up to date", result.RepoName)
+	case "conflict":
+		s.logger.Warn("%s: conflicts in %d files", result.RepoName, len(result.ConflictFiles))
+	case "error":
+		s.logger.Error("%s: %s", result.RepoName, result.ErrorMessage)
+	}
+}
+
+// finalizeResult records history and logs the result.
+func (s *Syncer) finalizeResult(result *Result) {
+	s.recordHistory(result)
+	s.logResult(result)
 }

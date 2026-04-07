@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/history"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
@@ -46,6 +48,14 @@ func runSync(cmd *cobra.Command, args []string) error {
 	if err == nil {
 		syncer.SetHistoryStore(histStore)
 		defer histStore.Close()
+	}
+
+	// Set up logger
+	logDir := filepath.Join(cfgMgr.ConfigDir(), "logs")
+	log, err := logger.New(logDir)
+	if err == nil {
+		syncer.SetLogger(log)
+		defer log.Close()
 	}
 
 	syncResults := make([]types.SyncResult, 0)

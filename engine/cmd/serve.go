@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/history"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	sched "github.com/loongxjin/forksync/engine/internal/scheduler"
@@ -63,6 +65,14 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err == nil {
 		syncer.SetHistoryStore(histStore)
 		defer histStore.Close()
+	}
+
+	// Set up logger
+	logDir := filepath.Join(cfgMgr.ConfigDir(), "logs")
+	log, err := logger.New(logDir)
+	if err == nil {
+		syncer.SetLogger(log)
+		defer log.Close()
 	}
 
 	// Create notifier (enabled by default from config)
