@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, type DragEvent } from 'react'
 import { useRepos } from '@/contexts/RepoContext'
 import { RepoRow } from '@/components/RepoRow'
 import { AddRepoDialog } from '@/components/AddRepoDialog'
@@ -10,6 +10,7 @@ export function Repos(): JSX.Element {
     useRepos()
   const [showAdd, setShowAdd] = useState(false)
   const [showScan, setShowScan] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
 
   useEffect(() => {
     if (!initialized) {
@@ -24,12 +25,64 @@ export function Repos(): JSX.Element {
   }
 
   const handleResolve = (name: string): void => {
-    // Navigate to conflicts page — will be implemented in Task 10
     window.location.hash = `#/conflicts/${name}`
   }
 
+  // Drag-drop handlers
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.dataTransfer.types.includes('Files')) {
+      setDragOver(true)
+    }
+  }, [])
+
+  const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(false)
+  }, [])
+
+  const handleDrop = useCallback(
+    async (e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setDragOver(false)
+
+      const files = e.dataTransfer.files
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        // On macOS/Electron, dragged folders have empty type and their path is in .path
+        const path = (file as File & { path?: string }).path
+        if (path) {
+          try {
+            await addRepo(path)
+          } catch {
+            // Individual add errors handled by context
+          }
+        }
+      }
+    },
+    [addRepo]
+  )
+
   return (
-    <div className="space-y-4">
+    <div
+      className={`relative space-y-4 ${dragOver ? 'ring-2 ring-primary ring-offset-2 ring-offset-background rounded-lg' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {dragOver && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center rounded-lg bg-primary/5 border-2 border-dashed border-primary/40">
+          <div className="text-center">
+            <span className="text-4xl">📂</span>
+            <p className="mt-2 text-sm font-medium text-primary">Drop repository folder here</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Repositories</h2>
         <div className="flex gap-2">
@@ -56,7 +109,7 @@ export function Repos(): JSX.Element {
         <div className="py-8 text-center">
           <p className="text-sm text-muted-foreground">No repositories managed yet.</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Click <strong>+ Add Repo</strong> or <strong>📂 Scan</strong> to get started.
+            Click <strong>+ Add Repo</strong>, <strong>📂 Scan</strong>, or drag a folder here to get started.
           </p>
         </div>
       )}
