@@ -34,6 +34,14 @@ func NewManager(store *SessionStore, provider agent.AgentProvider) *Manager {
 	}
 }
 
+// ProviderName returns the name of the underlying agent provider.
+func (m *Manager) ProviderName() string {
+	if m.provider == nil {
+		return "unknown"
+	}
+	return m.provider.Name()
+}
+
 // SetTTL configures the session expiration duration.
 func (m *Manager) SetTTL(d time.Duration) {
 	m.ttl = d

@@ -81,12 +81,16 @@ func (m *mockStore) Remove(id string) error {
 
 func TestResult_ToSyncResult(t *testing.T) {
 	r := &Result{
-		RepoID:        "repo-1",
-		RepoName:      "my-repo",
-		Status:        "synced",
-		CommitsPulled: 5,
-		ConflictFiles: []string{"a.go", "b.go"},
-		ErrorMessage:  "",
+		RepoID:         "repo-1",
+		RepoName:       "my-repo",
+		Status:         "synced",
+		CommitsPulled:  5,
+		ConflictFiles:  []string{"a.go", "b.go"},
+		ErrorMessage:   "",
+		AgentUsed:      "claude",
+		ConflictsFound: 2,
+		AutoResolved:   2,
+		PendingConfirm: []string{},
 	}
 	got := r.ToSyncResult()
 
@@ -107,6 +111,15 @@ func TestResult_ToSyncResult(t *testing.T) {
 	}
 	if got.ErrorMessage != "" {
 		t.Errorf("ErrorMessage = %q, want empty", got.ErrorMessage)
+	}
+	if got.AgentUsed != "claude" {
+		t.Errorf("AgentUsed = %q, want %q", got.AgentUsed, "claude")
+	}
+	if got.ConflictsFound != 2 {
+		t.Errorf("ConflictsFound = %d, want 2", got.ConflictsFound)
+	}
+	if got.AutoResolved != 2 {
+		t.Errorf("AutoResolved = %d, want 2", got.AutoResolved)
 	}
 }
 
@@ -130,6 +143,9 @@ func TestResult_ToSyncResult_Error(t *testing.T) {
 	}
 	if got.ConflictFiles != nil {
 		t.Errorf("ConflictFiles = %v, want nil", got.ConflictFiles)
+	}
+	if got.AgentUsed != "" {
+		t.Errorf("AgentUsed = %q, want empty", got.AgentUsed)
 	}
 }
 
@@ -209,8 +225,6 @@ func TestSyncRepo_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 
 	// At most 1 goroutine should have passed the active guard.
-	// The one that passes will fail at Fetch (no real git repo), but that's fine —
-	// we only care that the active-map guard prevents concurrent runs.
 	if successCount > 1 {
 		t.Errorf("expected at most 1 sync attempt, got %d", successCount)
 	}
@@ -231,15 +245,6 @@ func TestSyncAll_SkipsReposWithoutUpstream(t *testing.T) {
 	store := newMockStore(r1, r2, r3)
 	s := NewSyncer(store)
 
-	// We can't fully sync without real git repos, but SyncAll should still skip
-	// repos without upstream. The one with upstream will attempt SyncRepo and
-	// fail at Fetch, but the result will be included. The other two should be
-	// completely skipped (nil results).
-	//
-	// To verify the skip logic we look at the count: only repos with upstream
-	// should produce a result.
-	//
-	// However SyncRepo will try to fetch which fails, so we accept 1 result.
 	results := s.SyncAll(context.Background())
 
 	// Only the repo with upstream should produce a result.
@@ -256,7 +261,6 @@ func TestSyncAll_SkipsReposWithoutUpstream(t *testing.T) {
 }
 
 func TestSyncAll_ListError(t *testing.T) {
-	// Use a store that always returns an error from List.
 	s := NewSyncer(&listErrorStore{})
 	results := s.SyncAll(context.Background())
 
@@ -278,55 +282,12 @@ func (l *listErrorStore) List() ([]types.Repo, error) {
 }
 
 var errTestList = func() error {
-	// small helper to create a stable error
 	return &testListErr{}
 }()
 
 type testListErr struct{}
 
 func (testListErr) Error() string { return "test list error" }
-
-// ---------------------------------------------------------------------------
-// detectLanguageFromPath — table-driven tests
-// ---------------------------------------------------------------------------
-
-func TestDetectLanguageFromPath(t *testing.T) {
-	tests := []struct {
-		path string
-		want string
-	}{
-		{"main.go", "go"},
-		{"app.ts", "typescript"},
-		{"component.tsx", "typescript"},
-		{"index.js", "javascript"},
-		{"app.jsx", "javascript"},
-		{"script.py", "python"},
-		{"main.rs", "rust"},
-		{"Main.java", "java"},
-		{"Gemfile", ""},
-		{"main.rb", "ruby"},
-		{"utils.c", "c"},
-		{"header.h", "c"},
-		{"impl.cpp", "cpp"},
-		{"impl.cc", "cpp"},
-		{"impl.cxx", "cpp"},
-		{"Makefile", ""},
-		{"README.md", ""},
-		{"style.css", ""},
-		{"/some/deep/path/to/file.go", "go"},
-		{"noext", ""},
-		{"", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			got := detectLanguageFromPath(tt.path)
-			if got != tt.want {
-				t.Errorf("detectLanguageFromPath(%q) = %q, want %q", tt.path, got, tt.want)
-			}
-		})
-	}
-}
 
 // ---------------------------------------------------------------------------
 // notifyResult — tests that the notifier methods are called for each status
@@ -341,30 +302,14 @@ func TestNotifyResult_NilNotifier(t *testing.T) {
 }
 
 func TestNotifyResult_Synced(t *testing.T) {
-	called := false
 	s := &Syncer{
 		notifier: &notify.Notifier{},
 	}
-	// notify.Notifier methods only fire when enabled. We test the logic branch
-	// by patching notifier to nil and verifying no panic, then with a tracking
-	// wrapper.
-	//
-	// Since Notifier is a concrete struct, we use a wrapper approach: override
-	// the notifier field with a test-only wrapper that records calls.
-	//
-	// Actually, we can't override methods on a concrete struct. Instead let's
-	// test the branching logic directly by ensuring the method doesn't panic
-	// and checking edge cases.
-
 	// Test with commits > 0 — should call NotifySyncSuccess path.
-	_ = called
 	s.notifyResult("my-repo", &Result{Status: "synced", CommitsPulled: 5})
-	// No panic = pass
 }
 
 func TestNotifyResult_SyncedZeroCommits(t *testing.T) {
-	// When synced with 0 commits, NotifySyncSuccess should NOT be called.
-	// We can't observe this with the concrete notifier, but we verify no panic.
 	s := &Syncer{notifier: notify.NewNotifier(false)}
 	s.notifyResult("my-repo", &Result{Status: "synced", CommitsPulled: 0})
 }
@@ -456,5 +401,21 @@ func TestSetNotifier(t *testing.T) {
 	s.SetNotifier(n)
 	if s.notifier != n {
 		t.Error("SetNotifier did not set the notifier")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// SetSessionManager
+// ---------------------------------------------------------------------------
+
+func TestSetSessionManager(t *testing.T) {
+	s := NewSyncer(newMockStore())
+	if s.sessionMgr != nil {
+		t.Error("expected nil session manager initially")
+	}
+	s.SetSessionManager(nil)
+	// Setting nil is valid — means no auto-resolve
+	if s.sessionMgr != nil {
+		t.Error("expected nil session manager after SetSessionManager(nil)")
 	}
 }

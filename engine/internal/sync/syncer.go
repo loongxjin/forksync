@@ -3,13 +3,11 @@ package sync
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/loongxjin/forksync/engine/internal/ai"
+	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
@@ -22,12 +20,13 @@ const defaultTimeout = 5 * time.Minute
 
 // Syncer handles repository synchronization.
 type Syncer struct {
-	gitOps   *git.Operations
-	store    repo.Store
-	cfg      *config.Config
-	notifier *notify.Notifier
-	mu       sync.Mutex
-	active   map[string]bool // tracks repos currently syncing
+	gitOps        *git.Operations
+	store         repo.Store
+	cfg           *config.Config
+	notifier      *notify.Notifier
+	sessionMgr    *session.Manager
+	mu            sync.Mutex
+	active        map[string]bool // tracks repos currently syncing
 }
 
 // NewSyncer creates a new Syncer.
@@ -44,6 +43,11 @@ func (s *Syncer) SetNotifier(n *notify.Notifier) {
 	s.notifier = n
 }
 
+// SetSessionManager sets the agent session manager for auto-conflict resolution.
+func (s *Syncer) SetSessionManager(mgr *session.Manager) {
+	s.sessionMgr = mgr
+}
+
 // Result contains the result of syncing a single repo.
 type Result struct {
 	RepoID        string
@@ -52,17 +56,25 @@ type Result struct {
 	CommitsPulled int
 	ConflictFiles []string
 	ErrorMessage  string
+	AgentUsed     string // agent name if auto-resolve was attempted
+	ConflictsFound int   // number of conflicts detected
+	AutoResolved   int   // number of files auto-resolved by agent
+	PendingConfirm []string // files pending user confirmation
 }
 
 // ToSyncResult converts Result to types.SyncResult for JSON output.
 func (r *Result) ToSyncResult() types.SyncResult {
 	return types.SyncResult{
-		RepoID:        r.RepoID,
-		RepoName:      r.RepoName,
-		Status:        types.RepoStatus(r.Status),
-		CommitsPulled: r.CommitsPulled,
-		ConflictFiles: r.ConflictFiles,
-		ErrorMessage:  r.ErrorMessage,
+		RepoID:         r.RepoID,
+		RepoName:       r.RepoName,
+		Status:         types.RepoStatus(r.Status),
+		CommitsPulled:  r.CommitsPulled,
+		ConflictFiles:  r.ConflictFiles,
+		ErrorMessage:   r.ErrorMessage,
+		AgentUsed:      r.AgentUsed,
+		ConflictsFound: r.ConflictsFound,
+		AutoResolved:   r.AutoResolved,
+		PendingConfirm: r.PendingConfirm,
 	}
 }
 
@@ -135,19 +147,27 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	}
 
 	if mergeResult.HasConflicts {
-		// Step 4: Try AI auto-resolve if conflictStrategy is "ai_resolve"
-		if r.ConflictStrategy == "ai_resolve" && s.cfg != nil {
-			resolved := s.tryAIResolve(ctx, r, mergeResult.Conflicts)
+		result.ConflictsFound = len(mergeResult.Conflicts)
+		result.ConflictFiles = mergeResult.Conflicts
+
+		// Step 4: Try agent auto-resolve if configured and session manager available
+		strategy := r.ConflictStrategy
+		if strategy == "" && s.cfg != nil {
+			strategy = s.cfg.Agent.ConflictStrategy
+		}
+		if strategy == "agent_resolve" && s.sessionMgr != nil {
+			resolved := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)
 			if resolved {
 				result.Status = "synced"
+				result.AutoResolved = len(mergeResult.Conflicts)
 				s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
+				s.notifyResult(r.Name, result)
 				return result
 			}
-			// AI resolve failed, fall through to conflict status
+			// Agent resolve failed or needs confirmation — fall through to conflict status
 		}
 
 		result.Status = "conflict"
-		result.ConflictFiles = mergeResult.Conflicts
 		s.updateRepoStatus(r.ID, types.RepoStatusConflict, "")
 		s.notifyResult(r.Name, result)
 		return result
@@ -160,75 +180,60 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	return result
 }
 
-// tryAIResolve attempts to resolve conflicts using AI. Returns true if all conflicts were resolved.
-func (s *Syncer) tryAIResolve(ctx context.Context, r types.Repo, conflictPaths []string) bool {
-	// Get AI provider config
-	providerName := "openai"
-	if s.cfg.AI.DefaultProvider != "" {
-		providerName = s.cfg.AI.DefaultProvider
-	}
-
-	providerCfg, ok := s.cfg.AI.Providers[providerName]
-	if !ok || providerCfg.APIKey == "" {
+// tryAgentResolve attempts to resolve conflicts using the agent CLI.
+// Returns true if all conflicts were successfully resolved and committed.
+func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string) bool {
+	if s.sessionMgr == nil {
 		return false
 	}
 
-	provider := ai.NewOpenAIAdapter(providerCfg.APIKey, providerCfg.Model, providerCfg.BaseURL)
-	detector := conflict.NewDetector()
-
-	conflictFiles, err := detector.GetConflictFiles(ctx, r.Path, conflictPaths)
+	// Create or reuse a session for this repo
+	_, err := s.sessionMgr.GetOrCreate(ctx, r.ID, r.Path)
 	if err != nil {
 		return false
 	}
 
-	allSucceeded := true
-	for _, cf := range conflictFiles {
-		req := ai.ConflictRequest{
-			FilePath:        cf.Path,
-			ConflictContent: cf.OursContent,
-			Language:        detectLanguageFromPath(cf.Path),
-		}
-
-		resolution, err := provider.ResolveConflicts(ctx, req)
-		if err != nil {
-			allSucceeded = false
-			continue
-		}
-
-		// Validate: reject if conflict markers remain
-		if conflict.HasConflictMarkers(resolution.MergedContent) {
-			allSucceeded = false
-			continue
-		}
-
-		// Write resolved content
-		fullPath := filepath.Join(r.Path, cf.Path)
-		if writeErr := os.WriteFile(fullPath, []byte(resolution.MergedContent), 0644); writeErr != nil {
-			allSucceeded = false
-			continue
-		}
-
-		// Stage the file
-		gitAddCmd := exec.CommandContext(ctx, "git", "add", cf.Path)
-		gitAddCmd.Dir = r.Path
-		if addErr := gitAddCmd.Run(); addErr != nil {
-			allSucceeded = false
-			continue
-		}
-
-		// Validate staged changes with git diff --check
-		if checkErr := s.gitOps.CheckStaged(ctx, r.Path); checkErr != nil {
-			// Log but don't fail — whitespace issues are non-critical
-			_ = checkErr
-		}
+	// Determine conflict strategy
+	strategy := r.ConflictStrategy
+	if strategy == "" && s.cfg != nil {
+		strategy = s.cfg.Agent.ConflictStrategy
 	}
 
-	if !allSucceeded {
+	// Resolve conflicts via agent
+	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, conflictPaths, strategy)
+	if err != nil || !result.Success {
 		return false
 	}
 
+	// Verify no conflict markers remain in resolved files
+	for _, file := range result.ResolvedFiles {
+		content, err := s.gitOps.GetConflictedContent(ctx, r.Path, file)
+		if err != nil {
+			continue
+		}
+		if conflict.HasConflictMarkers(content) {
+			return false // still has markers
+		}
+	}
+
+	// Stage resolved files
+	for _, file := range result.ResolvedFiles {
+		gitAddCmd := exec.CommandContext(ctx, "git", "add", file)
+		gitAddCmd.Dir = r.Path
+		if err := gitAddCmd.Run(); err != nil {
+			return false
+		}
+	}
+
+	// Check staged changes
+	if checkErr := s.gitOps.CheckStaged(ctx, r.Path); checkErr != nil {
+		// Log but don't fail — whitespace issues are non-critical
+		_ = checkErr
+	}
+
 	// Complete the merge with a commit
-	commitCmd := exec.CommandContext(ctx, "git", "commit", "-m", "Merge upstream (AI-resolved conflicts)")
+	commitCmd := exec.CommandContext(ctx, "git", "commit", "-m",
+		fmt.Sprintf("Merge upstream (auto-resolved by %s)", s.sessionMgr.ProviderName()))
 	commitCmd.Dir = r.Path
 	if commitErr := commitCmd.Run(); commitErr != nil {
 		return false
@@ -297,32 +302,5 @@ func (s *Syncer) notifyResult(repoName string, result *Result) {
 		s.notifier.NotifyConflict(repoName, len(result.ConflictFiles))
 	case "error":
 		s.notifier.NotifyError(repoName, result.ErrorMessage)
-	}
-}
-
-// detectLanguageFromPath detects programming language from file extension.
-func detectLanguageFromPath(path string) string {
-	ext := filepath.Ext(path)
-	switch ext {
-	case ".go":
-		return "go"
-	case ".ts", ".tsx":
-		return "typescript"
-	case ".js", ".jsx":
-		return "javascript"
-	case ".py":
-		return "python"
-	case ".rs":
-		return "rust"
-	case ".java":
-		return "java"
-	case ".rb":
-		return "ruby"
-	case ".c", ".h":
-		return "c"
-	case ".cpp", ".cc", ".cxx":
-		return "cpp"
-	default:
-		return ""
 	}
 }
