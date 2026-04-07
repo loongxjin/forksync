@@ -189,7 +189,7 @@ func (m *Manager) ListSessionsAsInfo() ([]types.AgentSessionInfo, error) {
 		return nil, err
 	}
 
-	var infos []types.AgentSessionInfo
+	infos := make([]types.AgentSessionInfo, 0, len(records))
 	for _, rec := range records {
 		infos = append(infos, types.AgentSessionInfo{
 			ID:         rec.SessionID,

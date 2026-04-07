@@ -95,7 +95,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     try {
       const res = await engineApi.status()
       if (res.success) {
-        dispatch({ type: 'SET_REPOS', repos: res.data.repos })
+        dispatch({ type: 'SET_REPOS', repos: res.data.repos ?? [] })
       } else {
         dispatch({ type: 'SET_ERROR', error: res.error })
       }
@@ -109,7 +109,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     try {
       const res = await engineApi.syncAll()
       if (res.success) {
-        dispatch({ type: 'SET_SYNC_RESULTS', results: res.data.results })
+        dispatch({ type: 'SET_SYNC_RESULTS', results: res.data.results ?? [] })
       } else {
         dispatch({ type: 'SET_ERROR', error: res.error })
       }
@@ -143,7 +143,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     try {
       const res = await engineApi.scan(dir)
       if (res.success) {
-        dispatch({ type: 'SET_SCANNED', repos: res.data.repos })
+        dispatch({ type: 'SET_SCANNED', repos: res.data.repos ?? [] })
       } else {
         dispatch({ type: 'SET_ERROR', error: res.error })
       }

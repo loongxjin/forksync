@@ -40,7 +40,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		syncer.SetNotifier(notify.NewNotifier(true))
 	}
 
-	var syncResults []types.SyncResult
+	syncResults := make([]types.SyncResult, 0)
 
 	if syncAll {
 		results := syncer.SyncAll(cmd.Context())

@@ -127,7 +127,7 @@ func (s *SessionStore) ListAll() ([]*SessionRecord, error) {
 		return nil, fmt.Errorf("read session dir: %w", err)
 	}
 
-	var records []*SessionRecord
+	records := make([]*SessionRecord, 0)
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue

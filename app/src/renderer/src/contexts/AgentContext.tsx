@@ -90,8 +90,8 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
       if (res.success) {
         dispatch({
           type: 'SET_AGENTS',
-          agents: res.data.agents,
-          preferred: res.data.preferred
+          agents: res.data.agents ?? [],
+          preferred: res.data.preferred ?? ''
         })
       } else {
         dispatch({ type: 'SET_ERROR', error: res.error })
@@ -106,7 +106,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
     try {
       const res = await engineApi.agentSessions()
       if (res.success) {
-        dispatch({ type: 'SET_SESSIONS', sessions: res.data.sessions })
+        dispatch({ type: 'SET_SESSIONS', sessions: res.data.sessions ?? [] })
       } else {
         dispatch({ type: 'SET_ERROR', error: res.error })
       }

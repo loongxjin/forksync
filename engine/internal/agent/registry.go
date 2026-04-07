@@ -74,7 +74,7 @@ func (r *Registry) GetByName(name string) (AgentProvider, error) {
 
 // ListAll returns info about all known agents (installed or not).
 func (r *Registry) ListAll() []types.AgentInfo {
-	var all []types.AgentInfo
+	all := make([]types.AgentInfo, 0, len(r.providers))
 	for _, p := range r.providers {
 		all = append(all, types.AgentInfo{
 			Name:      p.Name(),

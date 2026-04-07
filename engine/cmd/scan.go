@@ -46,7 +46,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	gitOps := git.NewOperations()
 	ghClient := github.NewClient(ghToken)
 
-	var scannedRepos []types.ScannedRepo
+	scannedRepos := make([]types.ScannedRepo, 0)
 
 	err = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
