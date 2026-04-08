@@ -44,6 +44,8 @@ const api = {
     ipcRenderer.invoke('engine:agentCleanup'),
   history: (repoName?: string, limit?: number): Promise<ApiResponse<HistoryData>> =>
     ipcRenderer.invoke('engine:history', repoName, limit),
+  openDirectory: (): Promise<{ canceled: boolean; filePaths?: string[]; error?: string }> =>
+    ipcRenderer.invoke('dialog:openDirectory'),
   // Notification click-through navigation
   onNavigate: (callback: (path: string) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, path: string): void => callback(path)
