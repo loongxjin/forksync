@@ -49,6 +49,7 @@ export interface Repo {
   autoSync: boolean
   syncInterval: string
   conflictStrategy: string
+  createdAt: string
   lastSync: string | null
   status: RepoStatus
   aheadBy: number

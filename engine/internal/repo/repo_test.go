@@ -185,13 +185,10 @@ func TestList(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, list, 3)
 
-	names := make(map[string]bool)
-	for _, r := range list {
-		names[r.Name] = true
-	}
-	assert.True(t, names["repo-a"])
-	assert.True(t, names["repo-b"])
-	assert.True(t, names["repo-c"])
+	// Verify repos are returned in insertion order (by CreatedAt)
+	assert.Equal(t, "repo-a", list[0].Name)
+	assert.Equal(t, "repo-b", list[1].Name)
+	assert.Equal(t, "repo-c", list[2].Name)
 }
 
 func TestList_Empty(t *testing.T) {

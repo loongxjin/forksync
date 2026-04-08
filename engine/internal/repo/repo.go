@@ -5,7 +5,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -83,6 +85,9 @@ func (s *JSONStore) List() ([]types.Repo, error) {
 	for _, r := range s.repos {
 		repos = append(repos, r)
 	}
+	sort.Slice(repos, func(i, j int) bool {
+		return repos[i].CreatedAt.Before(repos[j].CreatedAt)
+	})
 	return repos, nil
 }
 
@@ -116,6 +121,10 @@ func (s *JSONStore) Add(repo types.Repo) error {
 
 	if repo.ID == "" {
 		repo.ID = uuid.New().String()
+	}
+
+	if repo.CreatedAt.IsZero() {
+		repo.CreatedAt = time.Now()
 	}
 
 	if _, exists := s.nameIndex[repo.Name]; exists {
@@ -178,6 +187,9 @@ func (s *JSONStore) saveUnsafe() error {
 	for _, r := range s.repos {
 		repos = append(repos, r)
 	}
+	sort.Slice(repos, func(i, j int) bool {
+		return repos[i].CreatedAt.Before(repos[j].CreatedAt)
+	})
 	data, err := json.MarshalIndent(repos, "", "  ")
 	if err != nil {
 		return err

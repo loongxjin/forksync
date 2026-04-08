@@ -57,6 +57,7 @@ type Repo struct {
 	AutoSync         bool       `json:"autoSync"`
 	SyncInterval     string     `json:"syncInterval"`
 	ConflictStrategy string     `json:"conflictStrategy"`
+	CreatedAt        time.Time  `json:"createdAt"`
 	LastSync         *Time      `json:"lastSync"`
 	Status           RepoStatus `json:"status"`
 	AheadBy          int        `json:"aheadBy"`
