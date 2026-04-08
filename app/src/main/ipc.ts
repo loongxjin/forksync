@@ -5,7 +5,7 @@
  * can invoke them via contextBridge-exposed API.
  */
 
-import { ipcMain } from 'electron'
+import { ipcMain, dialog } from 'electron'
 import { EngineClient } from './engine'
 import { notifySyncResults } from './notify'
 
@@ -82,5 +82,13 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('engine:history', async (_event, repoName?: string, limit?: number) => {
     return e.history(repoName, limit)
+  })
+
+  ipcMain.handle('dialog:openDirectory', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      title: 'Select Repository Directory'
+    })
+    return result
   })
 }
