@@ -85,10 +85,17 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('dialog:openDirectory', async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory'],
-      title: 'Select Repository Directory'
-    })
-    return result
+    try {
+      const result = await dialog.showOpenDialog({
+        properties: ['openDirectory'],
+        title: 'Select Repository Directory'
+      })
+      return result
+    } catch (err) {
+      return {
+        canceled: true,
+        error: err instanceof Error ? err.message : String(err)
+      }
+    }
   })
 }
