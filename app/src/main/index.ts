@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
+import { registerIDEHandlers } from './ide'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -45,6 +46,7 @@ app.whenReady().then(() => {
 
   // Register IPC handlers for engine communication
   registerIpcHandlers()
+  registerIDEHandlers()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

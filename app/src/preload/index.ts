@@ -18,6 +18,7 @@ import type {
   AgentCleanupData,
   HistoryData
 } from '../renderer/src/types/engine'
+import type { IDEInfo, IDEConfig, IDEOpenResult } from '../renderer/src/types/ide'
 
 const api = {
   status: (): Promise<ApiResponse<StatusData>> => ipcRenderer.invoke('engine:status'),
@@ -51,7 +52,19 @@ const api = {
     const handler = (_event: Electron.IpcRendererEvent, path: string): void => callback(path)
     ipcRenderer.on('navigate', handler)
     return () => ipcRenderer.removeListener('navigate', handler)
-  }
+  },
+
+  // IDE management
+  ideDetect: (): Promise<IDEInfo[]> => ipcRenderer.invoke('ide:detect'),
+  ideOpen: (repoPath: string, ideId: string): Promise<IDEOpenResult> =>
+    ipcRenderer.invoke('ide:open', repoPath, ideId),
+  ideGetConfig: (): Promise<IDEConfig> => ipcRenderer.invoke('ide:getConfig'),
+  ideSetDefault: (ideId: string | null): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('ide:setDefault', ideId),
+  ideAddCustom: (name: string, cliCommand: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('ide:addCustom', name, cliCommand),
+  ideRemoveCustom: (ideId: string): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('ide:removeCustom', ideId)
 }
 
 contextBridge.exposeInMainWorld('api', api)

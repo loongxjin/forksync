@@ -1,11 +1,12 @@
 import { useSettings } from '@/contexts/SettingsContext'
 import { Label } from '@/components/ui/label'
+import { IDEConfig } from '@/components/IDEConfig'
 
 export function GeneralSettings(): JSX.Element {
   const { theme, setTheme } = useSettings()
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="space-y-2">
         <Label>Theme</Label>
         <div className="flex gap-2">
@@ -25,6 +26,12 @@ export function GeneralSettings(): JSX.Element {
         </div>
       </div>
 
+      {/* IDE Configuration */}
+      <div className="space-y-2">
+        <Label>IDE 配置</Label>
+        <IDEConfig />
+      </div>
+
       <div className="space-y-2">
         <Label>Sync Interval</Label>
         <p className="text-xs text-muted-foreground">
@@ -37,12 +44,8 @@ export function GeneralSettings(): JSX.Element {
         <p className="text-xs text-muted-foreground">
           ForkSync — Keep your fork repositories up to date
         </p>
-        <p className="text-xs text-muted-foreground">
-          Config: ~/.forksync/config.yaml
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Data: ~/.forksync/repos.json
-        </p>
+        <p className="text-xs text-muted-foreground">Config: ~/.forksync/config.yaml</p>
+        <p className="text-xs text-muted-foreground">Data: ~/.forksync/repos.json</p>
       </div>
     </div>
   )

@@ -20,6 +20,7 @@ import type {
   AgentCleanupData,
   HistoryData
 } from '@/types/engine'
+import type { IDEInfo, IDEConfig, IDEOpenResult } from '@/types/ide'
 
 export interface EngineAPI {
   status(): Promise<ApiResponse<StatusData>>
@@ -42,6 +43,14 @@ export interface EngineAPI {
   openDirectory(): Promise<{ canceled: boolean; filePaths?: string[]; error?: string }>
   /** Listen for navigation events from main process (notification click-through). Returns unsubscribe fn. */
   onNavigate?: (callback: (path: string) => void) => () => void
+
+  // IDE management
+  ideDetect(): Promise<IDEInfo[]>
+  ideOpen(repoPath: string, ideId: string): Promise<IDEOpenResult>
+  ideGetConfig(): Promise<IDEConfig>
+  ideSetDefault(ideId: string | null): Promise<{ success: boolean }>
+  ideAddCustom(name: string, cliCommand: string): Promise<{ success: boolean; error?: string }>
+  ideRemoveCustom(ideId: string): Promise<{ success: boolean }>
 }
 
 /** Typed access to the engine API exposed via preload contextBridge */

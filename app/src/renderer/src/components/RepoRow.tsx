@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import type { Repo, RepoStatus } from '@/types/engine'
 import { getStatusConfig } from '@/components/StatusCard'
+import { IDEOpenButton } from '@/components/IDEOpenButton'
 
 interface RepoStatusBadgeProps {
   status: RepoStatus
@@ -68,6 +69,7 @@ export function RepoRow({ repo, onSync, onRemove, onResolve }: RepoRowProps): JS
       </div>
 
       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <IDEOpenButton repoPath={repo.path} />
         <button
           onClick={() => onSync(repo.name)}
           className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
