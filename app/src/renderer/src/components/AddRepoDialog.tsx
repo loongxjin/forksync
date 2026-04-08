@@ -16,6 +16,17 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
 
   if (!open) return null
 
+  const handleSelectDirectory = async (): Promise<void> => {
+    try {
+      const result = await window.api.openDirectory()
+      if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
+        setPath(result.filePaths[0])
+      }
+    } catch (err) {
+      console.error('Failed to open directory picker:', err)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
     if (!path.trim()) return
@@ -40,14 +51,21 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="repo-path">Repository Path</Label>
-            <Input
-              id="repo-path"
-              placeholder="/path/to/your/repo"
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
-              autoFocus
-            />
+            <Label>Repository Path</Label>
+            <div className="flex gap-2">
+              <div 
+                className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+              >
+                {path || 'No directory selected'}
+              </div>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={handleSelectDirectory}
+              >
+                选择目录
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -66,7 +84,7 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!path.trim() || adding}>
+            <Button type="submit" disabled={!path || adding}>
               {adding ? 'Adding...' : 'Add'}
             </Button>
           </div>
