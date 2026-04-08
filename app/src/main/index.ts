@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
@@ -12,6 +12,7 @@ function createWindow(): void {
     show: false,
     title: 'ForkSync',
     titleBarStyle: 'hiddenInset',
+    icon: nativeImage.createFromPath(join(__dirname, '../../resources/icon.png')),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -36,6 +37,11 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.forksync.app')
+
+  // Set macOS dock icon for dev mode
+  if (process.platform === 'darwin') {
+    app.dock.setIcon(nativeImage.createFromPath(join(__dirname, '../../resources/icon.png')))
+  }
 
   // Register IPC handlers for engine communication
   registerIpcHandlers()
