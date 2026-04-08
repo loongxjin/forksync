@@ -28,8 +28,18 @@ export function ScanDialog({
 
   if (!open) return null
 
-  const handleScan = async (e: React.FormEvent): Promise<void> => {
-    e.preventDefault()
+  const handleSelectDirectory = async (): Promise<void> => {
+    try {
+      const result = await window.api.openDirectory()
+      if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
+        setDir(result.filePaths[0])
+      }
+    } catch (err) {
+      console.error('Failed to open directory picker:', err)
+    }
+  }
+
+  const handleScan = async (): Promise<void> => {
     if (!dir.trim()) return
     setSelected(new Set())
     await onScan(dir.trim())
@@ -67,19 +77,30 @@ export function ScanDialog({
           Scan a directory for git repositories.
         </p>
 
-        <form onSubmit={handleScan} className="mt-4 flex gap-2">
-          <div className="flex-1">
-            <Input
-              placeholder="/path/to/projects"
-              value={dir}
-              onChange={(e) => setDir(e.target.value)}
-              autoFocus
-            />
+        <div className="mt-4 space-y-2">
+          <Label>Directory to Scan</Label>
+          <div className="flex gap-2">
+            <div 
+              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+            >
+              {dir || 'No directory selected'}
+            </div>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={handleSelectDirectory}
+            >
+              选择目录
+            </Button>
           </div>
-          <Button type="submit" disabled={!dir.trim() || loading}>
+          <Button 
+            className="w-full" 
+            onClick={handleScan} 
+            disabled={!dir || loading}
+          >
             {loading ? 'Scanning...' : 'Scan'}
           </Button>
-        </form>
+        </div>
 
         {scannedRepos.length > 0 && (
           <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
