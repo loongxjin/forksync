@@ -86,7 +86,10 @@ func (s *JSONStore) List() ([]types.Repo, error) {
 		repos = append(repos, r)
 	}
 	sort.Slice(repos, func(i, j int) bool {
-		return repos[i].CreatedAt.Before(repos[j].CreatedAt)
+		if !repos[i].CreatedAt.Equal(repos[j].CreatedAt) {
+			return repos[i].CreatedAt.Before(repos[j].CreatedAt)
+		}
+		return repos[i].ID < repos[j].ID
 	})
 	return repos, nil
 }
@@ -188,7 +191,10 @@ func (s *JSONStore) saveUnsafe() error {
 		repos = append(repos, r)
 	}
 	sort.Slice(repos, func(i, j int) bool {
-		return repos[i].CreatedAt.Before(repos[j].CreatedAt)
+		if !repos[i].CreatedAt.Equal(repos[j].CreatedAt) {
+			return repos[i].CreatedAt.Before(repos[j].CreatedAt)
+		}
+		return repos[i].ID < repos[j].ID
 	})
 	data, err := json.MarshalIndent(repos, "", "  ")
 	if err != nil {
