@@ -155,8 +155,17 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     }
   }, [refresh])
 
+  // Track syncing repos to prevent duplicate sync requests
+  const syncingReposRef = useRef<Set<string>>(new Set())
+
   const syncRepo = useCallback(
     async (name: string) => {
+      // Prevent duplicate sync for the same repo
+      if (syncingReposRef.current.has(name)) {
+        return
+      }
+      syncingReposRef.current.add(name)
+
       dispatch({ type: 'SET_LOADING', loading: true })
       try {
         const res = await engineApi.syncRepo(name)
@@ -168,6 +177,8 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         await refresh()
       } catch (err) {
         dispatch({ type: 'SET_ERROR', error: (err as Error).message })
+      } finally {
+        syncingReposRef.current.delete(name)
       }
     },
     [refresh]
