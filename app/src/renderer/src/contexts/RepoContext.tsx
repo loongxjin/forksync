@@ -13,6 +13,7 @@ import {
 } from 'react'
 import type { Repo, ScannedRepo, SyncResult, BranchMapping } from '@/types/engine'
 import { engineApi } from '@/lib/api'
+import type { ToastState } from '@/components/ui/toast'
 
 // ---------------------------------------------------------------------------
 // State & Actions
@@ -25,6 +26,7 @@ interface RepoState {
   loading: boolean
   initialized: boolean
   error: string | null
+  toast: ToastState
 }
 
 type RepoAction =
@@ -37,6 +39,8 @@ type RepoAction =
   | { type: 'UPDATE_REPO'; repo: Repo }
   | { type: 'REMOVE_REPO'; repoId: string }
   | { type: 'SET_ERROR'; error: string | null }
+  | { type: 'SHOW_TOAST'; message: string; toastType: ToastState['type'] }
+  | { type: 'HIDE_TOAST' }
 
 const initialState: RepoState = {
   repos: [],
@@ -44,7 +48,8 @@ const initialState: RepoState = {
   syncResults: [],
   loading: false,
   initialized: false,
-  error: null
+  error: null,
+  toast: { message: '', visible: false, type: 'info' }
 }
 
 function repoReducer(state: RepoState, action: RepoAction): RepoState {
@@ -73,6 +78,13 @@ function repoReducer(state: RepoState, action: RepoAction): RepoState {
       }
     case 'SET_ERROR':
       return { ...state, error: action.error, loading: false }
+    case 'SHOW_TOAST':
+      return {
+        ...state,
+        toast: { message: action.message, visible: true, type: action.toastType }
+      }
+    case 'HIDE_TOAST':
+      return { ...state, toast: { ...state.toast, visible: false } }
     default:
       return state
   }
@@ -89,6 +101,8 @@ interface RepoContextValue extends RepoState {
   scan: (dir: string) => Promise<void>
   addRepo: (path: string, upstream?: string, branchMapping?: BranchMapping) => Promise<void>
   removeRepo: (name: string) => Promise<void>
+  showToast: (message: string, type?: ToastState['type']) => void
+  hideToast: () => void
 }
 
 const RepoContext = createContext<RepoContextValue | null>(null)
@@ -98,10 +112,12 @@ const RepoContext = createContext<RepoContextValue | null>(null)
 // ---------------------------------------------------------------------------
 
 const AUTO_REFRESH_INTERVAL = 30_000 // 30 seconds
+const TOAST_DURATION = 2000 // 2 seconds
 
 export function RepoProvider({ children }: { children: ReactNode }): JSX.Element {
   const [state, dispatch] = useReducer(repoReducer, initialState)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const refresh = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', loading: true })
@@ -155,6 +171,27 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     }
   }, [refresh])
 
+  // Toast functions must be defined before syncRepo to avoid TDZ error
+  const hideToast = useCallback(() => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current)
+      toastTimeoutRef.current = null
+    }
+    dispatch({ type: 'HIDE_TOAST' })
+  }, [])
+
+  const showToast = useCallback((message: string, toastType: ToastState['type'] = 'info') => {
+    // Clear any existing timeout
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current)
+    }
+    dispatch({ type: 'SHOW_TOAST', message, toastType })
+    // Auto-hide after duration
+    toastTimeoutRef.current = setTimeout(() => {
+      dispatch({ type: 'HIDE_TOAST' })
+    }, TOAST_DURATION)
+  }, [])
+
   // Track syncing repos to prevent duplicate sync requests
   const syncingReposRef = useRef<Set<string>>(new Set())
 
@@ -171,6 +208,13 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         const res = await engineApi.syncRepo(name)
         if (res.success) {
           dispatch({ type: 'SET_SYNC_RESULTS', results: res.data.results })
+          // Check if repo is up to date and show toast
+          const upToDateResult = res.data.results?.find(
+            (r) => r.status === 'up_to_date' && r.repoName === name
+          )
+          if (upToDateResult) {
+            showToast(`"${name}" is already up to date`, 'info')
+          }
         } else {
           dispatch({ type: 'SET_ERROR', error: res.error })
         }
@@ -181,7 +225,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         syncingReposRef.current.delete(name)
       }
     },
-    [refresh]
+    [refresh, showToast]
   )
 
   const scan = useCallback(async (dir: string) => {
@@ -234,7 +278,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
 
   return (
     <RepoContext.Provider
-      value={{ ...state, refresh, syncAll, syncRepo, scan, addRepo, removeRepo }}
+      value={{ ...state, refresh, syncAll, syncRepo, scan, addRepo, removeRepo, showToast, hideToast }}
     >
       {children}
     </RepoContext.Provider>

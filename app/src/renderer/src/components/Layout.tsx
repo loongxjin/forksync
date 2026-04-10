@@ -2,6 +2,8 @@ import { Outlet, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { Sidebar } from './Sidebar'
 import { engineApi } from '@/lib/api'
+import { Toast } from './ui/toast'
+import { useRepos } from '@/contexts/RepoContext'
 
 function TitleBar(): JSX.Element {
   return (
@@ -29,6 +31,7 @@ function TitleBar(): JSX.Element {
 
 export function Layout(): JSX.Element {
   const navigate = useNavigate()
+  const { toast, hideToast } = useRepos()
 
   // Listen for navigation events from main process (notification click-through)
   useEffect(() => {
@@ -51,6 +54,13 @@ export function Layout(): JSX.Element {
           </div>
         </main>
       </div>
+      <Toast
+        message={toast.message}
+        visible={toast.visible}
+        type={toast.type}
+        onClose={hideToast}
+        duration={2000}
+      />
     </div>
   )
 }

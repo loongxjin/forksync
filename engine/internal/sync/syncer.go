@@ -334,8 +334,13 @@ func (s *Syncer) notifyResult(repoName string, result *Result) {
 }
 
 // recordHistory saves the sync result to the history store.
+// Skips recording for 'up_to_date' status as it's just a check, not an actual sync.
 func (s *Syncer) recordHistory(result *Result) {
 	if s.historyStore == nil {
+		return
+	}
+	// Don't record up_to_date to history - it's just a status check
+	if result.Status == "up_to_date" {
 		return
 	}
 	_ = s.historyStore.Record(history.Record{
