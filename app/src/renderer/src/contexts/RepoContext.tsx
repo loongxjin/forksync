@@ -8,7 +8,6 @@ import {
   useReducer,
   useCallback,
   useRef,
-  useEffect,
   type ReactNode
 } from 'react'
 import type { Repo, ScannedRepo, SyncResult, BranchMapping } from '@/types/engine'
@@ -111,12 +110,10 @@ const RepoContext = createContext<RepoContextValue | null>(null)
 // Provider
 // ---------------------------------------------------------------------------
 
-const AUTO_REFRESH_INTERVAL = 30_000 // 30 seconds
 const TOAST_DURATION = 2000 // 2 seconds
 
 export function RepoProvider({ children }: { children: ReactNode }): JSX.Element {
   const [state, dispatch] = useReducer(repoReducer, initialState)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const refresh = useCallback(async () => {
@@ -132,29 +129,6 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       dispatch({ type: 'SET_ERROR', error: (err as Error).message })
     }
   }, [])
-
-  // Silent refresh — updates data without changing loading state
-  const silentRefresh = useCallback(async () => {
-    try {
-      const res = await engineApi.status()
-      if (res.success) {
-        dispatch({ type: 'SET_REPOS_SILENT', repos: res.data.repos ?? [] })
-      }
-      // Ignore errors in background refresh
-    } catch {
-      // Ignore
-    }
-  }, [])
-
-  // Auto-refresh timer
-  useEffect(() => {
-    intervalRef.current = setInterval(silentRefresh, AUTO_REFRESH_INTERVAL)
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-    }
-  }, [silentRefresh])
 
   const syncAll = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', loading: true })

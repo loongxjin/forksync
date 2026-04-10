@@ -8,7 +8,6 @@ import {
   useReducer,
   useCallback,
   useRef,
-  useEffect,
   type ReactNode
 } from 'react'
 import type { AgentInfo, AgentSessionInfo, ResolveData, DoneData } from '@/types/engine'
@@ -95,11 +94,8 @@ const AgentContext = createContext<AgentContextValue | null>(null)
 // Provider
 // ---------------------------------------------------------------------------
 
-const AUTO_REFRESH_INTERVAL = 30_000 // 30 seconds
-
 export function AgentProvider({ children }: { children: ReactNode }): JSX.Element {
   const [state, dispatch] = useReducer(agentReducer, initialState)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const refreshAgents = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', loading: true })
@@ -132,41 +128,6 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
       dispatch({ type: 'SET_ERROR', error: (err as Error).message })
     }
   }, [])
-
-  // Silent background refresh — no loading state change
-  const silentRefresh = useCallback(async () => {
-    try {
-      const [agentsRes, sessionsRes] = await Promise.all([
-        engineApi.agentList(),
-        engineApi.agentSessions()
-      ])
-      if (agentsRes.success) {
-        dispatch({
-          type: 'SET_AGENTS_SILENT',
-          agents: agentsRes.data.agents ?? [],
-          preferred: agentsRes.data.preferred ?? ''
-        })
-      }
-      if (sessionsRes.success) {
-        dispatch({
-          type: 'SET_SESSIONS_SILENT',
-          sessions: sessionsRes.data.sessions ?? []
-        })
-      }
-    } catch {
-      // Ignore background refresh errors
-    }
-  }, [])
-
-  // Auto-refresh timer
-  useEffect(() => {
-    intervalRef.current = setInterval(silentRefresh, AUTO_REFRESH_INTERVAL)
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-    }
-  }, [silentRefresh])
 
   const resolve = useCallback(
     async (
