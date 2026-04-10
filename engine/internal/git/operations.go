@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	git "github.com/go-git/go-git/v5"
@@ -179,9 +180,10 @@ func (o *Operations) statusGoGit(_ context.Context, repo types.Repo) (*StatusRes
 	}
 
 	branch := head.Name().Short()
-	remoteBranch := fmt.Sprintf("refs/remotes/upstream/%s", branch)
+	remoteBranchName := repo.GetRemoteBranchForLocal(branch)
+	remoteBranch := fmt.Sprintf("refs/remotes/upstream/%s", remoteBranchName)
 	if repo.Upstream == "" {
-		remoteBranch = fmt.Sprintf("refs/remotes/origin/%s", branch)
+		remoteBranch = fmt.Sprintf("refs/remotes/origin/%s", remoteBranchName)
 	}
 
 	remoteRef, err := r.Reference(plumbing.ReferenceName(remoteBranch), true)
@@ -273,7 +275,8 @@ func (o *Operations) statusCLI(ctx context.Context, repo types.Repo) (*StatusRes
 	if repo.Upstream == "" {
 		remoteName = "origin"
 	}
-	upstreamRef := fmt.Sprintf("%s/%s", remoteName, branch)
+	remoteBranchName := repo.GetRemoteBranchForLocal(branch)
+	upstreamRef := fmt.Sprintf("%s/%s", remoteName, remoteBranchName)
 
 	// Get ahead count
 	ahead, err := o.revListCount(ctx, repo.Path, upstreamRef, "HEAD")
@@ -333,7 +336,8 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 		branch = strings.TrimSpace(string(output))
 	}
 
-	upstreamRef := fmt.Sprintf("%s/%s", remoteName, branch)
+	remoteBranchName := repo.GetRemoteBranchForLocal(branch)
+	upstreamRef := fmt.Sprintf("%s/%s", remoteName, remoteBranchName)
 	cmd := exec.CommandContext(ctx, "git", "merge", upstreamRef)
 	cmd.Dir = repo.Path
 	output, err := cmd.CombinedOutput()
@@ -461,4 +465,83 @@ func (o *Operations) getRemotesCLI(ctx context.Context, repoPath string) ([]Remo
 		}
 	}
 	return result, nil
+}
+
+// GetLocalBranches returns a list of local branch names
+func (o *Operations) GetLocalBranches(ctx context.Context, repoPath string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "branch", "--format=%(refname:short)")
+	cmd.Dir = repoPath
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("get local branches: %w", err)
+	}
+
+	var branches []string
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			branches = append(branches, line)
+		}
+	}
+	return branches, nil
+}
+
+// BranchInfo contains branch information with commit time
+type BranchInfo struct {
+	Name       string
+	CommitTime time.Time
+}
+
+// GetRemoteBranches returns a list of remote branch names, sorted by most recent commit first
+func (o *Operations) GetRemoteBranches(ctx context.Context, repoPath string, remoteName string) ([]string, error) {
+	// Use for-each-ref to get remote branches with their latest commit time
+	// Format: %(refname:short)|%(committerdate:iso8601)
+	cmd := exec.CommandContext(ctx, "git", "for-each-ref",
+		"--format=%(refname:short)|%(committerdate:iso8601)",
+		"--sort=-committerdate",
+		fmt.Sprintf("refs/remotes/%s/", remoteName))
+	cmd.Dir = repoPath
+	output, err := cmd.Output()
+	if err != nil {
+		// Fallback to ls-remote if for-each-ref fails (e.g., remote not fetched)
+		return o.getRemoteBranchesViaLsRemote(ctx, repoPath, remoteName)
+	}
+
+	var branches []string
+	prefix := remoteName + "/"
+	for _, line := range strings.Split(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		if len(parts) >= 1 {
+			branchName := strings.TrimPrefix(parts[0], prefix)
+			if branchName != "" && branchName != "HEAD" {
+				branches = append(branches, branchName)
+			}
+		}
+	}
+	return branches, nil
+}
+
+// getRemoteBranchesViaLsRemote fetches remote branches via ls-remote as a fallback
+func (o *Operations) getRemoteBranchesViaLsRemote(ctx context.Context, repoPath string, remoteName string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--heads", remoteName)
+	cmd.Dir = repoPath
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("get remote branches: %w", err)
+	}
+
+	var branches []string
+	prefix := "refs/heads/"
+	for _, line := range strings.Split(string(output), "\n") {
+		parts := strings.Split(line, "\t")
+		if len(parts) == 2 && strings.HasPrefix(parts[1], prefix) {
+			branchName := strings.TrimPrefix(parts[1], prefix)
+			branches = append(branches, branchName)
+		}
+	}
+	return branches, nil
 }

@@ -38,6 +38,12 @@ export type AgentSessionStatus = 'active' | 'expired' | 'failed'
 // Core Domain Models
 // ---------------------------------------------------------------------------
 
+/** Branch mapping configuration */
+export interface BranchMapping {
+  localBranch: string
+  remoteBranch: string
+}
+
 /** Go Repo — managed repository */
 export interface Repo {
   id: string
@@ -46,6 +52,7 @@ export interface Repo {
   origin: string
   upstream: string
   branch: string
+  branchMapping?: BranchMapping
   autoSync: boolean
   syncInterval: string
   conflictStrategy: string
@@ -64,6 +71,8 @@ export interface ScannedRepo {
   origin: string
   isFork: boolean
   suggestedUpstream?: string
+  localBranches?: string[]
+  remoteBranches?: string[]
 }
 
 /** Go SyncResult — per-repo sync outcome */
@@ -272,4 +281,5 @@ export interface ScanOptions {
 export interface AddOptions {
   path: string
   upstream?: string
+  branchMapping?: BranchMapping
 }

@@ -16,7 +16,8 @@ import type {
   AgentListData,
   AgentSessionsData,
   AgentCleanupData,
-  HistoryData
+  HistoryData,
+  BranchMapping
 } from '../renderer/src/types/engine'
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '../renderer/src/types/ide'
 
@@ -26,8 +27,8 @@ const api = {
   syncRepo: (name: string): Promise<ApiResponse<SyncData>> =>
     ipcRenderer.invoke('engine:syncRepo', name),
   scan: (dir: string): Promise<ApiResponse<ScanData>> => ipcRenderer.invoke('engine:scan', dir),
-  add: (path: string, upstream?: string): Promise<ApiResponse<AddData>> =>
-    ipcRenderer.invoke('engine:add', path, upstream),
+  add: (path: string, upstream?: string, branchMapping?: BranchMapping): Promise<ApiResponse<AddData>> =>
+    ipcRenderer.invoke('engine:add', path, upstream, branchMapping),
   remove: (name: string): Promise<ApiResponse<RemoveData>> =>
     ipcRenderer.invoke('engine:remove', name),
   resolve: (

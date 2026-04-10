@@ -74,11 +74,14 @@ export class EngineClient {
     return this.exec<ScanData>(['scan', dir])
   }
 
-  /** `forksync add <path> [--upstream <url>] --json` */
-  async add(repoPath: string, upstream?: string): Promise<ApiResponse<AddData>> {
+  /** `forksync add <path> [--upstream <url>] [--branch-mapping <json>] --json` */
+  async add(repoPath: string, upstream?: string, branchMapping?: { localBranch: string; remoteBranch: string }): Promise<ApiResponse<AddData>> {
     const args = ['add', repoPath]
     if (upstream) {
       args.push('--upstream', upstream)
+    }
+    if (branchMapping && branchMapping.localBranch && branchMapping.remoteBranch) {
+      args.push('--branch-mapping', JSON.stringify(branchMapping))
     }
     return this.exec<AddData>(args)
   }

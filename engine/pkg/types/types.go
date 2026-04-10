@@ -46,32 +46,51 @@ func (t *Time) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Repo 仓库配置模型
+// BranchMapping defines a mapping between local and remote branch names
+type BranchMapping struct {
+	LocalBranch  string `json:"localBranch"`
+	RemoteBranch string `json:"remoteBranch"`
+}
+
+// Repo represents a managed repository
 type Repo struct {
-	ID               string     `json:"id"`
-	Name             string     `json:"name"`
-	Path             string     `json:"path"`
-	Origin           string     `json:"origin"`
-	Upstream         string     `json:"upstream"`
-	Branch           string     `json:"branch"`
-	AutoSync         bool       `json:"autoSync"`
-	SyncInterval     string     `json:"syncInterval"`
-	ConflictStrategy string     `json:"conflictStrategy"`
-	CreatedAt        time.Time  `json:"createdAt"`
-	LastSync         *Time      `json:"lastSync"`
-	Status           RepoStatus `json:"status"`
-	AheadBy          int        `json:"aheadBy"`
-	BehindBy         int        `json:"behindBy"`
-	ErrorMessage     string     `json:"errorMessage,omitempty"`
+	ID               string         `json:"id"`
+	Name             string         `json:"name"`
+	Path             string         `json:"path"`
+	Origin           string         `json:"origin"`
+	Upstream         string         `json:"upstream"`
+	Branch           string         `json:"branch"`
+	BranchMapping    *BranchMapping `json:"branchMapping,omitempty"`
+	AutoSync         bool           `json:"autoSync"`
+	SyncInterval     string         `json:"syncInterval"`
+	ConflictStrategy string         `json:"conflictStrategy"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	LastSync         *Time          `json:"lastSync"`
+	Status           RepoStatus     `json:"status"`
+	AheadBy          int            `json:"aheadBy"`
+	BehindBy         int            `json:"behindBy"`
+	ErrorMessage     string         `json:"errorMessage,omitempty"`
+}
+
+// GetRemoteBranchForLocal returns the remote branch name for a given local branch.
+// If a custom mapping exists and matches, it returns the mapped remote branch.
+// Otherwise, it returns the local branch name (same-name mapping).
+func (r *Repo) GetRemoteBranchForLocal(localBranch string) string {
+	if r.BranchMapping != nil && r.BranchMapping.LocalBranch == localBranch {
+		return r.BranchMapping.RemoteBranch
+	}
+	return localBranch
 }
 
 // ScannedRepo 扫描结果
 type ScannedRepo struct {
-	Path              string `json:"path"`
-	Name              string `json:"name"`
-	Origin            string `json:"origin"`
-	IsFork            bool   `json:"isFork"`
-	SuggestedUpstream string `json:"suggestedUpstream,omitempty"`
+	Path              string   `json:"path"`
+	Name              string   `json:"name"`
+	Origin            string   `json:"origin"`
+	IsFork            bool     `json:"isFork"`
+	SuggestedUpstream string   `json:"suggestedUpstream,omitempty"`
+	LocalBranches     []string `json:"localBranches,omitempty"`
+	RemoteBranches    []string `json:"remoteBranches,omitempty"`
 }
 
 // SyncResult 同步结果

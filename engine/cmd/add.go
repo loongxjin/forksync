@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 
@@ -13,6 +14,7 @@ import (
 )
 
 var upstreamURL string
+var branchMappingJSON string
 
 var addCmd = &cobra.Command{
 	Use:   "add <repo-path>",
@@ -23,6 +25,7 @@ var addCmd = &cobra.Command{
 
 func init() {
 	addCmd.Flags().StringVar(&upstreamURL, "upstream", "", "upstream repository URL")
+	addCmd.Flags().StringVar(&branchMappingJSON, "branch-mapping", "", "optional branch mapping as JSON object, e.g. {\"localBranch\":\"main\",\"remoteBranch\":\"master\"}")
 	rootCmd.AddCommand(addCmd)
 }
 
@@ -77,15 +80,27 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		branch = statusResult.Branch
 	}
 
+	var branchMapping *types.BranchMapping
+	if branchMappingJSON != "" {
+		var mapping types.BranchMapping
+		if err := json.Unmarshal([]byte(branchMappingJSON), &mapping); err != nil {
+			return fmt.Errorf("invalid branch-mapping JSON: %w", err)
+		}
+		if mapping.LocalBranch != "" && mapping.RemoteBranch != "" {
+			branchMapping = &mapping
+		}
+	}
+
 	repoName := filepath.Base(repoPath)
 
 	newRepo := types.Repo{
-		Name:     repoName,
-		Path:     repoPath,
-		Origin:   originURL,
-		Upstream: resolvedUpstream,
-		Branch:   branch,
-		Status:   types.RepoStatusUnconfigured,
+		Name:          repoName,
+		Path:          repoPath,
+		Origin:        originURL,
+		Upstream:      resolvedUpstream,
+		Branch:        branch,
+		BranchMapping: branchMapping,
+		Status:        types.RepoStatusUnconfigured,
 	}
 
 	// Load store
@@ -109,6 +124,9 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			outputText("  Upstream: %s", resolvedUpstream)
 		} else {
 			outputText("  No upstream configured (use --upstream to set)")
+		}
+		if branchMapping != nil {
+			outputText("  Branch mapping: %s -> %s", branchMapping.LocalBranch, branchMapping.RemoteBranch)
 		}
 	}
 

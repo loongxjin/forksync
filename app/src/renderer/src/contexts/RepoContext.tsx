@@ -11,7 +11,7 @@ import {
   useEffect,
   type ReactNode
 } from 'react'
-import type { Repo, ScannedRepo, SyncResult } from '@/types/engine'
+import type { Repo, ScannedRepo, SyncResult, BranchMapping } from '@/types/engine'
 import { engineApi } from '@/lib/api'
 
 // ---------------------------------------------------------------------------
@@ -87,7 +87,7 @@ interface RepoContextValue extends RepoState {
   syncAll: () => Promise<void>
   syncRepo: (name: string) => Promise<void>
   scan: (dir: string) => Promise<void>
-  addRepo: (path: string, upstream?: string) => Promise<void>
+  addRepo: (path: string, upstream?: string, branchMapping?: BranchMapping) => Promise<void>
   removeRepo: (name: string) => Promise<void>
 }
 
@@ -188,10 +188,10 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   }, [])
 
   const addRepo = useCallback(
-    async (path: string, upstream?: string) => {
+    async (path: string, upstream?: string, branchMapping?: BranchMapping) => {
       dispatch({ type: 'SET_LOADING', loading: true })
       try {
-        const res = await engineApi.add(path, upstream)
+        const res = await engineApi.add(path, upstream, branchMapping)
         if (res.success) {
           await refresh()
         } else {

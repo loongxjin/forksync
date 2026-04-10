@@ -18,7 +18,8 @@ import type {
   AgentListData,
   AgentSessionsData,
   AgentCleanupData,
-  HistoryData
+  HistoryData,
+  BranchMapping
 } from '@/types/engine'
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '@/types/ide'
 
@@ -27,7 +28,7 @@ export interface EngineAPI {
   syncAll(): Promise<ApiResponse<SyncData>>
   syncRepo(name: string): Promise<ApiResponse<SyncData>>
   scan(dir: string): Promise<ApiResponse<ScanData>>
-  add(path: string, upstream?: string): Promise<ApiResponse<AddData>>
+  add(path: string, upstream?: string, branchMapping?: BranchMapping): Promise<ApiResponse<AddData>>
   remove(name: string): Promise<ApiResponse<RemoveData>>
   resolve(
     name: string,

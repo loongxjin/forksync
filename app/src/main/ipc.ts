@@ -45,8 +45,8 @@ export function registerIpcHandlers(): void {
     return e.scan(dir)
   })
 
-  ipcMain.handle('engine:add', async (_event, path: string, upstream?: string) => {
-    return e.add(path, upstream)
+  ipcMain.handle('engine:add', async (_event, path: string, upstream?: string, branchMapping?: { localBranch: string; remoteBranch: string }) => {
+    return e.add(path, upstream, branchMapping)
   })
 
   ipcMain.handle('engine:remove', async (_event, name: string) => {

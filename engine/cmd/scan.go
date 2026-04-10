@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/loongxjin/forksync/engine/internal/config"
@@ -95,6 +96,33 @@ func runScan(cmd *cobra.Command, args []string) error {
 						scanned.SuggestedUpstream = result.UpstreamURL
 					}
 				}
+			}
+		}
+
+		localBranches, _ := gitOps.GetLocalBranches(cmd.Context(), path)
+		scanned.LocalBranches = localBranches
+
+		fetchCmd := exec.CommandContext(cmd.Context(), "git", "fetch", "origin", "--dry-run")
+		fetchCmd.Dir = path
+		_ = fetchCmd.Run()
+
+		originBranches, _ := gitOps.GetRemoteBranches(cmd.Context(), path, "origin")
+		scanned.RemoteBranches = originBranches
+
+		for _, r := range remotes {
+			if r.Name == "upstream" {
+				upstreamBranches, _ := gitOps.GetRemoteBranches(cmd.Context(), path, "upstream")
+				branchMap := make(map[string]bool)
+				for _, b := range scanned.RemoteBranches {
+					branchMap[b] = true
+				}
+				for _, b := range upstreamBranches {
+					if !branchMap[b] {
+						scanned.RemoteBranches = append(scanned.RemoteBranches, b)
+						branchMap[b] = true
+					}
+				}
+				break
 			}
 		}
 
