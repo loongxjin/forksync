@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRepos } from '@/contexts/RepoContext'
 import { useAgents } from '@/contexts/AgentContext'
+import { useSettings } from '@/contexts/SettingsContext'
 import { StatusCard, getStatusConfig } from '@/components/StatusCard'
 import { AgentStatusBadge } from '@/components/AgentStatusBadge'
 import { Button } from '@/components/ui/button'
@@ -12,8 +13,10 @@ import type { Repo, RepoStatus, SyncHistoryRecord } from '@/types/engine'
 export function Dashboard(): JSX.Element {
   const { repos, loading, initialized, error, refresh, syncAll } = useRepos()
   const { agents, preferred, sessions, initialized: agentsInitialized, refreshAgents, refreshSessions } = useAgents()
+  const { engineConfig } = useSettings()
   const [history, setHistory] = useState<SyncHistoryRecord[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const startupSyncDone = useRef(false)
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true)
@@ -41,6 +44,19 @@ export function Dashboard(): JSX.Element {
       refreshSessions()
     }
   }, [agentsInitialized, refreshAgents, refreshSessions])
+
+  // Auto-sync on startup (once, only when config enables it)
+  useEffect(() => {
+    if (
+      !startupSyncDone.current &&
+      initialized &&
+      repos.length > 0 &&
+      engineConfig?.Sync?.SyncOnStartup
+    ) {
+      startupSyncDone.current = true
+      syncAll()
+    }
+  }, [initialized, repos.length, engineConfig, syncAll])
 
   // Load history on mount and after sync
   useEffect(() => {
