@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '@/contexts/SettingsContext'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -41,10 +41,17 @@ export function ProxySettings(): JSX.Element {
 
   const [proxyUrl, setProxyUrl] = useState('')
   const [saving, setSaving] = useState(false)
+  const isEditingRef = useRef(false)
+  const prevConfigUrlRef = useRef('')
 
   useEffect(() => {
     if (engineConfig?.Proxy?.URL !== undefined) {
-      setProxyUrl(engineConfig.Proxy.URL)
+      // Only sync from config if user is NOT actively editing
+      // and the config value actually changed from what we last synced
+      if (!isEditingRef.current && engineConfig.Proxy.URL !== prevConfigUrlRef.current) {
+        setProxyUrl(engineConfig.Proxy.URL)
+        prevConfigUrlRef.current = engineConfig.Proxy.URL
+      }
     }
   }, [engineConfig])
 
@@ -54,11 +61,14 @@ export function ProxySettings(): JSX.Element {
     if (proxyUrl === engineConfig.Proxy?.URL) return
     if (!engineConfig.Proxy?.Enabled) return // only save URL if proxy is enabled
 
+    isEditingRef.current = true
     const timer = setTimeout(async () => {
       setSaving(true)
       await updateConfig('proxy.url', proxyUrl)
       setSaving(false)
-    }, 800)
+      isEditingRef.current = false
+      prevConfigUrlRef.current = proxyUrl
+    }, 1500)
 
     return () => clearTimeout(timer)
   }, [proxyUrl, engineConfig, updateConfig])

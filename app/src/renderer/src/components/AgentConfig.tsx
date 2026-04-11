@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAgents } from '@/contexts/AgentContext'
 import { useSettings } from '@/contexts/SettingsContext'
 import { Badge } from '@/components/ui/badge'
@@ -57,12 +57,22 @@ export function AgentConfig(): JSX.Element {
   const [sessionTTL, setSessionTTL] = useState('')
   const [savingTimeout, setSavingTimeout] = useState(false)
   const [savingTTL, setSavingTTL] = useState(false)
+  const isEditingRef = useRef({ timeout: false, sessionTTL: false })
+  const prevConfigRef = useRef({ timeout: '', sessionTTL: '' })
 
-  // Sync from engine config
+  // Sync from engine config (only when not editing)
   useEffect(() => {
     if (engineConfig?.Agent) {
-      setTimeout_(engineConfig.Agent.Timeout || '')
-      setSessionTTL(engineConfig.Agent.SessionTTL || '')
+      const cfgTimeout = engineConfig.Agent.Timeout || ''
+      const cfgTTL = engineConfig.Agent.SessionTTL || ''
+      if (!isEditingRef.current.timeout && cfgTimeout !== prevConfigRef.current.timeout) {
+        setTimeout_(cfgTimeout)
+        prevConfigRef.current.timeout = cfgTimeout
+      }
+      if (!isEditingRef.current.sessionTTL && cfgTTL !== prevConfigRef.current.sessionTTL) {
+        setSessionTTL(cfgTTL)
+        prevConfigRef.current.sessionTTL = cfgTTL
+      }
     }
   }, [engineConfig])
 
@@ -70,11 +80,14 @@ export function AgentConfig(): JSX.Element {
   useEffect(() => {
     if (!timeout || !engineConfig) return
     if (timeout === engineConfig.Agent?.Timeout) return
+    isEditingRef.current.timeout = true
     const timer = setTimeout(async () => {
       setSavingTimeout(true)
       await updateConfig('agent.timeout', timeout)
       setSavingTimeout(false)
-    }, 800)
+      isEditingRef.current.timeout = false
+      prevConfigRef.current.timeout = timeout
+    }, 1500)
     return () => clearTimeout(timer)
   }, [timeout, engineConfig, updateConfig])
 
@@ -82,11 +95,14 @@ export function AgentConfig(): JSX.Element {
   useEffect(() => {
     if (!sessionTTL || !engineConfig) return
     if (sessionTTL === engineConfig.Agent?.SessionTTL) return
+    isEditingRef.current.sessionTTL = true
     const timer = setTimeout(async () => {
       setSavingTTL(true)
       await updateConfig('agent.session_ttl', sessionTTL)
       setSavingTTL(false)
-    }, 800)
+      isEditingRef.current.sessionTTL = false
+      prevConfigRef.current.sessionTTL = sessionTTL
+    }, 1500)
     return () => clearTimeout(timer)
   }, [sessionTTL, engineConfig, updateConfig])
 

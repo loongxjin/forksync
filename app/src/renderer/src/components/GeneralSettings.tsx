@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '@/contexts/SettingsContext'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -44,11 +44,15 @@ export function GeneralSettings(): JSX.Element {
   // Local state for sync interval (debounced save)
   const [syncInterval, setSyncInterval] = useState('')
   const [saving, setSaving] = useState(false)
+  const isEditingRef = useRef(false)
+  const prevConfigIntervalRef = useRef('')
 
   // Sync local state from engine config
   useEffect(() => {
-    if (engineConfig?.Sync?.DefaultInterval) {
-      setSyncInterval(engineConfig.Sync.DefaultInterval)
+    const configInterval = engineConfig?.Sync?.DefaultInterval ?? ''
+    if (configInterval !== '' && !isEditingRef.current && configInterval !== prevConfigIntervalRef.current) {
+      setSyncInterval(configInterval)
+      prevConfigIntervalRef.current = configInterval
     }
   }, [engineConfig])
 
@@ -57,11 +61,14 @@ export function GeneralSettings(): JSX.Element {
     if (!syncInterval || !engineConfig) return
     if (syncInterval === engineConfig.Sync?.DefaultInterval) return
 
+    isEditingRef.current = true
     const timer = setTimeout(async () => {
       setSaving(true)
       await updateConfig('sync.default_interval', syncInterval)
       setSaving(false)
-    }, 800)
+      isEditingRef.current = false
+      prevConfigIntervalRef.current = syncInterval
+    }, 1500)
 
     return () => clearTimeout(timer)
   }, [syncInterval, engineConfig, updateConfig])
