@@ -5,7 +5,7 @@
  * can invoke them via contextBridge-exposed API.
  */
 
-import { ipcMain, dialog } from 'electron'
+import { ipcMain, dialog, app } from 'electron'
 import { EngineClient } from './engine'
 import { notifySyncResults } from './notify'
 
@@ -94,6 +94,18 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('engine:configSet', async (_event, key: string, value: string) => {
     return e.configSet(key, value)
+  })
+
+  ipcMain.handle('app:setAutoLaunch', async (_event, enabled: boolean) => {
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: enabled,
+        path: process.execPath
+      })
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
   })
 
   ipcMain.handle('dialog:openDirectory', async () => {

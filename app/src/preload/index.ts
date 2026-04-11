@@ -54,6 +54,8 @@ const api = {
     ipcRenderer.invoke('engine:configGet'),
   configSet: (key: string, value: string): Promise<ApiResponse<ConfigSetData>> =>
     ipcRenderer.invoke('engine:configSet', key, value),
+  setAutoLaunch: (enabled: boolean): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('app:setAutoLaunch', enabled),
   openDirectory: (): Promise<{ canceled: boolean; filePaths?: string[]; error?: string }> =>
     ipcRenderer.invoke('dialog:openDirectory'),
   // Notification click-through navigation

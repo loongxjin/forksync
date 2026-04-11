@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { GeneralSettings } from '@/components/GeneralSettings'
 import { AgentConfig } from '@/components/AgentConfig'
+import { NotificationSettings } from '@/components/NotificationSettings'
+import { ProxySettings } from '@/components/ProxySettings'
 
-const tabs = ['General', 'Agent'] as const
+const tabs = ['General', 'Agent', 'Notification', 'Proxy'] as const
 type TabName = (typeof tabs)[number]
 
 export function Settings(): JSX.Element {
@@ -33,6 +35,8 @@ export function Settings(): JSX.Element {
       <div className="mt-4">
         {activeTab === 'General' && <GeneralSettings />}
         {activeTab === 'Agent' && <AgentConfig />}
+        {activeTab === 'Notification' && <NotificationSettings />}
+        {activeTab === 'Proxy' && <ProxySettings />}
       </div>
     </div>
   )

@@ -59,6 +59,9 @@ export interface EngineAPI {
   // Config management
   configGet(): Promise<ApiResponse<EngineConfig>>
   configSet(key: string, value: string): Promise<ApiResponse<ConfigSetData>>
+
+  // App settings
+  setAutoLaunch(enabled: boolean): Promise<{ success: boolean; error?: string }>
 }
 
 /** Typed access to the engine API exposed via preload contextBridge */
