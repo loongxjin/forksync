@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
@@ -22,6 +25,10 @@ var (
 	resolveNoConfirm bool   // --no-confirm
 	resolveReject    bool   // --reject
 	resolveDone      bool   // --done
+
+	// signalsToWatch lists OS signals that should trigger status rollback
+	// when the Go process is killed during agent conflict resolution.
+	signalsToWatch = []os.Signal{os.Interrupt, syscall.SIGTERM}
 )
 
 var resolveCmd = &cobra.Command{
@@ -145,6 +152,36 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	r.Status = types.RepoStatusResolving
 	_ = store.Update(r)
 
+	// resolved tracks whether the agent finished successfully.
+	// Used by the defer guard and signal handler to decide whether
+	// to roll back the status on unexpected exit.
+	var resolved atomic.Bool
+
+	// Defer guard: if the function returns without the agent having
+	// produced a final state (resolved / conflict from verify), roll
+	// back to conflict so the repo doesn't get stuck in resolving.
+	defer func() {
+		if !resolved.Load() {
+			r.Status = types.RepoStatusConflict
+			r.ErrorMessage = "agent process exited unexpectedly, conflict resolution incomplete"
+			_ = store.Update(r)
+		}
+	}()
+
+	// Signal guard: listen for SIGTERM / SIGINT (e.g. Electron timeout
+	// killing the Go process). When received, roll back status before
+	// the process exits.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, signalsToWatch...)
+	defer signal.Stop(sigCh)
+	go func() {
+		if _, ok := <-sigCh; ok && !resolved.Load() {
+			r.Status = types.RepoStatusConflict
+			r.ErrorMessage = "agent process was terminated, conflict resolution incomplete"
+			_ = store.Update(r)
+		}
+	}()
+
 	// Set timeout context
 	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 	defer cancel()
@@ -152,6 +189,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	// Resolve conflicts
 	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, strategy)
 	if err != nil {
+		resolved.Store(true) // agent finished (with error) — we handle the status
 		r.Status = types.RepoStatusConflict
 		r.ErrorMessage = fmt.Sprintf("agent resolve failed: %v", err)
 		_ = store.Update(r)
@@ -161,6 +199,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	// Verify: check for remaining conflict markers
 	remaining := detectConflicts(ctx, r.Path)
 	if len(remaining) > 0 {
+		resolved.Store(true) // agent finished but left conflicts — we handle the status
 		r.Status = types.RepoStatusConflict
 		r.ErrorMessage = fmt.Sprintf("agent left %d unresolved conflicts", len(remaining))
 		_ = store.Update(r)
@@ -185,7 +224,8 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	result.Diff = diff
 	result.ResolvedFiles = conflictPaths
 
-	// Update status
+	// Update status — agent resolved successfully
+	resolved.Store(true)
 	r.Status = types.RepoStatusResolved
 	r.ErrorMessage = ""
 	_ = store.Update(r)
