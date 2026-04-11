@@ -22,7 +22,9 @@ import type {
   AgentListData,
   AgentSessionsData,
   AgentCleanupData,
-  HistoryData
+  HistoryData,
+  EngineConfig,
+  ConfigSetData
 } from '../renderer/src/types/engine'
 
 /** Default timeout for engine commands (10 minutes — agent resolve can be slow) */
@@ -167,6 +169,16 @@ export class EngineClient {
       args.push(opts.repoName)
     }
     return this.exec<{ message: string }>(args)
+  }
+
+  /** `forksync config get --json` */
+  async configGet(): Promise<ApiResponse<EngineConfig>> {
+    return this.exec<EngineConfig>(['config', 'get'])
+  }
+
+  /** `forksync config set <key> <value> --json` */
+  async configSet(key: string, value: string): Promise<ApiResponse<ConfigSetData>> {
+    return this.exec<ConfigSetData>(['config', 'set', key, value])
   }
 
   // -----------------------------------------------------------------------

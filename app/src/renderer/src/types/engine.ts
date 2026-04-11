@@ -252,6 +252,41 @@ export interface ServeStatus {
 // App-level Types (not from Go engine)
 // ---------------------------------------------------------------------------
 
+/** Go engine Config — from `forksync config get --json` */
+export interface EngineConfig {
+  Sync: {
+    DefaultInterval: string
+    SyncOnStartup: boolean
+    AutoLaunch: boolean
+  }
+  Agent: {
+    Preferred: string
+    Priority: string[]
+    Timeout: string
+    ConflictStrategy: string
+    ConfirmBeforeCommit: boolean
+    SessionTTL: string
+  }
+  GitHub: {
+    Token: string
+  }
+  Notification: {
+    Enabled: boolean
+    OnConflict: boolean
+    OnSyncSuccess: boolean
+  }
+  Proxy: {
+    Enabled: boolean
+    URL: string
+  }
+}
+
+/** `forksync config set` response */
+export interface ConfigSetData {
+  key: string
+  value: unknown
+}
+
 /** IPC channel names for Electron main↔renderer communication */
 export type EngineChannel =
   | 'engine:status'

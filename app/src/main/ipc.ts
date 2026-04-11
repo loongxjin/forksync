@@ -88,6 +88,14 @@ export function registerIpcHandlers(): void {
     return e.historyCleanup(opts)
   })
 
+  ipcMain.handle('engine:configGet', async () => {
+    return e.configGet()
+  })
+
+  ipcMain.handle('engine:configSet', async (_event, key: string, value: string) => {
+    return e.configSet(key, value)
+  })
+
   ipcMain.handle('dialog:openDirectory', async () => {
     try {
       const result = await dialog.showOpenDialog({

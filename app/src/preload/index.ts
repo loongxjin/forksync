@@ -17,7 +17,9 @@ import type {
   AgentSessionsData,
   AgentCleanupData,
   HistoryData,
-  BranchMapping
+  BranchMapping,
+  EngineConfig,
+  ConfigSetData
 } from '../renderer/src/types/engine'
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '../renderer/src/types/ide'
 
@@ -48,6 +50,10 @@ const api = {
     ipcRenderer.invoke('engine:history', repoName, limit),
   historyCleanup: (opts?: { repoName?: string; keepDays?: number }): Promise<ApiResponse<{ message: string }>> =>
     ipcRenderer.invoke('engine:historyCleanup', opts),
+  configGet: (): Promise<ApiResponse<EngineConfig>> =>
+    ipcRenderer.invoke('engine:configGet'),
+  configSet: (key: string, value: string): Promise<ApiResponse<ConfigSetData>> =>
+    ipcRenderer.invoke('engine:configSet', key, value),
   openDirectory: (): Promise<{ canceled: boolean; filePaths?: string[]; error?: string }> =>
     ipcRenderer.invoke('dialog:openDirectory'),
   // Notification click-through navigation

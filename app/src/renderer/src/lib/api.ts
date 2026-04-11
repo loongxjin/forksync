@@ -19,7 +19,9 @@ import type {
   AgentSessionsData,
   AgentCleanupData,
   HistoryData,
-  BranchMapping
+  BranchMapping,
+  EngineConfig,
+  ConfigSetData
 } from '@/types/engine'
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '@/types/ide'
 
@@ -53,6 +55,10 @@ export interface EngineAPI {
   ideSetDefault(ideId: string | null): Promise<{ success: boolean }>
   ideAddCustom(name: string, cliCommand: string): Promise<{ success: boolean; error?: string }>
   ideRemoveCustom(ideId: string): Promise<{ success: boolean }>
+
+  // Config management
+  configGet(): Promise<ApiResponse<EngineConfig>>
+  configSet(key: string, value: string): Promise<ApiResponse<ConfigSetData>>
 }
 
 /** Typed access to the engine API exposed via preload contextBridge */

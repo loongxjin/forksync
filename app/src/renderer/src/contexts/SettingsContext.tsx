@@ -1,5 +1,5 @@
 /**
- * SettingsContext — manages app settings (theme, IDE config, etc.)
+ * SettingsContext — manages app settings (theme, IDE config, engine config)
  */
 
 import {
@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { engineApi } from '@/lib/api'
 import type { IDEConfig, IDEInfo } from '@/types/ide'
+import type { EngineConfig } from '@/types/engine'
 
 // ---------------------------------------------------------------------------
 // State & Actions
@@ -23,17 +24,26 @@ interface SettingsState {
   theme: Theme
   ideConfig: IDEConfig | null
   ideLoading: boolean
+  engineConfig: EngineConfig | null
+  configLoading: boolean
+  configError: string | null
 }
 
 type SettingsAction =
   | { type: 'SET_THEME'; theme: Theme }
   | { type: 'SET_IDE_CONFIG'; config: IDEConfig }
   | { type: 'SET_IDE_LOADING'; loading: boolean }
+  | { type: 'SET_ENGINE_CONFIG'; config: EngineConfig }
+  | { type: 'SET_CONFIG_LOADING'; loading: boolean }
+  | { type: 'SET_CONFIG_ERROR'; error: string | null }
 
 const initialState: SettingsState = {
   theme: (localStorage.getItem('forksync-theme') as Theme) || 'dark',
   ideConfig: null,
-  ideLoading: true
+  ideLoading: true,
+  engineConfig: null,
+  configLoading: true,
+  configError: null
 }
 
 function settingsReducer(state: SettingsState, action: SettingsAction): SettingsState {
@@ -44,6 +54,12 @@ function settingsReducer(state: SettingsState, action: SettingsAction): Settings
       return { ...state, ideConfig: action.config, ideLoading: false }
     case 'SET_IDE_LOADING':
       return { ...state, ideLoading: action.loading }
+    case 'SET_ENGINE_CONFIG':
+      return { ...state, engineConfig: action.config, configLoading: false, configError: null }
+    case 'SET_CONFIG_LOADING':
+      return { ...state, configLoading: action.loading }
+    case 'SET_CONFIG_ERROR':
+      return { ...state, configError: action.error, configLoading: false }
     default:
       return state
   }
@@ -62,6 +78,9 @@ interface SettingsContextValue extends SettingsState {
   removeCustomIDE: (ideId: string) => Promise<void>
   getInstalledIDEs: () => IDEInfo[]
   getDefaultIDE: () => IDEInfo | null
+  // Engine config
+  refreshConfig: () => Promise<void>
+  updateConfig: (key: string, value: string) => Promise<void>
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null)
@@ -138,10 +157,41 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
     )
   }, [state.ideConfig])
 
-  // Load IDE config on mount
+  // --- Engine config methods ---
+
+  const refreshConfig = useCallback(async () => {
+    dispatch({ type: 'SET_CONFIG_LOADING', loading: true })
+    try {
+      const result = await engineApi.configGet()
+      if (result.success && result.data) {
+        dispatch({ type: 'SET_ENGINE_CONFIG', config: result.data })
+      } else {
+        dispatch({ type: 'SET_CONFIG_ERROR', error: result.error || 'Failed to load config' })
+      }
+    } catch (err) {
+      dispatch({ type: 'SET_CONFIG_ERROR', error: err instanceof Error ? err.message : String(err) })
+    }
+  }, [])
+
+  const updateConfig = useCallback(async (key: string, value: string) => {
+    try {
+      const result = await engineApi.configSet(key, value)
+      if (result.success) {
+        // Refresh full config after set
+        await refreshConfig()
+      } else {
+        dispatch({ type: 'SET_CONFIG_ERROR', error: result.error || 'Failed to update config' })
+      }
+    } catch (err) {
+      dispatch({ type: 'SET_CONFIG_ERROR', error: err instanceof Error ? err.message : String(err) })
+    }
+  }, [refreshConfig])
+
+  // Load configs on mount
   useEffect(() => {
     refreshIDEConfig()
-  }, [refreshIDEConfig])
+    refreshConfig()
+  }, [refreshIDEConfig, refreshConfig])
 
   return (
     <SettingsContext.Provider
@@ -154,7 +204,9 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
         addCustomIDE,
         removeCustomIDE,
         getInstalledIDEs,
-        getDefaultIDE
+        getDefaultIDE,
+        refreshConfig,
+        updateConfig
       }}
     >
       {children}
