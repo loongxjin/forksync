@@ -91,10 +91,10 @@ func BuildConflictPrompt(files []string, strategy string) string {
 	switch strategy {
 	case "preserve_ours":
 		sb.WriteString("保留我们的自定义修改，接受上游的非冲突变更。\n")
-		sb.WriteString("当双方的修改发生在同一位置时，优先保留本地（ours）的版本。\n")
+		sb.WriteString("当双方的修改矛盾不可调和，优先保留本地（ours）的版本。\n")
 	case "accept_theirs":
 		sb.WriteString("优先接受上游的变更，仅在必要处保留本地修改。\n")
-		sb.WriteString("当双方的修改发生在同一位置时，优先采用上游（theirs）的版本。\n")
+		sb.WriteString("当双方的修改矛盾不可调和，优先采用上游（theirs）的版本。\n")
 	case "balanced":
 		sb.WriteString("智能合并，尽量同时保留双方的修改。\n")
 		sb.WriteString("只有当双方修改了完全相同的行且无法自动整合时才需要取舍。\n")
