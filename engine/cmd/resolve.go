@@ -145,18 +145,12 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	r.Status = types.RepoStatusResolving
 	_ = store.Update(r)
 
-	// Ensure session exists
-	if _, err := sessionMgr.CreateSessionForRepo(cmd.Context(), r.ID, r.Path); err != nil {
-		// Session might already exist, that's OK
-		_ = err
-	}
-
 	// Set timeout context
 	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 	defer cancel()
 
 	// Resolve conflicts
-	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, conflictPaths, strategy)
+	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, strategy)
 	if err != nil {
 		r.Status = types.RepoStatusConflict
 		r.ErrorMessage = fmt.Sprintf("agent resolve failed: %v", err)

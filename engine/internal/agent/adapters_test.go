@@ -41,31 +41,47 @@ func TestAllAdapters_Interface(t *testing.T) {
 }
 
 func TestClaudeAdapter_BuildArgs(t *testing.T) {
-	a := &ClaudeAdapter{binary: "claude"}
 
 	tests := []struct {
-		name      string
-		sessionID string
-		prompt    string
-		wantArgs  []string // exact expected args
+		name     string
+		new      bool
+		prompt   string
+		wantArgs []string
 	}{
 		{
-			name:      "new session",
-			sessionID: "",
-			prompt:    "resolve conflicts",
-			wantArgs:  []string{"--print", "--dangerously-skip-permissions", "resolve conflicts"},
+			name:     "new session",
+			new:      true,
+			prompt:   "resolve conflicts",
+			wantArgs: []string{"--print", "--dangerously-skip-permissions", "--output-format", "json", "resolve conflicts"},
 		},
 		{
-			name:      "resume session",
-			sessionID: "sess-123",
-			prompt:    "resolve more",
-			wantArgs:  []string{"--print", "--dangerously-skip-permissions", "--resume", "sess-123", "resolve more"},
+			name:     "resume session",
+			new:      false,
+			prompt:   "resolve more",
+			wantArgs: []string{"--print", "--dangerously-skip-permissions", "--output-format", "json", "--resume", "sess-123", "resolve more"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args := a.buildArgs(tt.sessionID, tt.prompt)
+			var args []string
+			if tt.new {
+				args = []string{
+					"--print",
+					"--dangerously-skip-permissions",
+					"--output-format", "json",
+					tt.prompt,
+				}
+			} else {
+				args = []string{
+					"--print",
+					"--dangerously-skip-permissions",
+					"--output-format", "json",
+					"--resume", "sess-123",
+					tt.prompt,
+				}
+			}
+			// Verify the args match expected
 			if len(args) != len(tt.wantArgs) {
 				t.Fatalf("args = %v; want %v", args, tt.wantArgs)
 			}

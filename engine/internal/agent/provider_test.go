@@ -59,16 +59,12 @@ func TestAgentProviderInterface(t *testing.T) {
 
 func TestSessionOptionsFields(t *testing.T) {
 	opts := SessionOptions{
-		RepoPath:     "/path/to/repo",
-		RepoName:     "my-repo",
-		ContextFiles: []string{"README.md", "go.mod"},
+		RepoPath: "/path/to/repo",
+		RepoName: "my-repo",
 	}
 
 	if opts.RepoPath != "/path/to/repo" {
 		t.Errorf("RepoPath = %q; want %q", opts.RepoPath, "/path/to/repo")
-	}
-	if len(opts.ContextFiles) != 2 {
-		t.Errorf("ContextFiles length = %d; want 2", len(opts.ContextFiles))
 	}
 }
 

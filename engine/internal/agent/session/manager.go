@@ -3,8 +3,6 @@ package session
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -83,39 +81,86 @@ func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*ag
 
 // ResolveConflicts is the main entry point for conflict resolution.
 // It ensures a session exists, builds the prompt, and calls the agent.
-func (m *Manager) ResolveConflicts(ctx context.Context, repoID string, conflictFiles []string, strategy string) (*agent.AgentResult, error) {
-	// Get or create session
-	rec, err := m.store.Load(repoID)
+// If resuming an existing session fails (e.g. the agent CLI lost it),
+// it transparently creates a new session and retries.
+func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string, conflictFiles []string, strategy string) (*agent.AgentResult, error) {
+	// Ensure session exists — reuse active or create new
+	sess, err := m.GetOrCreate(ctx, repoID, repoPath)
 	if err != nil {
-		return nil, fmt.Errorf("no session for repo %s: %w", repoID, err)
+		return nil, fmt.Errorf("ensure session for repo %s: %w", repoID, err)
 	}
 
-	sess := &agent.Session{
-		ID:       rec.SessionID,
-		Provider: rec.AgentName,
-		RepoPath: rec.RepoPath,
+	// Build prompt — for new sessions merge system prompt + conflict task
+	// into one prompt so the agent doesn't start working before receiving
+	// the actual task.
+	var prompt string
+	if sess.IsNew {
+		prompt = agent.BuildInitialConflictPrompt(conflictFiles, strategy)
+	} else {
+		prompt = agent.BuildConflictPrompt(conflictFiles, strategy)
 	}
-
-	// Build prompt
-	prompt := agent.BuildConflictPrompt(conflictFiles, strategy)
 
 	// Call agent
 	result, err := m.provider.ResolveConflicts(ctx, sess, prompt)
 	if err != nil {
-		_ = m.store.UpdateStatus(repoID, "failed")
-		return result, err
+		// Resume failed — the session is stale on the agent side.
+		// Discard it and create a fresh one, then retry.
+		m.invalidateSession(repoID)
+		sess, retryErr := m.createSessionUnlocked(ctx, repoID, repoPath)
+		if retryErr != nil {
+			_ = m.store.UpdateStatus(repoID, "failed")
+			return nil, fmt.Errorf("resume failed (%v); recreate session also failed: %w", err, retryErr)
+		}
+		// Retry with merged prompt (this is a new session too)
+		prompt = agent.BuildInitialConflictPrompt(conflictFiles, strategy)
+		result, err = m.provider.ResolveConflicts(ctx, sess, prompt)
+		if err != nil {
+			_ = m.store.UpdateStatus(repoID, "failed")
+			return result, err
+		}
+	}
+
+	// Mark session as no longer new after first real interaction
+	if sess.IsNew {
+		sess.IsNew = false
+		m.mu.Lock()
+		m.active[repoID] = sess
+		m.mu.Unlock()
 	}
 
 	// Update session's last used time
 	_ = m.store.UpdateLastUsed(repoID)
 
 	// Update session ID if agent returned a new one
-	if result.SessionID != "" && result.SessionID != rec.SessionID {
-		rec.SessionID = result.SessionID
-		_ = m.store.Save(rec)
+	if result.SessionID != "" && result.SessionID != sess.ID {
+		if rec, loadErr := m.store.Load(repoID); loadErr == nil {
+			rec.SessionID = result.SessionID
+			_ = m.store.Save(rec)
+		}
+		sess.ID = result.SessionID
+		m.mu.Lock()
+		m.active[repoID] = sess
+		m.mu.Unlock()
 	}
 
 	return result, nil
+}
+
+// invalidateSession removes a session from in-memory cache and marks it
+// as failed on disk, so subsequent GetOrCreate will create a new one.
+func (m *Manager) invalidateSession(repoID string) {
+	m.mu.Lock()
+	delete(m.active, repoID)
+	m.mu.Unlock()
+	_ = m.store.UpdateStatus(repoID, "failed")
+}
+
+// createSessionUnlocked creates a new session without acquiring the mutex.
+// Callers that already hold m.mu should use createSession instead.
+func (m *Manager) createSessionUnlocked(ctx context.Context, repoID, repoPath string) (*agent.Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.createSession(ctx, repoID, repoPath)
 }
 
 // CreateSessionForRepo creates a new agent session for a repository.
@@ -128,12 +173,8 @@ func (m *Manager) CreateSessionForRepo(ctx context.Context, repoID, repoPath str
 
 // createSession is the internal implementation (caller must hold m.mu).
 func (m *Manager) createSession(ctx context.Context, repoID, repoPath string) (*agent.Session, error) {
-	contextFiles := scanContextFiles(repoPath)
-
 	sess, err := m.provider.StartSession(ctx, agent.SessionOptions{
-		RepoPath:     repoPath,
-		RepoName:     filepath.Base(repoPath),
-		ContextFiles: contextFiles,
+		RepoPath: repoPath,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start agent session for %s: %w", repoID, err)
@@ -201,40 +242,4 @@ func (m *Manager) ListSessionsAsInfo() ([]types.AgentSessionInfo, error) {
 		})
 	}
 	return infos, nil
-}
-
-// scanContextFiles looks for common project context files in a repo.
-// Returns file names (relative paths) that exist.
-func scanContextFiles(repoPath string) []string {
-	candidates := []string{
-		"README.md", "README", "README.txt",
-		"CONTRIBUTING.md",
-		"AGENTS.md",
-		".editorconfig",
-		"go.mod", "package.json", "Cargo.toml",
-	}
-
-	var found []string
-	for _, f := range candidates {
-		if _, err := os.Stat(filepath.Join(repoPath, f)); err == nil {
-			found = append(found, f)
-		}
-	}
-	return found
-}
-
-// readContextFileContent reads a context file and returns its content.
-// Used by adapters that support context injection (e.g., Claude --print).
-// Returns empty string if file doesn't exist or can't be read.
-func readContextFileContent(repoPath, filename string) string {
-	data, err := os.ReadFile(filepath.Join(repoPath, filename))
-	if err != nil {
-		return ""
-	}
-	// Limit to 4KB per file to avoid overwhelming the prompt
-	const maxLen = 4096
-	if len(data) > maxLen {
-		return string(data[:maxLen]) + "\n... (truncated)"
-	}
-	return string(data)
 }

@@ -30,8 +30,7 @@ func (a *DroidAdapter) IsAvailable() bool {
 }
 
 func (a *DroidAdapter) StartSession(ctx context.Context, opts SessionOptions) (*Session, error) {
-	contextPrompt := buildContextInjectionPrompt(opts)
-	output, err := a.runCommand(ctx, "", opts.RepoPath, contextPrompt)
+	output, err := a.runCommand(ctx, "", opts.RepoPath, "ok")
 	if err != nil {
 		return nil, fmt.Errorf("droid start session: %w", err)
 	}
@@ -41,6 +40,7 @@ func (a *DroidAdapter) StartSession(ctx context.Context, opts SessionOptions) (*
 		Provider:  "droid",
 		RepoPath:  opts.RepoPath,
 		StartedAt: time.Now(),
+		IsNew:     true,
 	}, nil
 }
 

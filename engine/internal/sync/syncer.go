@@ -247,7 +247,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	}
 
 	// Resolve conflicts via agent
-	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, conflictPaths, strategy)
+	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, strategy)
 	if err != nil || !result.Success {
 		return false
 	}

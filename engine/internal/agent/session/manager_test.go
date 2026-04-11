@@ -126,7 +126,7 @@ func TestManager_ResolveConflicts(t *testing.T) {
 	// Create session first
 	_, _ = mgr.GetOrCreate(context.Background(), "repo-1", "/path/to/repo")
 
-	result, err := mgr.ResolveConflicts(context.Background(), "repo-1", []string{"a.go", "b.go"}, "preserve_ours")
+	result, err := mgr.ResolveConflicts(context.Background(), "repo-1", "/path/to/repo", []string{"a.go", "b.go"}, "preserve_ours")
 	if err != nil {
 		t.Fatalf("ResolveConflicts: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestManager_ResolveConflicts_NoSession(t *testing.T) {
 		t.Fatal("session should not be nil")
 	}
 
-	result, err := mgr.ResolveConflicts(context.Background(), "repo-new", []string{"a.go"}, "preserve_ours")
+	result, err := mgr.ResolveConflicts(context.Background(), "repo-new", "/path/to/repo", []string{"a.go"}, "preserve_ours")
 	if err != nil {
 		t.Fatalf("ResolveConflicts: %v", err)
 	}

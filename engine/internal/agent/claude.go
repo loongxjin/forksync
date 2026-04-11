@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"time"
@@ -9,13 +10,15 @@ import (
 
 // ClaudeAdapter implements AgentProvider for Claude Code CLI.
 //
-// Invocation: claude --print --dangerously-skip-permissions [--resume <id>] --append-system-prompt <text> <prompt>
+// Invocation patterns:
+//   - New session:  claude --print --dangerously-skip-permissions --output-format json <prompt>
+//   - Resume:       claude --print --dangerously-skip-permissions --output-format json --resume <session-id> <prompt>
 //
 // Claude Code CLI flags:
 //   - --print: non-interactive output mode
 //   - --dangerously-skip-permissions: autonomous mode (no approval prompts)
-//   - --resume <session-id>: resume existing session
-//   - --append-system-prompt <text>: inject system prompt
+//   - --output-format json: structured output containing session_id
+//   - --resume <session-id>: resume an existing session
 type ClaudeAdapter struct {
 	binary string
 }
@@ -32,24 +35,28 @@ func (a *ClaudeAdapter) IsAvailable() bool {
 }
 
 func (a *ClaudeAdapter) StartSession(ctx context.Context, opts SessionOptions) (*Session, error) {
-	// Claude Code creates sessions implicitly on first interaction.
-	contextPrompt := buildContextInjectionPrompt(opts)
-	result, err := a.runCommand(ctx, "", opts.RepoPath, contextPrompt)
+	// Send a minimal placeholder prompt just to obtain a session ID from
+	// the Claude CLI. The real task prompt is sent later via ResolveConflicts.
+	result, err := a.runCommandNew(ctx, opts.RepoPath, "ok")
 	if err != nil {
 		return nil, fmt.Errorf("claude start session: %w", err)
 	}
 
-	sessionID := extractSessionID(result)
+	if result.SessionID == "" {
+		return nil, fmt.Errorf("claude CLI did not return a session_id")
+	}
+
 	return &Session{
-		ID:        sessionID,
+		ID:        result.SessionID,
 		Provider:  "claude",
 		RepoPath:  opts.RepoPath,
 		StartedAt: time.Now(),
+		IsNew:     true,
 	}, nil
 }
 
 func (a *ClaudeAdapter) ResolveConflicts(ctx context.Context, session *Session, prompt string) (*AgentResult, error) {
-	output, err := a.runCommand(ctx, session.ID, session.RepoPath, prompt)
+	result, err := a.runCommandResume(ctx, session.ID, session.RepoPath, prompt)
 	if err != nil {
 		return &AgentResult{
 			Success:   false,
@@ -58,15 +65,10 @@ func (a *ClaudeAdapter) ResolveConflicts(ctx context.Context, session *Session, 
 		}, fmt.Errorf("claude resolve: %w", err)
 	}
 
-	sessionID := extractSessionID(output)
-	if sessionID == "" {
-		sessionID = session.ID
-	}
-
 	return &AgentResult{
 		Success:   true,
-		SessionID: sessionID,
-		Summary:   truncateOutput(output, 500),
+		SessionID: session.ID,
+		Summary:   truncateOutput(result.Text, 500),
 	}, nil
 }
 
@@ -75,24 +77,65 @@ func (a *ClaudeAdapter) EndSession(ctx context.Context, sessionID string) error 
 	return nil
 }
 
-// buildArgs constructs the CLI arguments for a Claude Code invocation.
-func (a *ClaudeAdapter) buildArgs(sessionID, prompt string) []string {
-	args := []string{"--print", "--dangerously-skip-permissions"}
-	if sessionID != "" {
-		args = append(args, "--resume", sessionID)
-	}
-	args = append(args, prompt)
-	return args
+// claudeJSONResult represents the JSON output from Claude Code CLI with --output-format json.
+type claudeJSONResult struct {
+	Type      string `json:"type"`
+	SessionID string `json:"session_id"`
+	Result    string `json:"result"`
+	IsError   bool   `json:"is_error"`
 }
 
-func (a *ClaudeAdapter) runCommand(ctx context.Context, sessionID, repoPath, prompt string) (string, error) {
-	args := a.buildArgs(sessionID, prompt)
+// claudeOutput holds the parsed result from a Claude CLI invocation.
+type claudeOutput struct {
+	SessionID string
+	Text      string
+}
+
+// runCommandNew starts a NEW session (no --resume, no --session-id).
+// Claude CLI assigns the session ID and returns it in JSON output.
+func (a *ClaudeAdapter) runCommandNew(ctx context.Context, repoPath, prompt string) (*claudeOutput, error) {
+	args := []string{
+		"--print",
+		"--dangerously-skip-permissions",
+		"--output-format", "json",
+		prompt,
+	}
+	return a.execClaude(ctx, repoPath, args)
+}
+
+// runCommandResume resumes an EXISTING session with --resume.
+func (a *ClaudeAdapter) runCommandResume(ctx context.Context, sessionID, repoPath, prompt string) (*claudeOutput, error) {
+	args := []string{
+		"--print",
+		"--dangerously-skip-permissions",
+		"--output-format", "json",
+		"--resume", sessionID,
+		prompt,
+	}
+	return a.execClaude(ctx, repoPath, args)
+}
+
+func (a *ClaudeAdapter) execClaude(ctx context.Context, repoPath string, args []string) (*claudeOutput, error) {
 	cmd := exec.CommandContext(ctx, a.binary, args...)
 	cmd.Dir = repoPath
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("claude CLI: %s: %w", string(output), err)
+		return nil, fmt.Errorf("claude CLI: %s: %w", string(output), err)
 	}
-	return string(output), nil
+
+	// Parse JSON output
+	var result claudeJSONResult
+	if jsonErr := json.Unmarshal(output, &result); jsonErr != nil {
+		return nil, fmt.Errorf("claude CLI: failed to parse JSON output: %w\nraw: %s", jsonErr, string(output))
+	}
+
+	if result.IsError {
+		return nil, fmt.Errorf("claude CLI returned error: %s", result.Result)
+	}
+
+	return &claudeOutput{
+		SessionID: result.SessionID,
+		Text:      result.Result,
+	}, nil
 }

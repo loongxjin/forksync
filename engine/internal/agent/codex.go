@@ -30,8 +30,7 @@ func (a *CodexAdapter) IsAvailable() bool {
 }
 
 func (a *CodexAdapter) StartSession(ctx context.Context, opts SessionOptions) (*Session, error) {
-	contextPrompt := buildContextInjectionPrompt(opts)
-	output, err := a.runCommand(ctx, false, opts.RepoPath, contextPrompt)
+	output, err := a.runCommand(ctx, false, opts.RepoPath, "ok")
 	if err != nil {
 		return nil, fmt.Errorf("codex start session: %w", err)
 	}
@@ -41,6 +40,7 @@ func (a *CodexAdapter) StartSession(ctx context.Context, opts SessionOptions) (*
 		Provider:  "codex",
 		RepoPath:  opts.RepoPath,
 		StartedAt: time.Now(),
+		IsNew:     true,
 	}, nil
 }
 
