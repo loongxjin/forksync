@@ -10,7 +10,7 @@ import type { ResolveData } from '@/types/engine'
 export function ConflictDetail(): JSX.Element {
   const { repoId } = useParams<{ repoId: string }>()
   const navigate = useNavigate()
-  const { repos, initialized, refresh } = useRepos()
+  const { repos, initialized, refresh, updateRepoStatus } = useRepos()
   const { resolve, resolveDone, resolveReject, preferred, loading, error: agentError } = useAgents()
 
   const [resolveResult, setResolveResult] = useState<ResolveData | null>(null)
@@ -25,7 +25,9 @@ export function ConflictDetail(): JSX.Element {
   }, [initialized, refresh])
 
   const handleResolve = async (): Promise<void> => {
-    if (!repoId) return
+    if (!repoId || !repo) return
+    // Optimistically update UI to "resolving" before the blocking agent call
+    updateRepoStatus(repo.id, 'resolving')
     setLocalLoading(true)
     try {
       const result = await resolve(repoId, { agent: preferred || undefined })

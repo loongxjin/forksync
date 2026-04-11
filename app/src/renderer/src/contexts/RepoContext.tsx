@@ -36,6 +36,7 @@ type RepoAction =
   | { type: 'SET_SCANNED'; repos: ScannedRepo[] }
   | { type: 'SET_SYNC_RESULTS'; results: SyncResult[] }
   | { type: 'UPDATE_REPO'; repo: Repo }
+  | { type: 'SET_REPO_STATUS'; repoId: string; status: Repo['status'] }
   | { type: 'REMOVE_REPO'; repoId: string }
   | { type: 'SET_ERROR'; error: string | null }
   | { type: 'SHOW_TOAST'; message: string; toastType: ToastState['type'] }
@@ -75,6 +76,13 @@ function repoReducer(state: RepoState, action: RepoAction): RepoState {
         ...state,
         repos: state.repos.filter((r) => r.id !== action.repoId)
       }
+    case 'SET_REPO_STATUS':
+      return {
+        ...state,
+        repos: state.repos.map((r) =>
+          r.id === action.repoId ? { ...r, status: action.status } : r
+        )
+      }
     case 'SET_ERROR':
       return { ...state, error: action.error, loading: false }
     case 'SHOW_TOAST':
@@ -100,6 +108,7 @@ interface RepoContextValue extends RepoState {
   scan: (dir: string) => Promise<void>
   addRepo: (path: string, upstream?: string, branchMapping?: BranchMapping) => Promise<void>
   removeRepo: (name: string) => Promise<void>
+  updateRepoStatus: (repoId: string, status: Repo['status']) => void
   showToast: (message: string, type?: ToastState['type']) => void
   hideToast: () => void
   startupSyncDone: boolean
@@ -267,9 +276,13 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     startupSyncDoneRef.current = true
   }, [])
 
+  const updateRepoStatus = useCallback((repoId: string, status: Repo['status']) => {
+    dispatch({ type: 'SET_REPO_STATUS', repoId, status })
+  }, [])
+
   return (
     <RepoContext.Provider
-      value={{ ...state, refresh, syncAll, syncRepo, scan, addRepo, removeRepo, showToast, hideToast, startupSyncDone: startupSyncDoneRef.current, markStartupSyncDone }}
+      value={{ ...state, refresh, syncAll, syncRepo, scan, addRepo, removeRepo, updateRepoStatus, showToast, hideToast, startupSyncDone: startupSyncDoneRef.current, markStartupSyncDone }}
     >
       {children}
     </RepoContext.Provider>
