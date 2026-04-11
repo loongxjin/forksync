@@ -11,12 +11,11 @@ import { engineApi } from '@/lib/api'
 import type { Repo, RepoStatus, SyncHistoryRecord } from '@/types/engine'
 
 export function Dashboard(): JSX.Element {
-  const { repos, loading, initialized, error, refresh, syncAll } = useRepos()
+  const { repos, loading, initialized, error, refresh, syncAll, startupSyncDone, markStartupSyncDone } = useRepos()
   const { agents, preferred, sessions, initialized: agentsInitialized, refreshAgents, refreshSessions } = useAgents()
   const { engineConfig } = useSettings()
   const [history, setHistory] = useState<SyncHistoryRecord[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  const startupSyncDone = useRef(false)
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true)
@@ -45,18 +44,18 @@ export function Dashboard(): JSX.Element {
     }
   }, [agentsInitialized, refreshAgents, refreshSessions])
 
-  // Auto-sync on startup (once, only when config enables it)
+  // Auto-sync on startup (once per app session, only when config enables it)
   useEffect(() => {
     if (
-      !startupSyncDone.current &&
+      !startupSyncDone &&
       initialized &&
       repos.length > 0 &&
       engineConfig?.Sync?.SyncOnStartup
     ) {
-      startupSyncDone.current = true
+      markStartupSyncDone()
       syncAll()
     }
-  }, [initialized, repos.length, engineConfig, syncAll])
+  }, [initialized, repos.length, engineConfig, syncAll, startupSyncDone, markStartupSyncDone])
 
   // Load history on mount and after sync
   useEffect(() => {

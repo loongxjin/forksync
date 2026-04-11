@@ -102,6 +102,8 @@ interface RepoContextValue extends RepoState {
   removeRepo: (name: string) => Promise<void>
   showToast: (message: string, type?: ToastState['type']) => void
   hideToast: () => void
+  startupSyncDone: boolean
+  markStartupSyncDone: () => void
 }
 
 const RepoContext = createContext<RepoContextValue | null>(null)
@@ -169,12 +171,23 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   // Track syncing repos to prevent duplicate sync requests
   const syncingReposRef = useRef<Set<string>>(new Set())
 
+  // Track whether startup sync has been done (persists across page navigation)
+  const startupSyncDoneRef = useRef(false)
+
   const syncRepo = useCallback(
     async (name: string) => {
       // Prevent duplicate sync for the same repo
       if (syncingReposRef.current.has(name)) {
         return
       }
+
+      // Don't allow sync if repo is in conflict/resolving/resolved state
+      const repo = state.repos.find((r) => r.name === name)
+      if (repo && (repo.status === 'conflict' || repo.status === 'resolving' || repo.status === 'resolved')) {
+        showToast(`"${name}" has unresolved conflicts, please resolve first`, 'warning')
+        return
+      }
+
       syncingReposRef.current.add(name)
 
       dispatch({ type: 'SET_LOADING', loading: true })
@@ -250,9 +263,13 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     [refresh]
   )
 
+  const markStartupSyncDone = useCallback(() => {
+    startupSyncDoneRef.current = true
+  }, [])
+
   return (
     <RepoContext.Provider
-      value={{ ...state, refresh, syncAll, syncRepo, scan, addRepo, removeRepo, showToast, hideToast }}
+      value={{ ...state, refresh, syncAll, syncRepo, scan, addRepo, removeRepo, showToast, hideToast, startupSyncDone: startupSyncDoneRef.current, markStartupSyncDone }}
     >
       {children}
     </RepoContext.Provider>

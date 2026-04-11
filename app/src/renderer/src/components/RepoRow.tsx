@@ -70,13 +70,15 @@ export function RepoRow({ repo, onSync, onRemove, onResolve }: RepoRowProps): JS
 
       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
         <IDEOpenButton repoPath={repo.path} />
-        <button
-          onClick={() => onSync(repo.name)}
-          className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-          title="Sync now"
-        >
-          🔄 Sync
-        </button>
+        {repo.status !== 'conflict' && repo.status !== 'resolving' && repo.status !== 'resolved' && (
+          <button
+            onClick={() => onSync(repo.name)}
+            className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            title="Sync now"
+          >
+            🔄 Sync
+          </button>
+        )}
         {(repo.status === 'conflict' || repo.status === 'resolved') && (
           <button
             onClick={() => onResolve(repo.name)}
