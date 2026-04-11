@@ -58,6 +58,14 @@ func runStatus(cmd *cobra.Command, args []string) error {
 					// but update the status to reflect this transitional state.
 					repos[i].Status = types.RepoStatusResolved
 					_ = store.Update(repos[i])
+				} else if err == nil && isMerging && len(unmergedFiles) > 0 && r.Status == types.RepoStatusResolving {
+					// MERGE_HEAD exists and there are still unmerged files, but
+					// the repo is in "resolving" state. This means the agent has
+					// exited (crashed, timed out, etc.) without finishing.
+					// Roll back to "conflict" so the user can retry.
+					repos[i].Status = types.RepoStatusConflict
+					repos[i].ErrorMessage = "agent exited unexpectedly, conflict resolution incomplete"
+					_ = store.Update(repos[i])
 				}
 			}
 
