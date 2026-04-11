@@ -284,9 +284,9 @@ func completeAgentResolve(ctx context.Context, r types.Repo, store repo.Store, r
 		}
 	}
 
-	// Commit
+	// Commit — skip pre-commit hooks since this is an automated merge commit
 	commitMsg := fmt.Sprintf("Merge upstream (agent-resolved conflicts)")
-	commitCmd := exec.CommandContext(ctx, "git", "commit", "-m", commitMsg)
+	commitCmd := exec.CommandContext(ctx, "git", "commit", "-m", commitMsg, "--no-verify")
 	commitCmd.Dir = r.Path
 	if output, err := commitCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git commit: %s: %w", string(output), err)
@@ -364,12 +364,24 @@ func runResolveDone(cmd *cobra.Command, r types.Repo, store repo.Store) error {
 		return nil
 	}
 
-	// Complete the merge
-	commitCmd := exec.CommandContext(cmd.Context(), "git", "commit", "--no-edit")
+	// Stage all resolved files before committing.
+	// Agent edits files in the working tree but does not run `git add`,
+	// so we must stage them explicitly.
+	addCmd := exec.CommandContext(cmd.Context(), "git", "add", "-A")
+	addCmd.Dir = r.Path
+	if output, err := addCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git add: %s: %w", string(output), err)
+	}
+
+	// Complete the merge.
+	// Use --no-verify to skip pre-commit hooks (lint, typecheck, etc.)
+	// because the agent's conflict resolution commit should not be blocked
+	// by code quality checks — the user can run those separately later.
+	commitCmd := exec.CommandContext(cmd.Context(), "git", "commit", "--no-edit", "--no-verify")
 	commitCmd.Dir = r.Path
 	output, err := commitCmd.CombinedOutput()
 	if err != nil {
-		commitCmd = exec.CommandContext(cmd.Context(), "git", "commit", "-m", "Merge upstream changes (agent-resolved conflicts)")
+		commitCmd = exec.CommandContext(cmd.Context(), "git", "commit", "-m", "Merge upstream changes (agent-resolved conflicts)", "--no-verify")
 		commitCmd.Dir = r.Path
 		output, err = commitCmd.CombinedOutput()
 		if err != nil {

@@ -11,7 +11,7 @@ export function ConflictDetail(): JSX.Element {
   const { repoId } = useParams<{ repoId: string }>()
   const navigate = useNavigate()
   const { repos, initialized, refresh } = useRepos()
-  const { resolve, resolveDone, resolveReject, preferred, loading } = useAgents()
+  const { resolve, resolveDone, resolveReject, preferred, loading, error: agentError } = useAgents()
 
   const [resolveResult, setResolveResult] = useState<ResolveData | null>(null)
   const [localLoading, setLocalLoading] = useState(false)
@@ -42,7 +42,12 @@ export function ConflictDetail(): JSX.Element {
     if (!repoId) return
     setLocalLoading(true)
     try {
-      await resolveDone(repoId)
+      const result = await resolveDone(repoId)
+      if (!result) {
+        // resolveDone returned null — error already dispatched in AgentContext
+        // Don't navigate away so the user can see the error
+        return
+      }
       await refresh()
       navigate('/conflicts')
     } finally {
@@ -54,7 +59,11 @@ export function ConflictDetail(): JSX.Element {
     if (!repoId) return
     setLocalLoading(true)
     try {
-      await resolveReject(repoId)
+      const ok = await resolveReject(repoId)
+      if (!ok) {
+        // resolveReject returned false — error already dispatched in AgentContext
+        return
+      }
       setResolveResult(null)
       await refresh()
     } finally {
@@ -100,6 +109,13 @@ export function ConflictDetail(): JSX.Element {
         onReject={handleReject}
         loading={loading || localLoading}
       />
+
+      {/* Error display */}
+      {agentError && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+          <p className="text-sm text-red-400">⚠ {agentError}</p>
+        </div>
+      )}
 
       {/* Diff Preview */}
       {resolveResult?.agentResult?.diff && (
