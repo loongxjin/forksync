@@ -46,6 +46,8 @@ const api = {
     ipcRenderer.invoke('engine:agentCleanup'),
   history: (repoName?: string, limit?: number): Promise<ApiResponse<HistoryData>> =>
     ipcRenderer.invoke('engine:history', repoName, limit),
+  historyCleanup: (opts?: { repoName?: string; keepDays?: number }): Promise<ApiResponse<{ message: string }>> =>
+    ipcRenderer.invoke('engine:historyCleanup', opts),
   openDirectory: (): Promise<{ canceled: boolean; filePaths?: string[]; error?: string }> =>
     ipcRenderer.invoke('dialog:openDirectory'),
   // Notification click-through navigation

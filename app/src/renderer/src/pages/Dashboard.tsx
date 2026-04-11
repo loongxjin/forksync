@@ -121,7 +121,25 @@ export function Dashboard(): JSX.Element {
 
       {/* Sync History Timeline */}
       <div className="rounded-lg border border-border bg-card p-4">
-        <h3 className="mb-3 text-sm font-medium text-muted-foreground">Sync History</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-muted-foreground">Sync History</h3>
+          {history.length > 0 && (
+            <Button variant="outline" size="sm" className="text-xs h-7" disabled={historyLoading}
+              onClick={async () => {
+                if (confirm('Clear all sync history?')) {
+                  const res = await engineApi.historyCleanup()
+                  if (res.success) {
+                    setHistory([])
+                  } else {
+                    alert(res.error || 'Failed to clear history')
+                  }
+                }
+              }}
+            >
+              🗑️ Clear
+            </Button>
+          )}
+        </div>
         {historyLoading && history.length === 0 ? (
           <p className="text-sm text-muted-foreground">Loading history...</p>
         ) : history.length === 0 ? (

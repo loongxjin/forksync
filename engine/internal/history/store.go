@@ -152,6 +152,45 @@ func (s *Store) Summary() (totalSyncs int, conflicts int, errors int, lastSync t
 	return
 }
 
+// ClearAll removes all sync history records and returns the number of deleted rows.
+func (s *Store) ClearAll() (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	res, err := s.db.Exec(`DELETE FROM sync_history`)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+// ClearByRepo removes sync history for a specific repo and returns the number of deleted rows.
+func (s *Store) ClearByRepo(repoID string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	res, err := s.db.Exec(`DELETE FROM sync_history WHERE repo_id = ?`, repoID)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+// ClearBefore removes sync history older than the given time and returns the number of deleted rows.
+func (s *Store) ClearBefore(before time.Time) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	res, err := s.db.Exec(`DELETE FROM sync_history WHERE created_at < ?`, before.Format(time.RFC3339))
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // Close closes the underlying database connection.
 func (s *Store) Close() error {
 	return s.db.Close()

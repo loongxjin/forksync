@@ -157,6 +157,18 @@ export class EngineClient {
     return this.exec<HistoryData>(args)
   }
 
+  /** `forksync history --cleanup [--keep-days N] [repo-name] --json` */
+  async historyCleanup(opts?: { repoName?: string; keepDays?: number }): Promise<ApiResponse<{ message: string }>> {
+    const args = ['history', '--cleanup']
+    if (opts?.keepDays && opts.keepDays > 0) {
+      args.push('--keep-days', String(opts.keepDays))
+    }
+    if (opts?.repoName) {
+      args.push(opts.repoName)
+    }
+    return this.exec<{ message: string }>(args)
+  }
+
   // -----------------------------------------------------------------------
   // Private — spawn + parse logic
   // -----------------------------------------------------------------------

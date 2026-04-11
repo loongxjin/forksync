@@ -84,6 +84,10 @@ export function registerIpcHandlers(): void {
     return e.history(repoName, limit)
   })
 
+  ipcMain.handle('engine:historyCleanup', async (_event, opts?: { repoName?: string; keepDays?: number }) => {
+    return e.historyCleanup(opts)
+  })
+
   ipcMain.handle('dialog:openDirectory', async () => {
     try {
       const result = await dialog.showOpenDialog({

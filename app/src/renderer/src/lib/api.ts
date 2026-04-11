@@ -40,6 +40,7 @@ export interface EngineAPI {
   agentSessions(): Promise<ApiResponse<AgentSessionsData>>
   agentCleanup(): Promise<ApiResponse<AgentCleanupData>>
   history(repoName?: string, limit?: number): Promise<ApiResponse<HistoryData>>
+  historyCleanup(opts?: { repoName?: string; keepDays?: number }): Promise<ApiResponse<{ message: string }>>
   /** Open a directory dialog and return selected paths. Returns {canceled, filePaths?, error?} */
   openDirectory(): Promise<{ canceled: boolean; filePaths?: string[]; error?: string }>
   /** Listen for navigation events from main process (notification click-through). Returns unsubscribe fn. */
