@@ -39,9 +39,28 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	gitOps := git.NewOperations()
 
-	// Update ahead/behind for each repo
+	// Update ahead/behind for each repo and refresh stale conflict statuses
 	for i, r := range repos {
 		if r.Status != types.RepoStatusSyncing {
+			// For repos in conflict/resolving/resolved state, re-check the actual
+			// git merge state. If the user has manually resolved and committed,
+			// the stored status is stale and should be corrected.
+			if r.Status == types.RepoStatusConflict || r.Status == types.RepoStatusResolving || r.Status == types.RepoStatusResolved {
+				isMerging, unmergedFiles, err := gitOps.IsMergingState(cmd.Context(), r.Path)
+				if err == nil && !isMerging {
+					// No merge in progress — conflicts were resolved externally
+					repos[i].Status = types.RepoStatusSynced
+					repos[i].ErrorMessage = ""
+					_ = store.Update(repos[i])
+				} else if err == nil && isMerging && len(unmergedFiles) == 0 {
+					// MERGE_HEAD exists but no unmerged files — user staged all
+					// resolutions but hasn't committed yet. Still in conflict state
+					// but update the status to reflect this transitional state.
+					repos[i].Status = types.RepoStatusResolved
+					_ = store.Update(repos[i])
+				}
+			}
+
 			statusResult, err := gitOps.Status(cmd.Context(), r)
 			if err == nil && statusResult != nil {
 				repos[i].AheadBy = statusResult.AheadBy
