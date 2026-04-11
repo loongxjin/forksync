@@ -1,8 +1,11 @@
 package config
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -119,4 +122,182 @@ func (m *Manager) Save(cfg *Config) error {
 	}
 
 	return os.WriteFile(configPath, data, 0644)
+}
+
+// validConfigKeys defines all supported dot-notation config keys and their types.
+var validConfigKeys = map[string]string{
+	// sync
+	"sync.default_interval": "string",
+	"sync.sync_on_startup":  "bool",
+	"sync.auto_launch":     "bool",
+	// agent
+	"agent.preferred":             "string",
+	"agent.priority":              "[]string",
+	"agent.timeout":               "string",
+	"agent.conflict_strategy":     "string",
+	"agent.confirm_before_commit": "bool",
+	"agent.session_ttl":           "string",
+	// github
+	"github.token": "string",
+	// notification
+	"notification.enabled":        "bool",
+	"notification.on_conflict":    "bool",
+	"notification.on_sync_success": "bool",
+	// proxy
+	"proxy.enabled": "bool",
+	"proxy.url":     "string",
+}
+
+// GetKeyType returns the type of a config key (e.g. "string", "bool", "[]string").
+// Returns empty string if the key is not recognized.
+func GetKeyType(key string) string {
+	return validConfigKeys[key]
+}
+
+// ValidConfigKeys returns all supported config keys.
+func ValidConfigKeys() []string {
+	keys := make([]string, 0, len(validConfigKeys))
+	for k := range validConfigKeys {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// Get returns the value of a config key using dot-notation (e.g. "agent.preferred").
+func (m *Manager) Get(key string) (interface{}, error) {
+	if _, ok := validConfigKeys[key]; !ok {
+		return nil, fmt.Errorf("unknown config key: %q", key)
+	}
+
+	cfg, err := m.Load()
+	if err != nil {
+		return nil, fmt.Errorf("load config: %w", err)
+	}
+
+	switch key {
+	// sync
+	case "sync.default_interval":
+		return cfg.Sync.DefaultInterval, nil
+	case "sync.sync_on_startup":
+		return cfg.Sync.SyncOnStartup, nil
+	case "sync.auto_launch":
+		return cfg.Sync.AutoLaunch, nil
+	// agent
+	case "agent.preferred":
+		return cfg.Agent.Preferred, nil
+	case "agent.priority":
+		return cfg.Agent.Priority, nil
+	case "agent.timeout":
+		return cfg.Agent.Timeout, nil
+	case "agent.conflict_strategy":
+		return cfg.Agent.ConflictStrategy, nil
+	case "agent.confirm_before_commit":
+		return cfg.Agent.ConfirmBeforeCommit, nil
+	case "agent.session_ttl":
+		return cfg.Agent.SessionTTL, nil
+	// github
+	case "github.token":
+		return cfg.GitHub.Token, nil
+	// notification
+	case "notification.enabled":
+		return cfg.Notification.Enabled, nil
+	case "notification.on_conflict":
+		return cfg.Notification.OnConflict, nil
+	case "notification.on_sync_success":
+		return cfg.Notification.OnSyncSuccess, nil
+	// proxy
+	case "proxy.enabled":
+		return cfg.Proxy.Enabled, nil
+	case "proxy.url":
+		return cfg.Proxy.URL, nil
+	default:
+		return nil, fmt.Errorf("unknown config key: %q", key)
+	}
+}
+
+// Set updates a single config key using dot-notation and saves the full config.
+// For "[]string" type keys, value should be a JSON-encoded string array like `["a","b"]`.
+func (m *Manager) Set(key string, value string) error {
+	if _, ok := validConfigKeys[key]; !ok {
+		return fmt.Errorf("unknown config key: %q. Valid keys: %v", key, ValidConfigKeys())
+	}
+
+	cfg, err := m.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	switch key {
+	// sync
+	case "sync.default_interval":
+		cfg.Sync.DefaultInterval = value
+	case "sync.sync_on_startup":
+		v, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
+		}
+		cfg.Sync.SyncOnStartup = v
+	case "sync.auto_launch":
+		v, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
+		}
+		cfg.Sync.AutoLaunch = v
+	// agent
+	case "agent.preferred":
+		cfg.Agent.Preferred = value
+	case "agent.priority":
+		var arr []string
+		if err := json.Unmarshal([]byte(value), &arr); err != nil {
+			return fmt.Errorf("invalid JSON array %q for %s: %w", value, key, err)
+		}
+		cfg.Agent.Priority = arr
+	case "agent.timeout":
+		cfg.Agent.Timeout = value
+	case "agent.conflict_strategy":
+		cfg.Agent.ConflictStrategy = value
+	case "agent.confirm_before_commit":
+		v, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
+		}
+		cfg.Agent.ConfirmBeforeCommit = v
+	case "agent.session_ttl":
+		cfg.Agent.SessionTTL = value
+	// github
+	case "github.token":
+		cfg.GitHub.Token = value
+	// notification
+	case "notification.enabled":
+		v, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
+		}
+		cfg.Notification.Enabled = v
+	case "notification.on_conflict":
+		v, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
+		}
+		cfg.Notification.OnConflict = v
+	case "notification.on_sync_success":
+		v, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
+		}
+		cfg.Notification.OnSyncSuccess = v
+	// proxy
+	case "proxy.enabled":
+		v, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
+		}
+		cfg.Proxy.Enabled = v
+	case "proxy.url":
+		cfg.Proxy.URL = value
+	default:
+		return fmt.Errorf("unknown config key: %q", key)
+	}
+
+	return m.Save(cfg)
 }
