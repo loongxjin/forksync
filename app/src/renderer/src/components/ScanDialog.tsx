@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +11,7 @@ interface ScanDialogProps {
   onAdd: (path: string, upstream?: string, branchMapping?: BranchMapping) => Promise<void>
   scannedRepos: ScannedRepo[]
   loading: boolean
+  initialDir?: string
 }
 
 interface RepoBranchConfig {
@@ -26,13 +27,29 @@ export function ScanDialog({
   onScan,
   onAdd,
   scannedRepos,
-  loading
+  loading,
+  initialDir
 }: ScanDialogProps): JSX.Element | null {
   const [dir, setDir] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState(false)
   const [expandedRepo, setExpandedRepo] = useState<string | null>(null)
   const [repoBranchConfigs, setRepoBranchConfigs] = useState<RepoBranchConfig>({})
+
+  // Auto-fill initialDir and trigger scan when provided (drag-drop flow)
+  useEffect(() => {
+    if (open && initialDir) {
+      setDir(initialDir)
+      setSelected(new Set())
+      setRepoBranchConfigs({})
+      setExpandedRepo(null)
+      // Auto-trigger scan after a tick so dir state is set
+      const timer = setTimeout(() => {
+        onScan(initialDir)
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [open, initialDir, onScan])
 
   if (!open) return null
 

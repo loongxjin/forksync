@@ -58,6 +58,8 @@ const api = {
     ipcRenderer.invoke('app:setAutoLaunch', enabled),
   openDirectory: (): Promise<{ canceled: boolean; filePaths?: string[]; error?: string }> =>
     ipcRenderer.invoke('dialog:openDirectory'),
+  isGitRepo: (dirPath: string): Promise<boolean> =>
+    ipcRenderer.invoke('fs:isGitRepo', dirPath),
   // Notification click-through navigation
   onNavigate: (callback: (path: string) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, path: string): void => callback(path)

@@ -45,6 +45,8 @@ export interface EngineAPI {
   historyCleanup(opts?: { repoName?: string; keepDays?: number }): Promise<ApiResponse<{ message: string }>>
   /** Open a directory dialog and return selected paths. Returns {canceled, filePaths?, error?} */
   openDirectory(): Promise<{ canceled: boolean; filePaths?: string[]; error?: string }>
+  /** Check if a directory is a git repository (has .git subdirectory) */
+  isGitRepo(dirPath: string): Promise<boolean>
   /** Listen for navigation events from main process (notification click-through). Returns unsubscribe fn. */
   onNavigate?: (callback: (path: string) => void) => () => void
 

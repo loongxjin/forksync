@@ -10,6 +10,7 @@ export function Repos(): JSX.Element {
     useRepos()
   const [showAdd, setShowAdd] = useState(false)
   const [showScan, setShowScan] = useState(false)
+  const [scanInitialDir, setScanInitialDir] = useState('')
   const [dragOver, setDragOver] = useState(false)
 
   useEffect(() => {
@@ -54,12 +55,20 @@ export function Repos(): JSX.Element {
         const file = files[i]
         // On macOS/Electron, dragged folders have empty type and their path is in .path
         const path = (file as File & { path?: string }).path
-        if (path) {
-          try {
+        if (!path) continue
+
+        try {
+          const isGit = await window.api.isGitRepo(path)
+          if (isGit) {
+            // Git repo → add directly
             await addRepo(path)
-          } catch {
-            // Individual add errors handled by context
+          } else {
+            // Non-git directory → open scan dialog with this dir pre-filled
+            setScanInitialDir(path)
+            setShowScan(true)
           }
+        } catch {
+          // Individual add errors handled by context
         }
       }
     },
@@ -137,11 +146,12 @@ export function Repos(): JSX.Element {
 
       <ScanDialog
         open={showScan}
-        onClose={() => setShowScan(false)}
+        onClose={() => { setShowScan(false); setScanInitialDir('') }}
         onScan={scan}
         onAdd={addRepo}
         scannedRepos={scannedRepos}
         loading={loading}
+        initialDir={scanInitialDir}
       />
     </div>
   )

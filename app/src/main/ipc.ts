@@ -6,6 +6,8 @@
  */
 
 import { ipcMain, dialog, app } from 'electron'
+import { existsSync } from 'fs'
+import { join } from 'path'
 import { EngineClient } from './engine'
 import { notifySyncResults } from './notify'
 
@@ -121,5 +123,9 @@ export function registerIpcHandlers(): void {
         error: err instanceof Error ? err.message : String(err)
       }
     }
+  })
+
+  ipcMain.handle('fs:isGitRepo', async (_event, dirPath: string) => {
+    return existsSync(join(dirPath, '.git'))
   })
 }
