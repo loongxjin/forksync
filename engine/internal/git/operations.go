@@ -393,6 +393,20 @@ func (o *Operations) GetConflictedContent(_ context.Context, repoPath, filePath 
 	return string(data), nil
 }
 
+// IsMergingState checks if the repository has an in-progress merge (unmerged files).
+// It runs `git ls-files --unmerge` to check for unmerged entries.
+func (o *Operations) IsMergingState(ctx context.Context, repoPath string) (bool, []string, error) {
+	// Check for MERGE_HEAD which indicates a merge is in progress
+	mergeHead := filepath.Join(repoPath, ".git", "MERGE_HEAD")
+	if _, err := os.Stat(mergeHead); os.IsNotExist(err) {
+		return false, nil, nil
+	}
+
+	// MERGE_HEAD exists — check for unmerged files
+	unmergedFiles := o.detectConflicts(ctx, repoPath)
+	return true, unmergedFiles, nil
+}
+
 // AbortMerge aborts an in-progress merge.
 func (o *Operations) AbortMerge(ctx context.Context, repoPath string) error {
 	cmd := exec.CommandContext(ctx, "git", "merge", "--abort")

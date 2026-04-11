@@ -116,6 +116,31 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	}()
 	s.mu.Unlock()
 
+	// Check if repo is already in a conflict/merge state before proceeding.
+	// This is a pre-check guard, NOT an actual sync attempt — so we skip
+	// recording history to avoid polluting the sync log.
+	isMerging, unmergedFiles, err := s.gitOps.IsMergingState(ctx, r.Path)
+	if err == nil && isMerging {
+		result.Status = "conflict"
+		result.ConflictFiles = unmergedFiles
+		result.ErrorMessage = "repository has unresolved merge conflicts, please resolve conflicts before syncing"
+		result.ConflictsFound = len(unmergedFiles)
+		s.updateRepoStatus(r.ID, types.RepoStatusConflict, result.ErrorMessage)
+		s.notifyResult(r.Name, result)
+		// DO NOT call finalizeResult — this is not a real sync, don't pollute history
+		s.logResult(result)
+		return result
+	}
+
+	// Also check if stored status indicates a conflict state that hasn't been resolved
+	if r.Status == types.RepoStatusConflict || r.Status == types.RepoStatusResolving || r.Status == types.RepoStatusResolved {
+		result.Status = "conflict"
+		result.ErrorMessage = fmt.Sprintf("repository is in %s state, please resolve conflicts before syncing", r.Status)
+		// DO NOT call finalizeResult — this is not a real sync, don't pollute history
+		s.logResult(result)
+		return result
+	}
+
 	// Set timeout
 	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()
