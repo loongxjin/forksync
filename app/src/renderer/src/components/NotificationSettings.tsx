@@ -39,42 +39,16 @@ export function NotificationSettings(): JSX.Element {
 
   const isLoading = configLoading || !engineConfig
 
-  const handleToggle = async (key: string, val: boolean): Promise<void> => {
-    await updateConfig(key, String(val))
-  }
-
   return (
     <div className="space-y-6">
       <Toggle
         label="Enable Notifications"
         checked={engineConfig?.Notification?.Enabled ?? true}
-        onChange={(val) => handleToggle('notification.enabled', val)}
+        onChange={(val) => updateConfig('notification.enabled', String(val))}
         disabled={isLoading}
       />
       <p className="text-xs text-muted-foreground -mt-4">
         Show system notifications for sync events
-      </p>
-
-      <div className="border-t border-border" />
-
-      <Toggle
-        label="Notify on Conflict"
-        checked={engineConfig?.Notification?.OnConflict ?? true}
-        onChange={(val) => handleToggle('notification.on_conflict', val)}
-        disabled={isLoading}
-      />
-      <p className="text-xs text-muted-foreground -mt-4">
-        Show notification when a conflict requires manual resolution
-      </p>
-
-      <Toggle
-        label="Notify on Sync Success"
-        checked={engineConfig?.Notification?.OnSyncSuccess ?? false}
-        onChange={(val) => handleToggle('notification.on_sync_success', val)}
-        disabled={isLoading}
-      />
-      <p className="text-xs text-muted-foreground -mt-4">
-        Show notification when sync completes successfully with new commits
       </p>
     </div>
   )
