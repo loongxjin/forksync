@@ -272,8 +272,6 @@ export interface EngineConfig {
   }
   Notification: {
     Enabled: boolean
-    OnConflict: boolean
-    OnSyncSuccess: boolean
   }
   Proxy: {
     Enabled: boolean
