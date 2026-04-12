@@ -9,7 +9,7 @@ import { ipcMain, dialog, app } from 'electron'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { EngineClient } from './engine'
-import { notifySyncResults } from './notify'
+import { notifySyncResults, updateNotificationConfig } from './notify'
 
 let engine: EngineClient | null = null
 
@@ -95,7 +95,12 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('engine:configSet', async (_event, key: string, value: string) => {
-    return e.configSet(key, value)
+    const result = await e.configSet(key, value)
+    // Refresh notification config if notification settings changed
+    if (key.startsWith('notification.')) {
+      await updateNotificationConfig(e)
+    }
+    return result
   })
 
   ipcMain.handle('app:setAutoLaunch', async (_event, enabled: boolean) => {
@@ -128,4 +133,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('fs:isGitRepo', async (_event, dirPath: string) => {
     return existsSync(join(dirPath, '.git'))
   })
+
+  // Initialize notification config from engine
+  updateNotificationConfig(e)
 }
