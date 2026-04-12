@@ -12,7 +12,6 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
-	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	sched "github.com/loongxjin/forksync/engine/internal/scheduler"
 	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
@@ -75,15 +74,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 		defer log.Close()
 	}
 
-	// Create notifier (enabled by default from config)
-	notifEnabled := true
-	if cfg != nil {
-		notifEnabled = cfg.Notification.Enabled
-	}
-	notifier := notify.NewNotifier(notifEnabled)
-
-	// Create and start scheduler
-	scheduler := sched.NewScheduler(syncer, notifier, cfg)
+	// Create and start scheduler (nil notifier — notifications handled by Electron layer)
+	scheduler := sched.NewScheduler(syncer, nil, cfg)
 
 	// Set up signal handling for graceful shutdown
 	ctx, cancel := context.WithCancel(cmd.Context())
