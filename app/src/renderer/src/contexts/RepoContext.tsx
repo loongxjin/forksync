@@ -146,7 +146,27 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     try {
       const res = await engineApi.syncAll()
       if (res.success) {
-        dispatch({ type: 'SET_SYNC_RESULTS', results: res.data.results ?? [] })
+        const results = res.data.results ?? []
+        dispatch({ type: 'SET_SYNC_RESULTS', results })
+
+        // Toast feedback for batch sync
+        const conflicts = results.filter(
+          (r) => r.status === 'conflict' || r.status === 'resolving'
+        )
+        const errors = results.filter((r) => r.status === 'error')
+        if (conflicts.length > 0) {
+          showToast(`${conflicts.length} repo${conflicts.length > 1 ? 's' : ''} have conflicts`, 'warning')
+        } else if (errors.length > 0) {
+          showToast(`${errors.length} repo${errors.length > 1 ? 's' : ''} failed to sync`, 'error')
+        } else {
+          const totalCommits = results.reduce((s, r) => s + (r.commitsPulled ?? 0), 0)
+          if (totalCommits > 0) {
+            showToast(
+              `Synced ${results.length} repo${results.length > 1 ? 's' : ''}, ${totalCommits} commits pulled`,
+              'success'
+            )
+          }
+        }
       } else {
         dispatch({ type: 'SET_ERROR', error: res.error })
       }
