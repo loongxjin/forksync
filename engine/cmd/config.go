@@ -82,9 +82,7 @@ func runConfigGet(cmd *cobra.Command, args []string) error {
 		}
 		outputText("")
 		outputText("Notification:")
-		outputText("  enabled:         %t", cfg.Notification.Enabled)
-		outputText("  on_conflict:     %t", cfg.Notification.OnConflict)
-		outputText("  on_sync_success: %t", cfg.Notification.OnSyncSuccess)
+		outputText("  enabled: %t", cfg.Notification.Enabled)
 		outputText("")
 		outputText("Proxy:")
 		outputText("  enabled: %t", cfg.Proxy.Enabled)

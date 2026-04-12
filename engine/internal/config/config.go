@@ -39,9 +39,7 @@ type GitHubConfig struct {
 }
 
 type NotificationConfig struct {
-	Enabled       bool `mapstructure:"enabled" yaml:"enabled"`
-	OnConflict    bool `mapstructure:"on_conflict" yaml:"on_conflict"`
-	OnSyncSuccess bool `mapstructure:"on_sync_success" yaml:"on_sync_success"`
+	Enabled bool `mapstructure:"enabled" yaml:"enabled"`
 }
 
 type ProxyConfig struct {
@@ -93,8 +91,6 @@ func (m *Manager) Load() (*Config, error) {
 	m.viper.SetDefault("agent.confirm_before_commit", true)
 	m.viper.SetDefault("agent.session_ttl", "24h")
 	m.viper.SetDefault("notification.enabled", true)
-	m.viper.SetDefault("notification.on_conflict", true)
-	m.viper.SetDefault("notification.on_sync_success", false)
 	m.viper.SetDefault("proxy.enabled", false)
 
 	if err := m.viper.ReadInConfig(); err != nil {
@@ -141,8 +137,6 @@ var validConfigKeys = map[string]string{
 	"github.token": "string",
 	// notification
 	"notification.enabled":        "bool",
-	"notification.on_conflict":    "bool",
-	"notification.on_sync_success": "bool",
 	// proxy
 	"proxy.enabled": "bool",
 	"proxy.url":     "string",
@@ -201,10 +195,6 @@ func (m *Manager) Get(key string) (interface{}, error) {
 	// notification
 	case "notification.enabled":
 		return cfg.Notification.Enabled, nil
-	case "notification.on_conflict":
-		return cfg.Notification.OnConflict, nil
-	case "notification.on_sync_success":
-		return cfg.Notification.OnSyncSuccess, nil
 	// proxy
 	case "proxy.enabled":
 		return cfg.Proxy.Enabled, nil
@@ -274,18 +264,6 @@ func (m *Manager) Set(key string, value string) error {
 			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
 		}
 		cfg.Notification.Enabled = v
-	case "notification.on_conflict":
-		v, err := strconv.ParseBool(value)
-		if err != nil {
-			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
-		}
-		cfg.Notification.OnConflict = v
-	case "notification.on_sync_success":
-		v, err := strconv.ParseBool(value)
-		if err != nil {
-			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
-		}
-		cfg.Notification.OnSyncSuccess = v
 	// proxy
 	case "proxy.enabled":
 		v, err := strconv.ParseBool(value)
