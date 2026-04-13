@@ -28,11 +28,22 @@ app: ## Build Electron app only (requires engine already built)
 clean: ## Clean build artifacts
 	rm -rf build/forksync engine/bins/ app/dist/ app/out/
 
-tag: ## Create and push a git tag for the current version
-	@git tag -a v$(VERSION) -m "Release v$(VERSION)"
-	@echo "Tag v$(VERSION) created. Run 'git push origin v$(VERSION)' to push."
+# Usage: make release-tag VERSION=0.2.0
+# 1. Syncs app/package.json version from VERSION
+# 2. Creates git tag vVERSION
+# 3. Pushes the commit and tag (triggers GitHub Actions)
+release-tag: ## Tag and push a release. Usage: make release-tag VERSION=0.2.0
+	@test "$(VERSION)" || (echo "Usage: make release-tag VERSION=0.2.0" && exit 1)
+	@echo "Syncing version to $(VERSION)..."
+	cd app && npm version $(VERSION) --no-git-tag-version
+	git add app/package.json app/package-lock.json
+	git commit -m "chore: bump version to v$(VERSION)" --allow-empty
+	git tag -a "v$(VERSION)" -m "Release v$(VERSION)"
+	@echo ""
+	@echo "Tag v$(VERSION) created. Run to push:"
+	@echo "  git push origin main --tags"
 
-release: ## Run GoReleaser (requires goreleaser installed)
+release: ## Run GoReleaser locally (requires goreleaser installed)
 	@echo "Releasing v$(VERSION)..."
 	cd engine && goreleaser release --clean
 

@@ -41,14 +41,8 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            artifact_name: ForkSync
-            asset_suffix: mac
           - os: ubuntu-latest
-            artifact_name: ForkSync
-            asset_suffix: linux
           - os: windows-latest
-            artifact_name: ForkSync
-            asset_suffix: win
     steps:
       - uses: actions/checkout@v4
 
@@ -61,6 +55,14 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
+
+      # Sync package.json version from git tag (v1.2.3 → 1.2.3)
+      - name: Sync version from git tag
+        working-directory: app
+        shell: bash
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          npm version "$TAG_VERSION" --no-git-tag-version
 
       - name: Build Go engine
         run: |
