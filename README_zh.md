@@ -219,7 +219,7 @@ forksync status
 forksync resolve my-fork                     # 交互式解决
 forksync resolve my-fork --agent claude      # 指定 Agent
 forksync resolve my-fork --no-confirm        # 自动提交（无需确认）
-forksync resolve my-fork --done              # 标记为已解决
+forksync resolve my-fork --accept            # 标记为已解决（接受）
 forksync resolve my-fork --reject            # 拒绝并回退
 ```
 
@@ -227,7 +227,7 @@ forksync resolve my-fork --reject            # 拒绝并回退
 |------|------|
 | `--agent <名称>` | 指定 Agent：`claude`、`opencode`、`droid`、`codex` |
 | `--no-confirm` | 自动提交解决结果，无需用户确认 |
-| `--done` | 标记所有冲突为已解决 |
+| `--accept` | 接受所有冲突为已解决 |
 | `--reject` | 拒绝上次解决结果（通过 `git checkout` 回退） |
 
 ### `forksync serve`

@@ -167,23 +167,17 @@ export interface ResolveData {
   agentResult?: AgentResolveResult
 }
 
-/** `forksync resolve <name> --done/--no-confirm` → ApiResponse<AcceptData> */
+/** `forksync resolve <name> --accept/--no-confirm` → ApiResponse<AcceptData> */
 export interface AcceptData {
   repoId: string
   resolved: boolean
+  remainingConflicts?: string[]
 }
 
 /** `forksync resolve <name> --reject` → ApiResponse<RejectData> */
 export interface RejectData {
   repoId: string
   rolledBack: boolean
-}
-
-/** `forksync resolve <name> --done` (alternative path) → ApiResponse<DoneData> */
-export interface DoneData {
-  repoId: string
-  allResolved: boolean
-  remainingConflicts?: string[]
 }
 
 /** `forksync agent list` → ApiResponse<AgentListData> */
@@ -230,11 +224,8 @@ export interface AgentCleanupData {
 }
 
 /**
- * `forksync remove <name>` — Go has a double-wrapping bug.
- * Actual output: ApiResponse<ApiResponse<{ removed: string }>>
- * Electron client will unwrap the outer layer.
- */
-export interface RemoveData {
+ * `forksync remove <name>` — returns the removed repo name.
+ */export interface RemoveData {
   removed: string
 }
 
@@ -294,7 +285,7 @@ export type EngineChannel =
   | 'engine:add'
   | 'engine:remove'
   | 'engine:resolve'
-  | 'engine:resolveDone'
+  | 'engine:resolveAccept'
   | 'engine:resolveReject'
   | 'engine:agentList'
   | 'engine:agentSessions'

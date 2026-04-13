@@ -24,7 +24,7 @@ var (
 	resolveAgent     string // --agent <name>
 	resolveNoConfirm bool   // --no-confirm
 	resolveReject    bool   // --reject
-	resolveDone      bool   // --done
+	resolveAccept    bool   // --accept
 
 	// signalsToWatch lists OS signals that should trigger status rollback
 	// when the Go process is killed during agent conflict resolution.
@@ -41,7 +41,7 @@ Examples:
   forksync resolve my-repo --agent claude         # Use specific agent
   forksync resolve my-repo --no-confirm           # Auto-commit without confirmation
   forksync resolve my-repo --reject               # Reject last resolution (rollback)
-  forksync resolve my-repo --done                 # Mark conflicts as resolved`,
+  forksync resolve my-repo --accept               # Accept conflicts as resolved`,
 	Args: cobra.ExactArgs(1),
 	RunE: runResolve,
 }
@@ -50,7 +50,7 @@ func init() {
 	resolveCmd.Flags().StringVar(&resolveAgent, "agent", "", "specify agent to use (claude, opencode, droid, codex)")
 	resolveCmd.Flags().BoolVar(&resolveNoConfirm, "no-confirm", false, "auto-commit without user confirmation")
 	resolveCmd.Flags().BoolVar(&resolveReject, "reject", false, "reject last resolution and rollback")
-	resolveCmd.Flags().BoolVar(&resolveDone, "done", false, "mark all conflicts as resolved")
+	resolveCmd.Flags().BoolVar(&resolveAccept, "accept", false, "accept all conflicts as resolved")
 	rootCmd.AddCommand(resolveCmd)
 }
 
@@ -68,9 +68,9 @@ func runResolve(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("repository %q not found", args[0])
 	}
 
-	// Handle --done
-	if resolveDone {
-		return runResolveDone(cmd, r, store)
+	// Handle --accept
+	if resolveAccept {
+		return runResolveAccept(cmd, r, store)
 	}
 
 	// Handle --reject: rollback to pre-resolution state
@@ -81,7 +81,7 @@ func runResolve(cmd *cobra.Command, args []string) error {
 	// Not in conflict state
 	if r.Status != types.RepoStatusConflict && r.Status != types.RepoStatusResolved {
 		if isJSON() {
-			outputJSON(types.DoneData{RepoID: r.ID, AllResolved: true}, nil)
+			outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
 		} else {
 			outputText("No conflicts to resolve for %s", r.Name)
 		}
@@ -92,7 +92,7 @@ func runResolve(cmd *cobra.Command, args []string) error {
 	conflictPaths := detectConflicts(cmd.Context(), r.Path)
 	if len(conflictPaths) == 0 {
 		if isJSON() {
-			outputJSON(types.DoneData{RepoID: r.ID, AllResolved: true}, nil)
+			outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
 		} else {
 			outputText("No conflict files found")
 		}
@@ -267,7 +267,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 			}
 		}
 		outputText("")
-		outputText("Run 'forksync resolve %s --done' to accept, or '--reject' to rollback.", r.Name)
+		outputText("Run 'forksync resolve %s --accept' to accept, or '--reject' to rollback.", r.Name)
 	}
 
 	return nil
@@ -329,16 +329,15 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error 
 	return nil
 }
 
-// runResolveDone checks for remaining conflicts and completes the merge.
-func runResolveDone(cmd *cobra.Command, r types.Repo, store repo.Store) error {
+// runResolveAccept checks for remaining conflicts and completes the merge.
+func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store) error {
 	remaining := detectConflicts(cmd.Context(), r.Path)
 
 	if len(remaining) > 0 {
 		if isJSON() {
-			outputJSON(types.DoneData{
-				RepoID:             r.ID,
-				AllResolved:        false,
-				RemainingConflicts: remaining,
+			outputJSON(types.AcceptData{
+				RepoID:   r.ID,
+				Resolved: false,
 			}, nil)
 		} else {
 			outputText("⚠️  %d conflicts still unresolved:", len(remaining))
@@ -357,7 +356,7 @@ func runResolveDone(cmd *cobra.Command, r types.Repo, store repo.Store) error {
 		_ = store.Update(r)
 
 		if isJSON() {
-			outputJSON(types.DoneData{RepoID: r.ID, AllResolved: true}, nil)
+			outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
 		} else {
 			outputText("✅ No merge in progress. Status updated.")
 		}
@@ -394,7 +393,7 @@ func runResolveDone(cmd *cobra.Command, r types.Repo, store repo.Store) error {
 	_ = store.Update(r)
 
 	if isJSON() {
-		outputJSON(types.DoneData{RepoID: r.ID, AllResolved: true}, nil)
+		outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
 	} else {
 		outputText("✅ Merge completed for %s", r.Name)
 	}

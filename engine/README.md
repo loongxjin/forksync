@@ -90,7 +90,7 @@ forksync resolve my-repo --no-confirm
 forksync resolve my-repo --reject
 
 # 标记冲突已全部解决（完成 merge commit）
-forksync resolve my-repo --done
+forksync resolve my-repo --accept
 ```
 
 **工作流程：**
@@ -187,7 +187,7 @@ proxy:
 | `status` | `StatusData` | `{ repos: Repo[], agents: AgentInfo[], preferredAgent }` |
 | `sync` | `SyncData` | `{ results: SyncResult[] }` |
 | `resolve` | `ResolveData` | `{ repoId, conflicts, agentResult }` |
-| `resolve --done` | `DoneData` | `{ repoId, allResolved, remainingConflicts }` |
+| `resolve --accept` | `AcceptData` | `{ repoId, resolved, remainingConflicts }` |
 | `resolve --reject` | `RejectData` | `{ repoId, rolledBack }` |
 | `agent list` | `AgentListData` | `{ agents: AgentInfo[], preferred }` |
 | `agent sessions` | `AgentSessionsData` | `{ sessions: AgentSessionInfo[] }` |
@@ -219,7 +219,7 @@ engine/
 │   ├── add.go               # 添加仓库
 │   ├── status.go            # 查看状态（含 agent 检测）
 │   ├── sync.go              # 同步仓库
-│   ├── resolve.go           # Agent 冲突解决 (--agent / --done / --reject)
+│   ├── resolve.go           # Agent 冲突解决 (--agent / --accept / --reject)
 │   ├── agent.go             # Agent 管理 (list / sessions / cleanup)
 │   ├── remove.go            # 移除仓库
 │   └── serve.go             # 后台服务

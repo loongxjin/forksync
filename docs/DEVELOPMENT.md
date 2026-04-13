@@ -311,7 +311,7 @@ React 组件
 | `engine:add` | `add(path, upstream?)` | `forksync add <path> --json` |
 | `engine:remove` | `remove(name)` | `forksync remove <name> --json` |
 | `engine:resolve` | `resolve(name, opts?)` | `forksync resolve <name> --json` |
-| `engine:resolveDone` | `resolveDone(name)` | `forksync resolve <name> --done --json` |
+| `engine:resolveAccept` | `resolveAccept(name)` | `forksync resolve <name> --accept --json` |
 | `engine:resolveReject` | `resolveReject(name)` | `forksync resolve <name> --reject --json` |
 | `engine:agentList` | `agentList()` | `forksync agent list --json` |
 | `engine:agentSessions` | `agentSessions()` | `forksync agent sessions --json` |

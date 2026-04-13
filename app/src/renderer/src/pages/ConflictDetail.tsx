@@ -11,7 +11,7 @@ export function ConflictDetail(): JSX.Element {
   const { repoId } = useParams<{ repoId: string }>()
   const navigate = useNavigate()
   const { repos, initialized, refresh, updateRepoStatus } = useRepos()
-  const { resolve, resolveDone, resolveReject, preferred, loading, error: agentError } = useAgents()
+  const { resolve, resolveAccept, resolveReject, preferred, loading, error: agentError } = useAgents()
 
   const [resolveResult, setResolveResult] = useState<ResolveData | null>(null)
   const [localLoading, setLocalLoading] = useState(false)
@@ -44,9 +44,9 @@ export function ConflictDetail(): JSX.Element {
     if (!repoId) return
     setLocalLoading(true)
     try {
-      const result = await resolveDone(repoId)
+      const result = await resolveAccept(repoId)
       if (!result) {
-        // resolveDone returned null — error already dispatched in AgentContext
+        // resolveAccept returned null — error already dispatched in AgentContext
         // Don't navigate away so the user can see the error
         return
       }

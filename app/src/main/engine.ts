@@ -17,7 +17,6 @@ import type {
   AddData,
   RemoveData,
   ResolveData,
-  DoneData,
   RejectData,
   AgentListData,
   AgentSessionsData,
@@ -88,25 +87,10 @@ export class EngineClient {
     return this.exec<AddData>(args)
   }
 
-  /**
-   * `forksync remove <name> --json`
-   *
-   * Note: Go engine has a double-wrapping bug — outputJSON wraps an already-
-   * wrapped ApiResponse. We unwrap the outer layer here.
-   */
+  /** `forksync remove <name> --json` */
   async remove(name: string): Promise<ApiResponse<RemoveData>> {
-    const raw = await this.execRaw(['remove', name])
-    // Handle double-wrapping: outer.success is the real indicator
-    if (raw.success && typeof raw.data === 'object' && raw.data !== null) {
-      const inner = raw.data as Record<string, unknown>
-      // Check if inner is also an ApiResponse (has success field)
-      if ('success' in inner && 'data' in inner) {
-        return inner as unknown as ApiResponse<RemoveData>
-      }
-    }
-    return raw as ApiResponse<RemoveData>
+    return this.exec<RemoveData>(['remove', name])
   }
-
   /** `forksync resolve <name> [--agent <name>] [--no-confirm] --json` */
   async resolve(
     name: string,
@@ -122,9 +106,9 @@ export class EngineClient {
     return this.exec<ResolveData>(args)
   }
 
-  /** `forksync resolve <name> --done --json` */
-  async resolveDone(name: string): Promise<ApiResponse<DoneData>> {
-    return this.exec<DoneData>(['resolve', name, '--done'])
+  /** `forksync resolve <name> --accept --json` */
+  async resolveAccept(name: string): Promise<ApiResponse<AcceptData>> {
+    return this.exec<AcceptData>(['resolve', name, '--accept'])
   }
 
   /** `forksync resolve <name> --reject --json` */

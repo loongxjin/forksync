@@ -11,7 +11,6 @@ import type {
   AddData,
   RemoveData,
   ResolveData,
-  DoneData,
   RejectData,
   AgentListData,
   AgentSessionsData,
@@ -37,8 +36,8 @@ const api = {
     name: string,
     opts?: { agent?: string; noConfirm?: boolean }
   ): Promise<ApiResponse<ResolveData>> => ipcRenderer.invoke('engine:resolve', name, opts),
-  resolveDone: (name: string): Promise<ApiResponse<DoneData>> =>
-    ipcRenderer.invoke('engine:resolveDone', name),
+  resolveAccept: (name: string): Promise<ApiResponse<AcceptData>> =>
+    ipcRenderer.invoke('engine:resolveAccept', name),
   resolveReject: (name: string): Promise<ApiResponse<RejectData>> =>
     ipcRenderer.invoke('engine:resolveReject', name),
   agentList: (): Promise<ApiResponse<AgentListData>> => ipcRenderer.invoke('engine:agentList'),

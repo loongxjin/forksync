@@ -219,7 +219,7 @@ Resolve merge conflicts with AI agents.
 forksync resolve my-fork                     # Interactive resolve
 forksync resolve my-fork --agent claude      # Use specific agent
 forksync resolve my-fork --no-confirm        # Auto-commit without confirmation
-forksync resolve my-fork --done              # Mark as resolved
+forksync resolve my-fork --accept            # Mark as resolved (accept)
 forksync resolve my-fork --reject            # Reject and rollback
 ```
 
@@ -227,7 +227,7 @@ forksync resolve my-fork --reject            # Reject and rollback
 |------|-------------|
 | `--agent <name>` | Use specific agent: `claude`, `opencode`, `droid`, `codex` |
 | `--no-confirm` | Auto-commit resolution without user confirmation |
-| `--done` | Mark all conflicts as resolved |
+| `--accept` | Accept all conflicts as resolved |
 | `--reject` | Reject last resolution (rollback via `git checkout`) |
 
 ### `forksync serve`

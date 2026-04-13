@@ -5,7 +5,6 @@ import (
 
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/repo"
-	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
 
@@ -41,14 +40,9 @@ func runRemove(cmd *cobra.Command, args []string) error {
 	}
 
 	if isJSON() {
-		outputJSON(types.ApiResponse[struct {
+		outputJSON(struct {
 			Removed string `json:"removed"`
-		}]{
-			Success: true,
-			Data: struct {
-				Removed string `json:"removed"`
-			}{Removed: r.Name},
-		}, nil)
+		}{Removed: r.Name}, nil)
 	} else {
 		outputText("✅ Removed %s from ForkSync", r.Name)
 	}

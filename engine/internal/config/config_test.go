@@ -37,8 +37,6 @@ func TestManager_Load_WithDefaults(t *testing.T) {
 	assert.True(t, cfg.Sync.SyncOnStartup)
 	assert.False(t, cfg.Sync.AutoLaunch)
 	assert.True(t, cfg.Notification.Enabled)
-	assert.True(t, cfg.Notification.OnConflict)
-	assert.False(t, cfg.Notification.OnSyncSuccess)
 	assert.False(t, cfg.Proxy.Enabled)
 
 	// Verify Agent config defaults
@@ -72,9 +70,7 @@ func TestManager_SaveAndReload(t *testing.T) {
 			SessionTTL:          "24h",
 		},
 		Notification: NotificationConfig{
-			Enabled:       false,
-			OnConflict:    false,
-			OnSyncSuccess: true,
+			Enabled: false,
 		},
 		Proxy: ProxyConfig{
 			Enabled: true,
@@ -109,8 +105,6 @@ func TestManager_SaveAndReload(t *testing.T) {
 	assert.Equal(t, "24h", loadedCfg.Agent.SessionTTL)
 
 	assert.False(t, loadedCfg.Notification.Enabled)
-	assert.False(t, loadedCfg.Notification.OnConflict)
-	assert.True(t, loadedCfg.Notification.OnSyncSuccess)
 
 	assert.True(t, loadedCfg.Proxy.Enabled)
 	assert.Equal(t, "http://proxy.example.com:8080", loadedCfg.Proxy.URL)
@@ -140,8 +134,6 @@ sync:
 	assert.True(t, cfg.Sync.AutoLaunch)
 	assert.True(t, cfg.Sync.SyncOnStartup)
 	assert.True(t, cfg.Notification.Enabled)
-	assert.True(t, cfg.Notification.OnConflict)
-	assert.False(t, cfg.Notification.OnSyncSuccess)
 	assert.False(t, cfg.Proxy.Enabled)
 }
 

@@ -13,7 +13,6 @@ import type {
   AddData,
   RemoveData,
   ResolveData,
-  DoneData,
   RejectData,
   AgentListData,
   AgentSessionsData,
@@ -36,7 +35,7 @@ export interface EngineAPI {
     name: string,
     opts?: { agent?: string; noConfirm?: boolean }
   ): Promise<ApiResponse<ResolveData>>
-  resolveDone(name: string): Promise<ApiResponse<DoneData>>
+  resolveAccept(name: string): Promise<ApiResponse<AcceptData>>
   resolveReject(name: string): Promise<ApiResponse<RejectData>>
   agentList(): Promise<ApiResponse<AgentListData>>
   agentSessions(): Promise<ApiResponse<AgentSessionsData>>

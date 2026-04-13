@@ -181,24 +181,18 @@ type ResolveData struct {
 	AgentResult *AgentResolveResult `json:"agentResult,omitempty"`
 }
 
-// AcceptData accept 响应
+// AcceptData accept 响应 (--accept 或 --no-confirm 後)
 type AcceptData struct {
-	RepoID   string `json:"repoId"`
-	Resolved bool   `json:"resolved"`
+	RepoID             string   `json:"repoId"`
+	Resolved           bool     `json:"resolved"`
+	RemainingConflicts []string `json:"remainingConflicts,omitempty"`
 }
-
 // RejectData reject 响应
 type RejectData struct {
 	RepoID     string `json:"repoId"`
 	RolledBack bool   `json:"rolledBack"`
 }
 
-// DoneData done 响应
-type DoneData struct {
-	RepoID             string   `json:"repoId"`
-	AllResolved        bool     `json:"allResolved"`
-	RemainingConflicts []string `json:"remainingConflicts,omitempty"`
-}
 
 // AgentListData agent list 响应
 type AgentListData struct {

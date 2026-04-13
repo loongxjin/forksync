@@ -139,8 +139,6 @@ func TestManager_Set_AllBoolKeys(t *testing.T) {
 		"sync.auto_launch",
 		"agent.confirm_before_commit",
 		"notification.enabled",
-		"notification.on_conflict",
-		"notification.on_sync_success",
 		"proxy.enabled",
 	}
 
@@ -185,8 +183,8 @@ func TestGetKeyType(t *testing.T) {
 func TestValidConfigKeys(t *testing.T) {
 	keys := ValidConfigKeys()
 	assert.NotEmpty(t, keys)
-	// Should have at least 16 keys (sync:3 + agent:6 + github:1 + notification:3 + proxy:2 = 15)
-	assert.GreaterOrEqual(t, len(keys), 15)
+	// Should have at least 13 keys (sync:3 + agent:6 + github:1 + notification:1 + proxy:2 = 13)
+	assert.GreaterOrEqual(t, len(keys), 13)
 }
 
 func newViper() *viper.Viper {

@@ -10,7 +10,7 @@ import {
   useRef,
   type ReactNode
 } from 'react'
-import type { AgentInfo, AgentSessionInfo, ResolveData, DoneData } from '@/types/engine'
+import type { AgentInfo, AgentSessionInfo, ResolveData, AcceptData } from '@/types/engine'
 import { engineApi } from '@/lib/api'
 
 // ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ interface AgentContextValue extends AgentState {
     name: string,
     opts?: { agent?: string; noConfirm?: boolean }
   ) => Promise<ResolveData | null>
-  resolveDone: (name: string) => Promise<DoneData | null>
+  resolveAccept: (name: string) => Promise<AcceptData | null>
   resolveReject: (name: string) => Promise<boolean>
   cleanup: () => Promise<number>
 }
@@ -152,10 +152,10 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
     []
   )
 
-  const resolveDone = useCallback(async (name: string): Promise<DoneData | null> => {
+  const resolveAccept = useCallback(async (name: string): Promise<AcceptData | null> => {
     dispatch({ type: 'SET_LOADING', loading: true })
     try {
-      const res = await engineApi.resolveDone(name)
+      const res = await engineApi.resolveAccept(name)
       if (res.success) {
         dispatch({ type: 'SET_LOADING', loading: false })
         return res.data
@@ -206,7 +206,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
         refreshAgents,
         refreshSessions,
         resolve,
-        resolveDone,
+        resolveAccept,
         resolveReject,
         cleanup
       }}

@@ -62,8 +62,8 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle('engine:resolveDone', async (_event, name: string) => {
-    return e.resolveDone(name)
+  ipcMain.handle('engine:resolveAccept', async (_event, name: string) => {
+    return e.resolveAccept(name)
   })
 
   ipcMain.handle('engine:resolveReject', async (_event, name: string) => {
