@@ -1,8 +1,8 @@
 # ForkSync — 自动同步上游 Fork 仓库工具
 
-**日期**: 2026-04-06  
-**状态**: Draft  
-**作者**: loongxjin  
+**日期**: 2026-04-06
+**状态**: Draft
+**作者**: loongxjin
 **定位**: 开源桌面应用（macOS）
 
 ---
@@ -13,7 +13,7 @@
 
 ## 解决方案
 
-**ForkSync** 是一个 macOS 桌面应用（Electron + Go），自动检测 fork 仓库的上游更新，智能同步代码，并通过 AI 自动解决合并冲突。需要人工介入时通过系统通知提醒用户。
+**ForkSync** 是一个 macOS 桌面应用（Electron + Go），自动检测 fork 仓库的上游更新，智能同步代码，并通过本地 AI coding agent CLI（如 Claude Code、OpenCode、Droid、Codex）自动解决合并冲突。需要人工介入时通过系统通知提醒用户。
 
 ---
 
@@ -23,12 +23,12 @@
 ┌─────────────────────────────────────────────────┐
 │              Electron UI (TypeScript)            │
 │  Dashboard | Repo List | Conflict Resolver       │
-│  Settings  | AI Config | Notifications          │
+│  Settings  | Agent Config | Notifications       │
 ├─────────────────────────────────────────────────┤
 │              IPC (spawn Go binary, JSON I/O)     │
 ├─────────────────────────────────────────────────┤
 │           Go Core Engine (嵌入式二进制)           │
-│  Git Sync | Conflict Detector | AI Resolver     │
+│  Git Sync | Conflict Detector | Agent Resolver  │
 │  Repo Scan | Upstream Manager  | Scheduler      │
 └─────────────────────────────────────────────────┘
 ```
@@ -37,6 +37,7 @@
 - Go 引擎是独立可运行的 CLI，Electron 通过 spawn 调用，JSON 格式通信
 - 引擎不依赖 UI，可在终端单独使用
 - 前端是引擎的可视化界面
+- 冲突解决通过本地 agent CLI，不直接调用 AI API
 
 ---
 
@@ -54,7 +55,7 @@
   "branch": "main",
   "autoSync": true,
   "syncInterval": "30m",
-  "conflictStrategy": "ai_resolve",
+  "conflictStrategy": "agent_resolve",
   "lastSync": "2026-04-06T10:00:00Z",
   "status": "synced"
 }
@@ -81,40 +82,35 @@
         ▼
   检测到冲突
         │
-        ├── AI 自动解决（如果已配置 AI 且策略为 ai_resolve）
-        │     ├── 成功 ──► 自动合入，通知用户已解决
+        ├── Agent 自动解决（如果已安装 agent CLI 且策略为 agent_resolve）
+        │     ├── 成功 ──► 展示 diff，用户确认后提交
         │     └── 失败 ──► 通知用户手动介入
         │
-        └── 无 AI 配置 ──► 通知用户手动解决
+        └── 无可用 Agent ──► 通知用户手动解决
 ```
 
-### AI 冲突解决
+### Agent CLI 冲突解决
 
-**适配器模式**，支持多个 AI 提供商：
+ForkSync 通过调用本地已安装的 AI coding agent CLI 来解决冲突，而非直接调用 AI API。
 
-```go
-type AIProvider interface {
-    ResolveConflicts(ctx context.Context, req ConflictRequest) (*ConflictResolution, error)
-}
-```
+**支持的平台**：
+- `claude` — Claude Code（Anthropic）
+- `opencode` — OpenCode（开源）
+- `droid` — Factory Droid
+- `codex` — OpenAI Codex
 
-内置适配器：
-- `OpenAIAdapter` — GPT-4o（支持自定义 `base_url`，兼容第三方 OpenAI API）
-- `AnthropicAdapter` — Claude Sonnet
-- `GeminiAdapter` — Google Gemini
-- `OllamaAdapter` — 本地模型
+**自动发现**：启动时通过 `exec.LookPath` 自动扫描已安装的 agent CLI，零配置即用。用户可在设置中指定偏好。
 
-**冲突解决 Prompt 策略**：
-- **输入**：冲突文件的完整内容，包含 `<<<<<<<`、`=======`、`>>>>>>>` 冲突标记
-- **上下文**：用户相对于上游的完整 diff（个性化修改列表）
-- **指令**：保留用户的个性化修改，同时合入上游的非冲突新功能；如果无法确定取舍，标记为需要人工介入
-- **输出**：解决后的文件内容 + 修改解释
+**工作方式**：
+1. 检测到冲突后，获取或创建该仓库的 agent 会话（仓库级持久会话）
+2. 向 agent 发送冲突文件列表（agent 在仓库目录中直接工作，自己读取和分析冲突文件）
+3. Agent 直接编辑文件解决冲突
+4. 验证解决结果（无残留冲突标记、无空白错误）
+5. 展示 diff 给用户确认后提交
 
-**失败处理**：AI 返回的内容通过以下验证：
-1. 去除所有冲突标记（`<<<<<<<`、`=======`、`>>>>>>>`），确认无残留
-2. 对代码文件执行基础语法检查（Go/TS/Python/Rust 等通过对应 parser）
-3. 执行 `git diff --check` 确认无空白错误
-任何验证失败则回退为手动解决，不自动写入。
+**会话管理**：每个仓库维护一个持久 agent 会话，首次启动时注入项目上下文（README、目录结构等），后续冲突解决复用同一会话，agent 已了解项目结构和代码风格。
+
+**失败处理**：验证失败或 agent 出错时回退为手动解决，通知用户介入。
 
 ### CLI 接口
 
@@ -131,16 +127,24 @@ forksync sync <repo-name>
 # 同步所有仓库
 forksync sync --all
 
-# 查看所有仓库状态
+# 查看所有仓库状态（含 agent 检测状态）
 forksync status
 
-# 交互式解决冲突
+# 使用 agent 解决冲突
 forksync resolve <repo-name>
+forksync resolve <repo-name> --agent claude
+forksync resolve <repo-name> --no-confirm
+
+# Agent 管理
+forksync agent list             # 列出已安装的 agent
+forksync agent sessions         # 列出活跃会话
+forksync agent cleanup          # 清理过期会话
 
 # JSON 输出模式（供 Electron 调用）
 forksync status --json
 forksync sync --all --json
-forksync sync <repo-name> --json
+forksync resolve <repo-name> --json
+forksync agent list --json
 ```
 
 所有 `--json` 输出遵循统一格式：
@@ -167,6 +171,7 @@ forksync sync <repo-name> --json
 - 三个状态卡片：同步成功数 / 冲突待处理数 / 同步中数量
 - 最近活动时间线（同步记录、冲突事件）
 - 快捷操作：一键同步全部
+- Agent 状态指示：当前使用的 agent 和活跃会话数
 
 #### 2. Repo List（仓库管理页）
 - 仓库列表，每行显示：名称、状态指示灯、上次同步时间、upstream 仓库
@@ -176,22 +181,24 @@ forksync sync <repo-name> --json
 - 每行操作：立即同步、查看 diff、打开终端、在 Finder 中显示、移除
 
 #### 3. Conflict Resolver（冲突解决面板）
-- 左右分栏对比：用户版本 vs 上游版本，差异高亮显示
-- AI 建议区域：显示 AI 合并后的代码预览和修改解释
-- 三个操作按钮：接受 AI 建议 / 手动编辑（打开内置编辑器） / 跳过此文件
+- Agent 解决后的 diff 预览，语法高亮显示
+- Agent 总结说明区域
+- 三个操作按钮：接受解决结果 / 拒绝并回滚 / 手动编辑
+- 显示使用的 agent 和会话状态
 - 支持逐文件处理，显示进度（共 N 个冲突文件，已处理 M 个）
 
 #### 4. Settings（设置页）
 - 通用设置：同步间隔（全局默认）、启动时自动同步、开机自启动
-- AI 配置：选择默认 AI 提供商、配置各提供商的 API Key 和模型
+- Agent 配置：自动发现的 agent 列表、首选 agent、超时时间、自动确认开关
 - 通知设置：启用/关闭 macOS 系统通知
-- 代理设置：HTTP/SOCKS5 代理（用于 GitHub 和 AI API 访问）
+- 代理设置：HTTP/SOCKS5 代理（用于 GitHub API 访问）
 
 ### 系统通知
 
 通过 macOS 原生通知中心（Electron `Notification` API）推送：
 - 同步成功：可选显示
-- 冲突需要人工介入：必须显示，包含仓库名和冲突文件数
+- 冲突需人工介入：必须显示，包含仓库名和冲突文件数
+- Agent 解决成功等待确认：必须显示，包含 diff 摘要
 - 通知点击后打开应用并跳转到对应冲突面板
 
 ---
@@ -202,6 +209,8 @@ forksync sync <repo-name> --json
 ~/.forksync/
 ├── config.yaml          # 全局配置
 ├── repos.json           # 管理的仓库列表和状态
+├── sessions/            # Agent 会话记录
+│   └── <repoID>.json    # 每个仓库的 agent 会话
 ├── logs/                # 同步日志（按日期轮转）
 │   └── sync-YYYY-MM-DD.log
 └── db/                  # SQLite（仓库元数据、同步历史记录）
@@ -215,22 +224,17 @@ sync:
   sync_on_startup: true
   auto_launch: false
 
-ai:
-  default_provider: openai
-  providers:
-    openai:
-      api_key: sk-xxx
-      model: gpt-4o
-      base_url: https://api.openai.com/v1
-    anthropic:
-      api_key: sk-ant-xxx
-      model: claude-sonnet-4-20250514
-    gemini:
-      api_key: xxx
-      model: gemini-2.5-pro
-    ollama:
-      base_url: http://localhost:11434
-      model: codellama
+agent:
+  preferred: claude
+  priority:
+    - claude
+    - opencode
+    - droid
+    - codex
+  timeout: 10m
+  conflict_strategy: preserve_ours
+  confirm_before_commit: true
+  session_ttl: 24h
 
 notification:
   enabled: true
@@ -269,12 +273,22 @@ forksync/
 │   │   ├── add.go
 │   │   ├── sync.go
 │   │   ├── status.go
-│   │   └── resolve.go
+│   │   ├── resolve.go
+│   │   └── agent.go        # Agent 子命令
 │   ├── internal/
 │   │   ├── git/            # Git 操作封装（go-git + 命令行）
 │   │   ├── sync/           # 同步逻辑
-│   │   ├── conflict/       # 冲突检测与解析
-│   │   ├── ai/             # AI 适配器（多提供商）
+│   │   ├── conflict/       # 冲突检测
+│   │   ├── agent/          # Agent 适配器（多 CLI）
+│   │   │   ├── provider.go
+│   │   │   ├── registry.go
+│   │   │   ├── claude.go
+│   │   │   ├── opencode.go
+│   │   │   ├── droid.go
+│   │   │   └── codex.go
+│   │   ├── agent/session/  # Agent 会话管理
+│   │   │   ├── manager.go
+│   │   │   └── store.go
 │   │   ├── config/         # 配置管理
 │   │   ├── repo/           # 仓库管理
 │   │   ├── notify/         # 通知系统
@@ -300,7 +314,7 @@ forksync/
 │   └── build.sh            # 编译 Go + 打包 Electron
 └── docs/                   # 文档
     ├── getting-started.md
-    └── ai-configuration.md
+    └── agent-configuration.md
 ```
 
 ---
@@ -310,9 +324,11 @@ forksync/
 ### Go 引擎
 - `github.com/go-git/go-git/v5` — Git 操作
 - `github.com/spf13/cobra` — CLI 框架
-- `github.com/sashabaranov/go-openai` — OpenAI API 客户端
-- `github.com/liushuangls/go-anthropic` — Anthropic API 客户端
+- `github.com/google/uuid` — UUID 生成
+- `github.com/spf13/viper` — 配置管理
 - `modernc.org/sqlite` — SQLite 驱动（纯 Go，无 CGO）
+- ~~`github.com/sashabaranov/go-openai`~~ — 已移除
+- ~~`github.com/liushuangls/go-anthropic`~~ — 已移除
 
 ### Electron 前端
 - `electron` — 桌面框架
@@ -333,3 +349,4 @@ forksync/
 - 浏览器版本
 - 付费 / SaaS 模式
 - Git 仓库浏览器（仅管理同步，不做完整的 Git GUI）
+- 直接调用 AI API（通过 agent CLI 替代）

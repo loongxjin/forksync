@@ -1,0 +1,263 @@
+{
+  "common": {
+    "add": "Add",
+    "cancel": "Cancel",
+    "close": "Close",
+    "save": "Save",
+    "saving": "Saving...",
+    "loading": "Loading...",
+    "refresh": "Refresh",
+    "noResults": "No results",
+    "retry": "Retry",
+    "optional": "optional",
+    "selectDirectory": "Select Directory",
+    "select": "Select...",
+    "confirm": "Confirm"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "repos": "Repos",
+    "conflicts": "Conflicts",
+    "settings": "Settings"
+  },
+  "theme": {
+    "dark": "Dark",
+    "light": "Light",
+    "system": "System"
+  },
+  "status": {
+    "synced": "Synced",
+    "syncing": "Syncing",
+    "conflict": "Conflict",
+    "resolving": "Resolving",
+    "resolved": "Resolved",
+    "error": "Error",
+    "unconfigured": "Unconfigured",
+    "upToDate": "Up to date"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "syncing": "Syncing...",
+    "syncAll": "Sync All",
+    "synced": "Synced",
+    "conflict": "Conflict",
+    "syncing_status": "Syncing",
+    "error_status": "Error",
+    "agentStatus": "Agent Status",
+    "activeSessions": "{{count}} active session(s)",
+    "syncHistory": "Sync History",
+    "clearHistoryConfirm": "Clear all sync history?",
+    "clearFailed": "Failed to clear history",
+    "clear": "🗑️ Clear",
+    "loadingHistory": "Loading history...",
+    "noHistory": "No sync history yet.",
+    "conflictAlert": "{{count}} repo(s) with conflicts",
+    "justNow": "just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago"
+  },
+  "repos": {
+    "title": "Repositories",
+    "refresh": "🔄 Refresh",
+    "scan": "📂 Scan",
+    "addRepo": "+ Add Repo",
+    "loading": "Loading...",
+    "emptyTitle": "No repositories managed yet.",
+    "emptyHint": "Click + Add Repo, 📂 Scan, or drag a folder here to get started.",
+    "removeConfirm": "Remove \"{{name}}\" from ForkSync? The local repo won't be deleted.",
+    "dropOverlay": "Drop repository folder here",
+    "origin": "origin:",
+    "upstream": "upstream:",
+    "syncNow": "Sync now",
+    "sync": "🔄 Sync",
+    "resolveConflicts": "Resolve conflicts",
+    "resolve": "⚡ Resolve",
+    "remove": "Remove",
+    "behind": "↓{{count}} behind"
+  },
+  "addRepo": {
+    "title": "Add Repository",
+    "description": "Enter the local path to a git repository.",
+    "repoPath": "Repository Path",
+    "noDirectorySelected": "No directory selected",
+    "upstreamUrl": "Upstream URL (optional)",
+    "autoDetected": "Auto-detected for GitHub forks.",
+    "branchMapping": "Custom Branch Mapping",
+    "branchMappingHint": "Default: sync branches with the same name (e.g., main → origin/main)",
+    "branchMappingDesc": "Map a local branch to a different remote branch name.",
+    "localBranch": "Local Branch",
+    "remoteBranch": "Remote Branch",
+    "localPlaceholder": "e.g., main",
+    "remotePlaceholder": "e.g., master",
+    "adding": "Adding...",
+    "failedOpenDir": "Failed to open directory picker:",
+    "failedLoadBranches": "Failed to load branches:"
+  },
+  "scanRepo": {
+    "title": "Scan Directory",
+    "description": "Scan a directory for git repositories.",
+    "directoryToScan": "Directory to Scan",
+    "noDirectorySelected": "No directory selected",
+    "scanning": "Scanning...",
+    "scan": "Scan",
+    "reposFound": "{{count}} repos found",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "fork": "fork",
+    "mapped": "mapped",
+    "hide": "Hide",
+    "map": "Map",
+    "adding": "Adding {{count}}...",
+    "addRepos": "Add {{count}} repos",
+    "localBranch": "Local branch",
+    "remoteBranch": "Remote branch",
+    "localBranchPlaceholder": "local branch",
+    "remoteBranchPlaceholder": "remote branch",
+    "defaultSyncSameName": "Default: sync branches with the same name",
+    "failedOpenDir": "Failed to open directory picker:"
+  },
+  "conflicts": {
+    "title": "Conflicts",
+    "refresh": "🔄 Refresh",
+    "noConflicts": "No conflicts detected.",
+    "noConflictsHint": "All repositories are synced and up to date.",
+    "back": "← Back",
+    "notFound": "Repository not found.",
+    "conflictResolution": "Conflict Resolution",
+    "diffPreview": "Diff Preview",
+    "conflictFiles": "Conflict Files",
+    "runResolveHint": "Run resolve to detect conflict files."
+  },
+  "resolvePanel": {
+    "title": "Resolve Actions",
+    "agent": "Agent:",
+    "agentSummary": "Agent Summary",
+    "resolvedFiles": "Resolved Files",
+    "resolving": "Resolving...",
+    "resolveWithAgent": "⚡ Resolve with Agent",
+    "accept": "✓ Accept",
+    "rejectRollback": "✗ Reject & Rollback",
+    "resolvingStatus": "Agent is resolving conflicts for {{repoName}}..."
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "general": "General",
+      "agent": "Agent",
+      "notification": "Notification",
+      "proxy": "Proxy"
+    },
+    "general": {
+      "theme": "Theme",
+      "ide": "IDE",
+      "defaultSyncInterval": "Default Sync Interval",
+      "syncIntervalPlaceholder": "e.g. 30m, 1h, 2h",
+      "syncIntervalHint": "Go duration format: 30m, 1h, 2h30m",
+      "syncOnStartup": "Sync on Startup",
+      "syncOnStartupDesc": "Automatically sync all repos when the app starts",
+      "openAtLogin": "Open at Login",
+      "openAtLoginDesc": "Launch ForkSync automatically when you log in",
+      "about": "About",
+      "aboutText": "ForkSync — Keep your fork repositories up to date",
+      "configPath": "Config: ~/.forksync/config.yaml",
+      "dataPath": "Data: ~/.forksync/repos.json"
+    },
+    "notification": {
+      "enable": "Enable Notifications",
+      "description": "Show system notifications for sync events"
+    },
+    "proxy": {
+      "enable": "Enable Proxy",
+      "description": "Route GitHub API requests through a proxy (HTTP/SOCKS5)",
+      "proxyUrl": "Proxy URL",
+      "proxyUrlPlaceholder": "e.g. socks5://127.0.0.1:7890",
+      "supports": "Supports HTTP and SOCKS5 proxies"
+    },
+    "agent": {
+      "strategies": {
+        "preserveOurs": "Preserve Ours",
+        "preserveOursDesc": "Keep local changes, accept upstream non-conflict changes",
+        "preserveTheirs": "Preserve Theirs",
+        "preserveTheirsDesc": "Accept upstream changes, keep local non-conflict changes",
+        "agentResolve": "Agent Resolve",
+        "agentResolveDesc": "Let AI agent resolve conflicts automatically",
+        "manual": "Manual",
+        "manualDesc": "Always resolve conflicts manually"
+      },
+      "detectedAgents": "Detected Agents",
+      "preferred": "preferred",
+      "notInstalled": "not installed",
+      "setPreferred": "Set Preferred",
+      "noAgentsDetected": "No agent CLIs detected.",
+      "config": "Agent Configuration",
+      "timeout": "Agent Timeout",
+      "timeoutPlaceholder": "e.g. 10m",
+      "conflictStrategy": "Conflict Strategy",
+      "autoConfirm": "Auto-confirm Agent Results",
+      "autoConfirmDesc": "Skip manual confirmation when agent resolves conflicts successfully",
+      "sessionTTL": "Session TTL",
+      "sessionTTLPlaceholder": "e.g. 24h",
+      "sessions": "Sessions ({{count}})",
+      "cleanupExpired": "🧹 Cleanup Expired",
+      "noSessions": "No active sessions."
+    }
+  },
+  "ide": {
+    "config": "IDE Configuration",
+    "defaultIde": "Default IDE",
+    "notSet": "Not set",
+    "detectedIdes": "Detected IDEs",
+    "notDetected": "Not detected",
+    "customIde": "Custom IDEs",
+    "noCustomIde": "No custom IDEs",
+    "namePlaceholder": "IDE name (e.g., Windsurf)",
+    "commandPlaceholder": "CLI command (e.g., windsurf)",
+    "addCustom": "+ Add Custom IDE",
+    "detecting": "Detecting...",
+    "redetect": "🔍 Redetect",
+    "openFailed": "Failed to open",
+    "openWith": "Open with {{name}}",
+    "selectIdeToOpen": "Select IDE to open",
+    "open": "Open",
+    "selectOtherIde": "Select other IDE",
+    "default": "(default)",
+    "setDefault": "⚙️ Set default IDE...",
+    "pathNotExist": "Path not found: {{path}}",
+    "ideNotFound": "IDE not found: {{ideId}}",
+    "ideNotDetected": "{{name}} not detected, please confirm it is installed"
+  },
+  "agentBadge": {
+    "noAgentsInstalled": "No agents installed",
+    "connected": "● Connected",
+    "more": "+{{count}} more"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "message": "An unexpected error occurred.",
+    "retry": "Try again"
+  },
+  "diffViewer": {
+    "noDiff": "No diff available."
+  },
+  "toast": {
+    "conflictsWarning": "\"{{name}}\" has unresolved conflicts, please resolve first",
+    "upToDate": "\"{{name}}\" is already up to date",
+    "syncSuccess": "Synced {{count}} repo(s), {{pulled}} commits pulled",
+    "syncConflicts": "{{count}} repo(s) have conflicts",
+    "syncFailed": "{{count}} repo(s) failed to sync",
+    "loadConfigFailed": "Failed to load config",
+    "updateConfigFailed": "Failed to update config"
+  },
+  "notify": {
+    "conflictsTitle": "Conflicts in {{count}} repo(s)",
+    "conflictsBody": "{{names}} — {{files}} file(s) need resolution",
+    "failedTitle": "Sync failed for {{count}} repo(s)",
+    "failedBody": "{{names}}",
+    "completeTitle": "Sync complete",
+    "completeBody": "{{count}} repo(s) synced, {{pulled}} commits pulled"
+  },
+  "mainProcess": {
+    "selectRepoDir": "Select Repository Directory"
+  }
+}

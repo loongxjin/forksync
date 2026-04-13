@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-engine:
+    name: Release Go Engine
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          workdir: engine
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-desktop:
+    name: Release Desktop App
+    needs: release-engine
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+          - os: ubuntu-latest
+          - os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      # Sync package.json version from git tag (v1.2.3 → 1.2.3)
+      - name: Sync version from git tag
+        working-directory: app
+        shell: bash
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          npm version "$TAG_VERSION" --no-git-tag-version
+
+      - name: Build Go engine
+        run: |
+          cd engine
+          CGO_ENABLED=0 go build -ldflags "-s -w -X github.com/loongxjin/forksync/engine/pkg/version.Version=${{ github.ref_name }}" -o ../build/forksync .
+
+      - name: Install Electron dependencies
+        run: cd app && npm ci
+
+      - name: Build Electron app
+        run: cd app && npm run build
+
+      - name: Package (macOS)
+        if: matrix.os == 'macos-latest'
+        run: cd app && npx electron-builder --mac --publish never
+
+      - name: Package (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cd app && npx electron-builder --linux --publish never
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        run: cd app && npx electron-builder --win --publish never
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/dist/*.dmg
+            app/dist/*.AppImage
+            app/dist/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

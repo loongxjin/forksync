@@ -14,7 +14,9 @@
 |--------|------|
 | 开发路径 | Go 引擎 + Electron UI 并行开发（方案 A：契约先行） |
 | Git 操作实现 | 优先 go-git 库，命令行做 fallback |
-| AI 适配器 MVP | 先实现 OpenAI 适配器（支持自定义 base_url），接口预留扩展 |
+| 冲突解决 | 通过本地 agent CLI（Claude Code/OpenCode/Droid/Codex），不直接调用 AI API |
+| Agent 发现 | `exec.LookPath` 自动扫描，零配置 |
+| Agent 调用 | Go `exec.Cmd` 子进程，仓库级持久会话 |
 | UI 视觉风格 | 开发者工具风（类似 VS Code / GitHub Desktop，深色主题，信息密度高） |
 
 ---
@@ -40,23 +42,8 @@ interface ApiResponse<T> {
 ```typescript
 interface StatusData {
   repos: Repo[];
-}
-
-interface Repo {
-  id: string;
-  name: string;
-  path: string;
-  origin: string;
-  upstream: string;
-  branch: string;
-  autoSync: boolean;
-  syncInterval: string;
-  conflictStrategy: string;
-  lastSync: string;       // ISO 8601
-  status: "synced" | "syncing" | "conflict" | "error" | "unconfigured";
-  aheadBy: number;        // 领先 upstream 多少 commit
-  behindBy: number;       // 落后 upstream 多少 commit
-  errorMessage?: string;
+  agents: AgentInfo[];    // 新增：agent 检测状态
+  preferredAgent: string; // 新增：当前首选 agent
 }
 ```
 
@@ -66,14 +53,15 @@ interface Repo {
 interface SyncResult {
   repoId: string;
   repoName: string;
-  status: "synced" | "conflict" | "up_to_date" | "error";
+  status: "synced" | "conflict" | "resolving" | "resolved" | "up_to_date" | "error";
   commitsPulled: number;
   conflictFiles?: string[];
   errorMessage?: string;
-}
-
-interface SyncData {
-  results: SyncResult[];
+  // 新增
+  agentUsed?: string;
+  conflictsFound?: number;
+  autoResolved?: number;
+  pendingConfirm?: string[];
 }
 ```
 
@@ -83,21 +71,13 @@ interface SyncData {
 interface ScanData {
   repos: ScannedRepo[];
 }
-
-interface ScannedRepo {
-  path: string;
-  name: string;
-  origin: string;
-  isFork: boolean;
-  suggestedUpstream?: string;
-}
 ```
 
 #### `forksync add <path> --upstream <url> --json`
 
 ```typescript
 interface AddData {
-  repo: Repo;  // 同 status 中的 Repo
+  repo: Repo;
 }
 ```
 
@@ -107,34 +87,67 @@ interface AddData {
 interface ResolveData {
   repoId: string;
   conflicts: ConflictFile[];
+  agentResult?: AgentResolveResult;  // 新增：agent 解决结果
 }
 
-interface ConflictFile {
-  path: string;
-  oursContent: string;
-  theirsContent: string;
-  mergedContent?: string;  // AI 建议的合并结果
-  aiExplanation?: string;
+interface AgentResolveResult {
+  success: boolean;
+  resolvedFiles: string[];
+  diff: string;
+  summary: string;
+  sessionId: string;
 }
 ```
 
-#### `forksync resolve <repo> --accept <filepath> --content <content> --json`
+#### `forksync resolve <repo> --accept --json`
 
 ```typescript
 interface AcceptData {
   repoId: string;
-  file: string;
   resolved: boolean;
 }
 ```
 
-#### `forksync resolve <repo> --done --json`
+#### `forksync resolve <repo> --reject --json`
 
 ```typescript
-interface DoneData {
+interface RejectData {
   repoId: string;
-  allResolved: boolean;
-  remainingConflicts?: string[];
+  rolledBack: boolean;
+}
+```
+
+#### `forksync agent list --json` （新增）
+
+```typescript
+interface AgentListData {
+  agents: AgentInfo[];
+  preferred: string;
+}
+
+interface AgentInfo {
+  name: string;       // "claude", "opencode", "droid", "codex"
+  binary: string;     // "claude"
+  path: string;       // "/usr/local/bin/claude"
+  installed: boolean;
+  version?: string;
+}
+```
+
+#### `forksync agent sessions --json` （新增）
+
+```typescript
+interface AgentSessionsData {
+  sessions: AgentSessionInfo[];
+}
+
+interface AgentSessionInfo {
+  id: string;
+  repoId: string;
+  agentName: string;
+  status: "active" | "expired" | "failed";
+  createdAt: string;
+  lastUsedAt: string;
 }
 ```
 
@@ -143,15 +156,19 @@ interface DoneData {
 Electron 侧封装 Go 二进制调用：
 
 ```typescript
-async function callEngine(args: string[]): Promise<ApiResponse<any>> {
-  const binary = path.join(app.getPath('exe'), '..', 'Resources', 'forksync');
-  // dev 模式下用 go run ./engine/...
-  const proc = spawn(binary, args);
-  // 收集 stdout，返回 JSON
+class EngineClient {
+  async status(): Promise<ApiResponse<StatusData>>;
+  async sync(repoName?: string): Promise<ApiResponse<SyncData>>;
+  async scan(dir: string): Promise<ApiResponse<ScanData>>;
+  async add(path: string, upstream: string): Promise<ApiResponse<AddData>>;
+  async resolve(repoName: string, agent?: string, noConfirm?: boolean): Promise<ApiResponse<ResolveData>>;
+  async acceptResolve(repoName: string, sessionId: string): Promise<ApiResponse<AcceptData>>;
+  async rejectResolve(repoName: string, sessionId: string): Promise<ApiResponse<RejectData>>;
+  async agentList(): Promise<ApiResponse<AgentListData>>;
+  async agentSessions(): Promise<ApiResponse<AgentSessionsData>>;
+  async agentCleanup(): Promise<ApiResponse<void>>;
 }
 ```
-
-Go 侧：所有命令统一通过 `--json` flag 切换输出格式，不加 `--json` 则输出人类可读的彩色终端文本。
 
 ---
 
@@ -161,15 +178,16 @@ Go 侧：所有命令统一通过 `--json` flag 切换输出格式，不加 `--j
 
 ```
 cmd/ (CLI 入口)
-  ├── internal/config/      ← 配置读写
-  ├── internal/repo/        ← 仓库管理（依赖 config）
-  ├── internal/git/         ← Git 操作（依赖 repo）
-  ├── internal/github/      ← GitHub API（识别 fork 关系）
-  ├── internal/sync/        ← 同步编排（依赖 git, repo）
-  ├── internal/conflict/    ← 冲突检测（依赖 git）
-  ├── internal/ai/          ← AI 适配器（依赖 conflict）
-  ├── internal/notify/      ← macOS 通知
-  └── internal/scheduler/   ← 定时调度（依赖 sync）
+  ├── internal/config/          ← 配置读写
+  ├── internal/repo/            ← 仓库管理（依赖 config）
+  ├── internal/git/             ← Git 操作（依赖 repo）
+  ├── internal/github/          ← GitHub API（识别 fork 关系）
+  ├── internal/sync/            ← 同步编排（依赖 git, repo, agent/session）
+  ├── internal/conflict/        ← 冲突检测（依赖 git）
+  ├── internal/agent/           ← Agent 适配器（依赖 config）
+  ├── internal/agent/session/   ← Agent 会话管理（依赖 agent）
+  ├── internal/notify/          ← macOS 通知
+  └── internal/scheduler/       ← 定时调度（依赖 sync）
 ```
 
 ### 实现阶段
@@ -189,17 +207,18 @@ cmd/ (CLI 入口)
 | `github/` | 调用 GitHub API 检测 fork 关系，获取 upstream URL |
 | `cmd/scan` | 扫描目录 → 检测 git 仓库 → 识别 fork |
 | `cmd/add` | 添加仓库到管理列表 |
-| `cmd/status` | 查询所有仓库状态，输出表格/JSON |
+| `cmd/status` | 查询所有仓库状态 + agent 检测状态 |
 
 #### 阶段 3：同步与冲突
 
 | 模块 | 职责 |
 |------|------|
 | `sync/` | 同步编排：fetch → compare → merge → handle conflict |
-| `conflict/` | 检测冲突文件，提取 ours/theirs 内容 |
-| `ai/` | OpenAI 适配器（MVP），`AIProvider` 接口预留扩展 |
+| `conflict/` | 检测冲突文件，返回文件路径列表 |
+| `agent/` | Agent 适配器：Provider 接口 + 4 个 CLI 适配器 |
+| `agent/session/` | 仓库级会话管理，持久化，上下文注入 |
 | `cmd/sync` | 单个/全部同步 |
-| `cmd/resolve` | 交互式冲突解决 |
+| `cmd/resolve` | 通过 agent 解决冲突，支持确认/拒绝 |
 
 #### 阶段 4：调度与通知
 
@@ -236,18 +255,21 @@ app/
 │   │   ├── hooks/
 │   │   │   ├── useRepos.ts  # 仓库列表状态管理
 │   │   │   ├── useSync.ts   # 同步操作
+│   │   │   ├── useAgent.ts  # Agent 状态和操作（新增）
 │   │   │   └── useEngine.ts # 引擎连接状态
 │   │   ├── components/
 │   │   │   ├── ui/          # shadcn/ui 基础组件
 │   │   │   ├── Layout.tsx   # 侧边栏 + 主内容区
 │   │   │   ├── RepoRow.tsx  # 仓库列表行
 │   │   │   ├── StatusBadge.tsx
-│   │   │   └── DiffViewer.tsx  # 冲突对比组件
+│   │   │   ├── DiffViewer.tsx  # 冲突对比组件
+│   │   │   ├── AgentStatus.tsx # Agent 状态指示（新增）
+│   │   │   └── ResolveConfirm.tsx # 冲突解决确认（新增）
 │   │   ├── pages/
 │   │   │   ├── Dashboard.tsx    # 总览
 │   │   │   ├── Repos.tsx        # 仓库管理
 │   │   │   ├── Conflicts.tsx    # 冲突解决
-│   │   │   └── Settings.tsx     # 设置
+│   │   │   └── Settings.tsx     # 设置（含 Agent 配置）
 │   │   └── styles/
 │   │       └── globals.css      # Tailwind 入口
 │   ├── index.html
@@ -260,7 +282,7 @@ app/
 
 ### 核心架构决策
 
-**状态管理**：React Context + useReducer。两个核心 Context：`RepoContext`（仓库列表和状态）、`SettingsContext`（配置）。不引入 Redux 等外部状态库。
+**状态管理**：React Context + useReducer。三个核心 Context：`RepoContext`（仓库列表和状态）、`SettingsContext`（配置）、`AgentContext`（agent 状态和会话）。不引入 Redux 等外部状态库。
 
 **路由**：React Router。
 - `/` → Dashboard
@@ -277,20 +299,6 @@ React 组件
         → 收集 stdout JSON 返回
 ```
 
-main process 侧封装 `EngineClient` 类：
-
-```typescript
-class EngineClient {
-  async status(): Promise<ApiResponse<StatusData>>;
-  async sync(repoName?: string): Promise<ApiResponse<SyncData>>;
-  async scan(dir: string): Promise<ApiResponse<ScanData>>;
-  async add(path: string, upstream: string): Promise<ApiResponse<AddData>>;
-  async resolve(repoName: string): Promise<ApiResponse<ResolveData>>;
-  async acceptResolve(repoName: string, file: string, content: string): Promise<ApiResponse<AcceptData>>;
-  async doneResolve(repoName: string): Promise<ApiResponse<DoneData>>;
-}
-```
-
 **开发模式 vs 生产模式**：
 - **开发模式**：`main.ts` 用 `go run ./engine/... args` 调用 Go 引擎，实时反映 Go 代码修改
 - **生产模式**：`main.ts` 用预编译的 `forksync` 二进制（打包在 Electron resources 中）
@@ -303,19 +311,18 @@ class EngineClient {
 
 ---
 
-## 4. 同步流程与 AI 冲突解决
+## 4. 同步流程与 Agent 冲突解决
 
 ### 同步状态机
 
 ```
 Repo.status 变迁：
   unconfigured → syncing → synced
-                         → conflict → syncing → synced
+                         → conflict → resolving → resolved → syncing → synced
                          → error → syncing → synced
 ```
 
-注：`conflict` 状态在用户手动解决后或 AI 解决失败后等待用户介入期间保持不变，
-直到用户完成解决操作后再次触发 sync。
+新增 `resolving` 状态（agent 正在解决冲突）和 `resolved` 状态（agent 解决完成，等待用户确认）。
 
 ### 同步操作核心逻辑
 
@@ -337,66 +344,60 @@ Repo.status 变迁：
    - 有冲突 → 进入冲突处理
 
 4. 冲突处理（依赖 conflictStrategy 配置）
-   - "ai_resolve" → 调用 AI 处理
+   - "agent_resolve" → 检测可用 agent → 调用 agent 解决
    - "manual" → 返回 conflict 状态，等待用户
 ```
 
-### AI 冲突解决
-
-**输入结构**：
-
-```go
-type ConflictRequest struct {
-    FilePath       string // 冲突文件路径
-    ConflictContent string // 包含 <<<<<<< ======= >>>>>>> 标记的原始内容
-    UserDiff       string // 用户相对于 upstream 的完整 diff
-    Language       string // 文件语言（从扩展名推断）
-}
-```
-
-**Prompt 策略**：
+### Agent 冲突解决流程
 
 ```
-System: 你是一个代码合并助手。你的任务是在保留用户个性化修改的同时，
-合入上游的非冲突更新。如果无法确定某个冲突块的取舍，在输出中标记
-[NEEDS_MANUAL_REVIEW]。
+1. 冲突检测
+   - 扫描 git 状态，收集所有冲突文件路径列表
+   - 返回 []string{"/path/to/file1.go", "/path/to/file2.ts"}
 
-User:
-文件: {FilePath}
-语言: {Language}
+2. 会话获取
+   - SessionManager.GetOrCreate(repoID, repoPath)
+   - 首次: 启动 agent + 注入项目上下文（README、目录结构等）
+   - 已有: resume 已有会话
 
-用户的个性化修改（相对 upstream 的 diff）：
-{UserDiff}
+3. 构建 prompt
+   - 只传文件路径列表，不传文件内容
+   - Agent 在仓库目录中工作，自行读取冲突文件
 
-冲突文件内容：
-{ConflictContent}
+   Prompt 示例:
+   "以下文件存在合并冲突，请解决它们：
+    - pkg/handler.go
+    - internal/service/user.go
+    策略：保留我们的自定义修改，接受上游的非冲突变更。
+    解决后请确保没有残留的冲突标记。"
 
-请输出完整的解决后文件内容，并在文件末尾附上修改说明。
+4. Agent 执行
+   - 通过 exec.Cmd 启动 agent CLI 子进程
+   - Agent 直接在仓库目录中编辑文件
+   - 捕获 stdout/stderr
+   - 支持 context 取消和超时
+
+5. 结果验证
+   a) 检查冲突标记是否消除 (grep <<<<<<<)
+   b) git diff --check (空白问题)
+   c) git diff (获取完整 diff 供用户确认)
+
+6. 用户确认
+   - 展示 diff
+   - 用户确认 → git add + git commit
+   - 用户拒绝 → git checkout -- <files> (回滚)
+
+7. 会话更新
+   - 更新 lastUsedAt
+   - 保存会话记录
 ```
-
-**输出结构**：
-
-```go
-type ConflictResolution struct {
-    MergedContent string // AI 返回的解决后内容
-    Explanation   string // 修改说明
-    NeedsReview   bool   // 是否包含 [NEEDS_MANUAL_REVIEW] 标记
-}
-```
-
-**验证链**（AI 输出写入前必须全部通过）：
-
-1. 冲突标记清除检查：`strings.Contains(merged, "<<<<<<<")` → 失败
-2. 语法检查：根据语言调用对应检查器（Go: `go vet`，TS: `tsc --noEmit`，Python: `python -m py_compile`），失败则不写入
-3. `git diff --check`：无空白错误
-
-任一验证失败 → 回退为手动解决，通知用户。
 
 ### 并发安全
 
 - 同一个仓库同一时间只允许一个 sync 操作（用 `sync.Mutex` 按 repo ID 加锁）
+- 同一个仓库同一时间只允许一个 agent 会话操作
 - 调度器触发同步前检查锁状态，避免重复执行
-- `context.WithTimeout` 设置单次同步超时（默认 5 分钟）
+- `context.WithTimeout` 设置单次同步超时（默认 10 分钟）
 
 ---
 
@@ -455,7 +456,8 @@ new Notification({ title, body, silent: false })
 |------|------|----------|
 | 同步成功（有新 commit） | 可选 | 跳转到该仓库详情 |
 | 冲突需人工介入 | 必须 | 跳转到冲突解决面板 |
-| AI 解决成功 | 可选 | 跳转到该仓库详情 |
+| Agent 解决成功，等待确认 | 必须 | 跳转到冲突解决面板 |
+| Agent 解决失败 | 必须 | 跳转到该仓库详情 |
 | 同步失败 | 必须 | 跳转到该仓库详情 |
 
 ### 构建与打包
