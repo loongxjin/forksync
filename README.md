@@ -17,6 +17,9 @@ ForkSync monitors your forked repositories, fetches upstream changes, and resolv
 - 📊 **Desktop Dashboard** — React-based UI to manage repos, view conflicts, and configure agents
 - 🔔 **macOS Notifications** — Get notified on sync success, conflicts, or errors
 - 🔍 **Directory Scanning** — Scan any directory to discover and batch-add fork repos
+- 📝 **Sync History** — SQLite-backed history with filters and cleanup
+- 🌐 **i18n Support** — Multi-language interface
+- 🖥️ **IDE Integration** — Open repos in VSCode, Cursor, or Trae
 - ⚙️ **Flexible Config** — YAML config with multiple conflict strategies and agent preferences
 
 ---
@@ -129,7 +132,8 @@ Built with **Electron** + **React** + **TypeScript** + **Tailwind CSS**.
 | **Repos** | `/repos` | Manage repos: add, scan directory, sync, remove |
 | **Conflicts** | `/conflicts` | List repos with conflicts, resolve via agents |
 | **Conflict Detail** | `/conflicts/:repoId` | Diff viewer, agent summary, accept/reject resolution |
-| **Settings** | `/settings` | General settings, agent configuration |
+| **History** | `/history` | Sync history timeline with filters and cleanup |
+| **Settings** | `/settings` | General settings, agent configuration, IDE preferences |
 
 ### Architecture
 
@@ -137,7 +141,7 @@ Built with **Electron** + **React** + **TypeScript** + **Tailwind CSS**.
 ┌───────────────────────────────────┐
 │       Electron UI (React)          │
 │  Dashboard · Repos · Conflicts     │
-│  Settings · ConflictDetail         │
+│  History · Settings · ConflictDetail │
 └───────────────┬───────────────────┘
                 │ IPC (contextBridge)
 ┌───────────────▼───────────────────┐
@@ -149,7 +153,7 @@ Built with **Electron** + **React** + **TypeScript** + **Tailwind CSS**.
 │        Go CLI Engine (Cobra)       │
 │  add · remove · scan · sync        │
 │  status · resolve · serve          │
-│  agent (list/sessions/cleanup)     │
+│  agent · config · history          │
 └───────────────────────────────────┘
 ```
 
@@ -253,6 +257,40 @@ forksync agent sessions   # List active agent sessions
 forksync agent cleanup    # Remove expired/failed sessions
 ```
 
+### `forksync config`
+
+Manage ForkSync configuration.
+
+```bash
+forksync config get                          # Show all config values
+forksync config set agent.preferred claude   # Set a config value (dot-notation)
+forksync config set sync.default_interval 1h # Set sync interval
+forksync config keys                        # List all available keys
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `get` | Display all configuration values |
+| `set <key> <value>` | Set a configuration value (dot-notation keys) |
+| `keys` | List all supported configuration keys and types |
+
+### `forksync history [repo-name]`
+
+Show and manage sync history.
+
+```bash
+forksync history                # Show recent history for all repos
+forksync history my-fork        # Show history for a specific repo
+forksync history --cleanup      # Clear all history
+forksync history --cleanup --keep-days 30  # Keep last 30 days
+```
+
+| Flag | Description |
+|------|-------------|
+| `--limit <n>` | Number of records to show (default: 20) |
+| `--cleanup` | Clean up sync history |
+| `--keep-days <n>` | Keep records from last N days when cleaning up |
+
 ---
 
 ## 🤖 AI Agent Support
@@ -306,8 +344,6 @@ github:
 
 notification:
   enabled: true
-  on_conflict: true
-  on_sync_success: false
 
 proxy:
   enabled: false
@@ -321,6 +357,8 @@ proxy:
 | `~/.forksync/config.yaml` | User configuration |
 | `~/.forksync/repos.json` | Managed repository list |
 | `~/.forksync/sessions/<id>.json` | Agent session records |
+| `~/.forksync/db/forksync.db` | SQLite sync history database |
+| `~/.forksync/logs/sync-*.log` | Daily-rotated log files |
 
 ---
 
@@ -329,7 +367,7 @@ proxy:
 ```
 forksync/
 ├── engine/                      # Go CLI engine
-│   ├── cmd/                     # Cobra commands (add, sync, resolve, etc.)
+│   ├── cmd/                     # Cobra commands (add, sync, resolve, config, history, etc.)
 │   ├── internal/
 │   │   ├── agent/               # AI agent adapters + registry
 │   │   │   ├── session/         # Session manager + persistent store
@@ -341,6 +379,8 @@ forksync/
 │   │   ├── conflict/            # Conflict detection
 │   │   ├── git/                 # Git operations (go-git + CLI fallback)
 │   │   ├── github/              # GitHub API client
+│   │   ├── history/             # SQLite-backed sync history store
+│   │   ├── logger/              # File-based logging with daily rotation
 │   │   ├── notify/              # macOS notifications
 │   │   ├── repo/                # Repository JSON store
 │   │   ├── scheduler/           # Background sync scheduler
@@ -352,11 +392,14 @@ forksync/
 │   │   ├── main/                # Electron main process
 │   │   │   ├── index.ts         # Window creation
 │   │   │   ├── engine.ts        # EngineClient (spawns Go binary)
-│   │   │   └── ipc.ts           # IPC handler registration
+│   │   │   ├── ipc.ts           # IPC handler registration
+│   │   │   ├── i18n.ts          # Internationalization helper
+│   │   │   ├── ide.ts           # IDE detection & management (VSCode, Cursor, Trae)
+│   │   │   └── notify.ts        # System notifications with click-through
 │   │   ├── preload/             # Context bridge (window.api)
 │   │   └── renderer/            # React UI
 │   │       ├── src/
-│   │       │   ├── pages/       # Dashboard, Repos, Conflicts, Settings
+│   │       │   ├── pages/       # Dashboard, Repos, Conflicts, History, Settings
 │   │       │   ├── components/  # UI components (dialogs, badges, etc.)
 │   │       │   ├── contexts/    # React Context state management
 │   │       │   ├── hooks/       # Custom hooks (useTheme)
@@ -381,7 +424,7 @@ cd engine
 go test ./... -v
 ```
 
-**122 tests** across 12 test files covering:
+**146 tests** across 15 test files covering:
 - Repository store CRUD
 - Sync pipeline
 - Agent adapters & provider interface
@@ -392,6 +435,8 @@ go test ./... -v
 - Type serialization
 - Git operations
 - Conflict detection
+- Sync history store & cleanup
+- Logger & log rotation
 
 ---
 
