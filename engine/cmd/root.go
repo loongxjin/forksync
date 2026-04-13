@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/loongxjin/forksync/engine/pkg/types"
+	"github.com/loongxjin/forksync/engine/pkg/version"
 	"github.com/spf13/cobra"
 )
 
@@ -19,10 +20,21 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "output in JSON format")
+	rootCmd.AddCommand(versionCmd)
 }
 
 func Execute() error {
 	return rootCmd.Execute()
+}
+
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print forksync version",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("forksync %s\n", version.Version)
+		fmt.Printf("commit:  %s\n", version.Commit)
+		fmt.Printf("built:   %s\n", version.BuildDate)
+	},
 }
 
 // outputJSON writes a JSON ApiResponse to stdout.
