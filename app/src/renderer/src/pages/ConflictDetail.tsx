@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useRepos } from '@/contexts/RepoContext'
 import { useAgents } from '@/contexts/AgentContext'
@@ -8,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import type { ResolveData } from '@/types/engine'
 
 export function ConflictDetail(): JSX.Element {
+  const { t } = useTranslation()
   const { repoId } = useParams<{ repoId: string }>()
   const navigate = useNavigate()
   const { repos, initialized, refresh, updateRepoStatus } = useRepos()
@@ -77,9 +79,9 @@ export function ConflictDetail(): JSX.Element {
     return (
       <div className="space-y-4">
         <Button variant="ghost" size="sm" onClick={() => navigate('/conflicts')}>
-          ← Back
+          {t('conflicts.back')}
         </Button>
-        <p className="text-sm text-muted-foreground">Repository not found.</p>
+        <p className="text-sm text-muted-foreground">{t('conflicts.notFound')}</p>
       </div>
     )
   }
@@ -88,11 +90,11 @@ export function ConflictDetail(): JSX.Element {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" onClick={() => navigate('/conflicts')}>
-          ← Back
+          {t('conflicts.back')}
         </Button>
         <h2 className="text-xl font-semibold">
           {repo.name}
-          <span className="ml-2 text-sm font-normal text-muted-foreground">Conflict Resolution</span>
+          <span className="ml-2 text-sm font-normal text-muted-foreground">{t('conflicts.conflictResolution')}</span>
         </h2>
       </div>
 
@@ -122,7 +124,7 @@ export function ConflictDetail(): JSX.Element {
       {/* Diff Preview */}
       {resolveResult?.agentResult?.diff && (
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-muted-foreground">Diff Preview</h3>
+          <h3 className="text-sm font-medium text-muted-foreground">{t('conflicts.diffPreview')}</h3>
           <DiffViewer diff={resolveResult.agentResult.diff} className="max-h-96" />
         </div>
       )}
@@ -130,7 +132,7 @@ export function ConflictDetail(): JSX.Element {
       {/* Conflict files list */}
       {(resolveResult?.conflicts ?? repo.status === 'conflict') && !resolveResult && (
         <div className="rounded-lg border border-border bg-card p-4">
-          <h3 className="text-sm font-medium text-muted-foreground">Conflict Files</h3>
+          <h3 className="text-sm font-medium text-muted-foreground">{t('conflicts.conflictFiles')}</h3>
           {resolveResult?.conflicts && resolveResult.conflicts.length > 0 ? (
             <ul className="mt-2 space-y-1">
               {resolveResult.conflicts.map((f) => (
@@ -141,7 +143,7 @@ export function ConflictDetail(): JSX.Element {
             </ul>
           ) : (
             <p className="mt-2 text-sm text-muted-foreground">
-              Run resolve to detect conflict files.
+              {t('conflicts.runResolveHint')}
             </p>
           )}
         </div>

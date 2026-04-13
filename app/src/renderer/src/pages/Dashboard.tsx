@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useRepos } from '@/contexts/RepoContext'
 import { useAgents } from '@/contexts/AgentContext'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -9,8 +10,10 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { engineApi } from '@/lib/api'
 import type { Repo, RepoStatus, SyncHistoryRecord } from '@/types/engine'
+import type { TFunction } from 'i18next'
 
 export function Dashboard(): JSX.Element {
+  const { t } = useTranslation()
   const { repos, loading, initialized, error, refresh, syncAll, startupSyncDone, markStartupSyncDone } = useRepos()
   const { agents, preferred, sessions, initialized: agentsInitialized, refreshAgents, refreshSessions } = useAgents()
   const { engineConfig } = useSettings()
@@ -79,9 +82,9 @@ export function Dashboard(): JSX.Element {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Dashboard</h2>
+        <h2 className="text-xl font-semibold">{t('dashboard.title')}</h2>
         <Button onClick={syncAll} disabled={loading} size="sm">
-          {loading ? 'Syncing...' : 'Sync All'}
+          {loading ? t('dashboard.syncing') : t('dashboard.syncAll')}
         </Button>
       </div>
 
@@ -95,25 +98,25 @@ export function Dashboard(): JSX.Element {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <StatusCard
           icon="🟢"
-          label="Synced"
+          label={t('dashboard.synced')}
           count={(statusCounts['synced'] ?? 0) + (statusCounts['up_to_date'] ?? 0)}
           color="#22c55e"
         />
         <StatusCard
           icon="🔴"
-          label="Conflict"
+          label={t('dashboard.conflict')}
           count={statusCounts['conflict'] ?? 0}
           color="#ef4444"
         />
         <StatusCard
           icon="🟡"
-          label="Syncing"
+          label={t('dashboard.syncing_status')}
           count={statusCounts['syncing'] ?? 0}
           color="#eab308"
         />
         <StatusCard
           icon="❌"
-          label="Error"
+          label={t('dashboard.error_status')}
           count={statusCounts['error'] ?? 0}
           color="#ef4444"
         />
@@ -123,11 +126,11 @@ export function Dashboard(): JSX.Element {
 
       {/* Agent Status */}
       <div className="rounded-lg border border-border bg-card p-4">
-        <h3 className="mb-2 text-sm font-medium text-muted-foreground">Agent Status</h3>
+        <h3 className="mb-2 text-sm font-medium text-muted-foreground">{t('dashboard.agentStatus')}</h3>
         <AgentStatusBadge agents={agents} preferred={preferred} />
         {activeSessions.length > 0 && (
           <p className="mt-2 text-xs text-muted-foreground">
-            {activeSessions.length} active session{activeSessions.length !== 1 ? 's' : ''}
+            {t('dashboard.activeSessions', { count: activeSessions.length })}
           </p>
         )}
       </div>
@@ -137,28 +140,28 @@ export function Dashboard(): JSX.Element {
       {/* Sync History Timeline */}
       <div className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-muted-foreground">Sync History</h3>
+          <h3 className="text-sm font-medium text-muted-foreground">{t('dashboard.syncHistory')}</h3>
           {history.length > 0 && (
             <Button variant="outline" size="sm" className="text-xs h-7" disabled={historyLoading}
               onClick={async () => {
-                if (confirm('Clear all sync history?')) {
+                if (confirm(t('dashboard.clearHistoryConfirm'))) {
                   const res = await engineApi.historyCleanup()
                   if (res.success) {
                     setHistory([])
                   } else {
-                    alert(res.error || 'Failed to clear history')
+                    alert(res.error || t('dashboard.clearFailed'))
                   }
                 }
               }}
             >
-              🗑️ Clear
+              {t('dashboard.clear')}
             </Button>
           )}
         </div>
         {historyLoading && history.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Loading history...</p>
+          <p className="text-sm text-muted-foreground">{t('dashboard.loadingHistory')}</p>
         ) : history.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No sync history yet.</p>
+          <p className="text-sm text-muted-foreground">{t('dashboard.noHistory')}</p>
         ) : (
           <div className="space-y-1">
             {history.map((record) => (
@@ -172,7 +175,7 @@ export function Dashboard(): JSX.Element {
       {conflictRepos.length > 0 && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-4">
           <h3 className="text-sm font-medium text-red-500">
-            {conflictRepos.length} repo{conflictRepos.length !== 1 ? 's' : ''} with conflicts
+            {t('dashboard.conflictAlert', { count: conflictRepos.length })}
           </h3>
           <div className="mt-2 space-y-1">
             {conflictRepos.map((repo) => (
@@ -192,8 +195,9 @@ export function Dashboard(): JSX.Element {
 }
 
 function HistoryRow({ record }: { record: SyncHistoryRecord }): JSX.Element {
+  const { t } = useTranslation()
   const config = getHistoryStatusConfig(record.status)
-  const timeAgo = formatTimeAgo(record.createdAt)
+  const timeAgo = formatTimeAgo(record.createdAt, t)
 
   return (
     <div className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm">
@@ -241,14 +245,14 @@ function getHistoryStatusConfig(status: string): { icon: string; color: string }
   }
 }
 
-function formatTimeAgo(dateStr: string | null): string {
+function formatTimeAgo(dateStr: string | null, t: TFunction): string {
   if (!dateStr) return ''
   const date = new Date(dateStr)
   const now = new Date()
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000)
 
-  if (seconds < 60) return 'just now'
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  return `${Math.floor(seconds / 86400)}d ago`
+  if (seconds < 60) return t('dashboard.justNow')
+  if (seconds < 3600) return t('dashboard.minutesAgo', { count: Math.floor(seconds / 60) })
+  if (seconds < 86400) return t('dashboard.hoursAgo', { count: Math.floor(seconds / 3600) })
+  return t('dashboard.daysAgo', { count: Math.floor(seconds / 86400) })
 }

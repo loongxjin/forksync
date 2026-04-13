@@ -6,6 +6,7 @@
  */
 
 import { Notification, BrowserWindow } from 'electron'
+import { t } from './i18n'
 import type { SyncResult } from '../renderer/src/types/engine'
 import type { EngineClient } from './engine'
 
@@ -53,8 +54,8 @@ export function notifySyncResults(results: SyncResult[]): void {
       0
     )
     showNotification({
-      title: `Conflicts in ${conflicts.length} repo${conflicts.length > 1 ? 's' : ''}`,
-      body: `${repoNames} — ${totalFiles} file${totalFiles !== 1 ? 's' : ''} need resolution`,
+      title: t('notify.conflictsTitle', { count: conflicts.length }),
+      body: t('notify.conflictsBody', { names: repoNames, files: totalFiles }),
       navigateTo: '/conflicts'
     })
   }
@@ -63,8 +64,8 @@ export function notifySyncResults(results: SyncResult[]): void {
   if (errors.length > 0) {
     const repoNames = errors.map((r) => r.repoName).join(', ')
     showNotification({
-      title: `Sync failed for ${errors.length} repo${errors.length > 1 ? 's' : ''}`,
-      body: repoNames,
+      title: t('notify.failedTitle', { count: errors.length }),
+      body: t('notify.failedBody', { names: repoNames }),
       navigateTo: '/'
     })
   }
@@ -74,8 +75,8 @@ export function notifySyncResults(results: SyncResult[]): void {
     const totalCommits = synced.reduce((sum, r) => sum + r.commitsPulled, 0)
     if (totalCommits > 0) {
       showNotification({
-        title: 'Sync complete',
-        body: `${synced.length} repo${synced.length > 1 ? 's' : ''} synced, ${totalCommits} commits pulled`,
+        title: t('notify.completeTitle'),
+        body: t('notify.completeBody', { count: synced.length, pulled: totalCommits }),
         navigateTo: '/'
       })
     }

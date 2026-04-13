@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, type DragEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useRepos } from '@/contexts/RepoContext'
 import { RepoRow } from '@/components/RepoRow'
 import { AddRepoDialog } from '@/components/AddRepoDialog'
@@ -6,6 +7,7 @@ import { ScanDialog } from '@/components/ScanDialog'
 import { Button } from '@/components/ui/button'
 
 export function Repos(): JSX.Element {
+  const { t } = useTranslation()
   const { repos, scannedRepos, loading, initialized, error, refresh, syncRepo, scan, addRepo, removeRepo } =
     useRepos()
   const [showAdd, setShowAdd] = useState(false)
@@ -20,7 +22,7 @@ export function Repos(): JSX.Element {
   }, [initialized, refresh])
 
   const handleRemove = async (name: string): Promise<void> => {
-    if (confirm(`Remove "${name}" from ForkSync? The local repo won't be deleted.`)) {
+    if (confirm(t('repos.removeConfirm', { name }))) {
       await removeRepo(name)
     }
   }
@@ -87,22 +89,22 @@ export function Repos(): JSX.Element {
         <div className="absolute inset-0 z-40 flex items-center justify-center rounded-lg bg-primary/5 border-2 border-dashed border-primary/40">
           <div className="text-center">
             <span className="text-4xl">📂</span>
-            <p className="mt-2 text-sm font-medium text-primary">Drop repository folder here</p>
+            <p className="mt-2 text-sm font-medium text-primary">{t('repos.dropOverlay')}</p>
           </div>
         </div>
       )}
 
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Repositories</h2>
+        <h2 className="text-xl font-semibold">{t('repos.title')}</h2>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
-            🔄 Refresh
+            {t('repos.refresh')}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowScan(true)}>
-            📂 Scan
+            {t('repos.scan')}
           </Button>
           <Button size="sm" onClick={() => setShowAdd(true)}>
-            + Add Repo
+            {t('repos.addRepo')}
           </Button>
         </div>
       </div>
@@ -114,14 +116,14 @@ export function Repos(): JSX.Element {
       )}
 
       {loading && repos.length === 0 && (
-        <div className="py-8 text-center text-sm text-muted-foreground">Loading...</div>
+        <div className="py-8 text-center text-sm text-muted-foreground">{t('repos.loading')}</div>
       )}
 
       {!loading && repos.length === 0 && (
         <div className="py-8 text-center">
-          <p className="text-sm text-muted-foreground">No repositories managed yet.</p>
+          <p className="text-sm text-muted-foreground">{t('repos.emptyTitle')}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Click <strong>+ Add Repo</strong>, <strong>📂 Scan</strong>, or drag a folder here to get started.
+            {t('repos.emptyHint')}
           </p>
         </div>
       )}

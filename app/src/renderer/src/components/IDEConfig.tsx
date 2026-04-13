@@ -3,10 +3,12 @@
  */
 
 import { useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSettings } from '@/contexts/SettingsContext'
 import { Label } from '@/components/ui/label'
 
 export function IDEConfig(): JSX.Element {
+  const { t } = useTranslation()
   const {
     ideConfig,
     ideLoading,
@@ -48,8 +50,8 @@ export function IDEConfig(): JSX.Element {
   if (ideLoading) {
     return (
       <div className="space-y-2">
-        <Label>IDE 配置</Label>
-        <p className="text-xs text-muted-foreground">加载中...</p>
+        <Label>{t('ide.config')}</Label>
+        <p className="text-xs text-muted-foreground">{t('common.loading')}</p>
       </div>
     )
   }
@@ -58,13 +60,13 @@ export function IDEConfig(): JSX.Element {
     <div className="space-y-4">
       {/* Default IDE selector */}
       <div className="space-y-2">
-        <Label>默认 IDE</Label>
+        <Label>{t('ide.defaultIde')}</Label>
         <select
           value={ideConfig?.defaultIDE ?? ''}
           onChange={(e) => setDefaultIDE(e.target.value || null)}
           className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-foreground"
         >
-          <option value="">未设置</option>
+          <option value="">{t('ide.notSet')}</option>
           {installedIDEs.map((ide) => (
             <option key={ide.id} value={ide.id}>
               {ide.name}
@@ -75,7 +77,7 @@ export function IDEConfig(): JSX.Element {
 
       {/* Detected IDEs */}
       <div className="space-y-2">
-        <Label>已检测到的 IDE</Label>
+        <Label>{t('ide.detectedIdes')}</Label>
         <div className="space-y-1">
           {ideConfig?.detectedIDEs
             .filter((ide) => !ide.isCustom)
@@ -87,7 +89,7 @@ export function IDEConfig(): JSX.Element {
                   <span className="text-muted-foreground">(CLI: {ide.cliCommand})</span>
                 )}
                 {!ide.installed && (
-                  <span className="text-muted-foreground">未检测到</span>
+                  <span className="text-muted-foreground">{t('ide.notDetected')}</span>
                 )}
               </div>
             ))}
@@ -96,7 +98,7 @@ export function IDEConfig(): JSX.Element {
 
       {/* Custom IDEs */}
       <div className="space-y-2">
-        <Label>自定义 IDE</Label>
+        <Label>{t('ide.customIde')}</Label>
         {ideConfig?.customIDEs && ideConfig.customIDEs.length > 0 ? (
           <div className="space-y-1">
             {ideConfig.customIDEs.map((custom) => {
@@ -117,21 +119,21 @@ export function IDEConfig(): JSX.Element {
             })}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">暂无自定义 IDE</p>
+          <p className="text-xs text-muted-foreground">{t('ide.noCustomIde')}</p>
         )}
 
         {showAddForm ? (
           <div className="space-y-2 rounded-md border border-border p-3">
             <input
               type="text"
-              placeholder="IDE 名称 (如: Windsurf)"
+              placeholder={t('ide.namePlaceholder')}
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               className="w-full rounded border border-border bg-card px-2 py-1 text-xs text-foreground"
             />
             <input
               type="text"
-              placeholder="CLI 命令 (如: windsurf)"
+              placeholder={t('ide.commandPlaceholder')}
               value={newCli}
               onChange={(e) => setNewCli(e.target.value)}
               className="w-full rounded border border-border bg-card px-2 py-1 text-xs text-foreground"
@@ -141,13 +143,13 @@ export function IDEConfig(): JSX.Element {
                 onClick={handleAddCustom}
                 className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90"
               >
-                添加
+                {t('common.add')}
               </button>
               <button
                 onClick={() => setShowAddForm(false)}
                 className="rounded border border-border px-3 py-1 text-xs text-foreground hover:bg-accent"
               >
-                取消
+                {t('common.cancel')}
               </button>
             </div>
           </div>
@@ -156,7 +158,7 @@ export function IDEConfig(): JSX.Element {
             onClick={() => setShowAddForm(true)}
             className="text-xs text-primary hover:underline"
           >
-            + 添加自定义 IDE
+            {t('ide.addCustom')}
           </button>
         )}
       </div>
@@ -167,7 +169,7 @@ export function IDEConfig(): JSX.Element {
         disabled={detecting}
         className="rounded border border-border px-3 py-1.5 text-xs text-foreground hover:bg-accent disabled:opacity-50"
       >
-        {detecting ? '检测中...' : '🔍 重新检测'}
+        {detecting ? t('ide.detecting') : t('ide.redetect')}
       </button>
     </div>
   )

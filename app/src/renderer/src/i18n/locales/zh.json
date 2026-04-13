@@ -1,0 +1,263 @@
+{
+  "common": {
+    "add": "添加",
+    "cancel": "取消",
+    "close": "关闭",
+    "save": "保存",
+    "saving": "保存中...",
+    "loading": "加载中...",
+    "refresh": "刷新",
+    "noResults": "暂无结果",
+    "retry": "重试",
+    "optional": "可选",
+    "selectDirectory": "选择目录",
+    "select": "选择...",
+    "confirm": "确认"
+  },
+  "nav": {
+    "dashboard": "仪表盘",
+    "repos": "仓库",
+    "conflicts": "冲突",
+    "settings": "设置"
+  },
+  "theme": {
+    "dark": "深色",
+    "light": "浅色",
+    "system": "跟随系统"
+  },
+  "status": {
+    "synced": "已同步",
+    "syncing": "同步中",
+    "conflict": "冲突",
+    "resolving": "解决中",
+    "resolved": "已解决",
+    "error": "错误",
+    "unconfigured": "未配置",
+    "upToDate": "已最新"
+  },
+  "dashboard": {
+    "title": "仪表盘",
+    "syncing": "同步中...",
+    "syncAll": "全部同步",
+    "synced": "已同步",
+    "conflict": "冲突",
+    "syncing_status": "同步中",
+    "error_status": "错误",
+    "agentStatus": "Agent 状态",
+    "activeSessions": "{{count}} 个活跃会话",
+    "syncHistory": "同步历史",
+    "clearHistoryConfirm": "确认清除所有同步历史？",
+    "clearFailed": "清除历史失败",
+    "clear": "🗑️ 清除",
+    "loadingHistory": "加载历史...",
+    "noHistory": "暂无同步历史",
+    "conflictAlert": "{{count}} 个仓库存在冲突",
+    "justNow": "刚刚",
+    "minutesAgo": "{{count}} 分钟前",
+    "hoursAgo": "{{count}} 小时前",
+    "daysAgo": "{{count}} 天前"
+  },
+  "repos": {
+    "title": "仓库",
+    "refresh": "🔄 刷新",
+    "scan": "📂 扫描",
+    "addRepo": "+ 添加仓库",
+    "loading": "加载中...",
+    "emptyTitle": "暂无管理的仓库",
+    "emptyHint": "点击 + 添加仓库、📂 扫描，或拖拽文件夹到此处开始。",
+    "removeConfirm": "确认从 ForkSync 中移除 \"{{name}}\"？本地仓库不会被删除。",
+    "dropOverlay": "将仓库文件夹拖拽到此处",
+    "origin": "origin:",
+    "upstream": "upstream:",
+    "syncNow": "立即同步",
+    "sync": "🔄 同步",
+    "resolveConflicts": "解决冲突",
+    "resolve": "⚡ 解决",
+    "remove": "移除",
+    "behind": "落后 {{count}}"
+  },
+  "addRepo": {
+    "title": "添加仓库",
+    "description": "输入本地 Git 仓库的路径。",
+    "repoPath": "仓库路径",
+    "noDirectorySelected": "未选择目录",
+    "upstreamUrl": "上游仓库 URL（可选）",
+    "autoDetected": "自动检测 GitHub fork 的上游仓库。",
+    "branchMapping": "自定义分支映射",
+    "branchMappingHint": "默认：同名分支同步（如 main → origin/main）",
+    "branchMappingDesc": "将本地分支映射到不同的远程分支名。",
+    "localBranch": "本地分支",
+    "remoteBranch": "远程分支",
+    "localPlaceholder": "如：main",
+    "remotePlaceholder": "如：master",
+    "adding": "添加中...",
+    "failedOpenDir": "打开目录选择器失败：",
+    "failedLoadBranches": "加载分支失败："
+  },
+  "scanRepo": {
+    "title": "扫描目录",
+    "description": "扫描目录中的 Git 仓库。",
+    "directoryToScan": "扫描目录",
+    "noDirectorySelected": "未选择目录",
+    "scanning": "扫描中...",
+    "scan": "扫描",
+    "reposFound": "发现 {{count}} 个仓库",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "fork": "fork",
+    "mapped": "已映射",
+    "hide": "隐藏",
+    "map": "映射",
+    "adding": "正在添加 {{count}} 个...",
+    "addRepos": "添加 {{count}} 个仓库",
+    "localBranch": "本地分支",
+    "remoteBranch": "远程分支",
+    "localBranchPlaceholder": "本地分支",
+    "remoteBranchPlaceholder": "远程分支",
+    "defaultSyncSameName": "默认：同名分支同步",
+    "failedOpenDir": "打开目录选择器失败："
+  },
+  "conflicts": {
+    "title": "冲突",
+    "refresh": "🔄 刷新",
+    "noConflicts": "未检测到冲突。",
+    "noConflictsHint": "所有仓库已同步且最新。",
+    "back": "← 返回",
+    "notFound": "未找到该仓库。",
+    "conflictResolution": "冲突解决",
+    "diffPreview": "Diff 预览",
+    "conflictFiles": "冲突文件",
+    "runResolveHint": "点击「解决」以检测冲突文件。"
+  },
+  "resolvePanel": {
+    "title": "解决操作",
+    "agent": "Agent:",
+    "agentSummary": "Agent 总结",
+    "resolvedFiles": "已解决文件",
+    "resolving": "解决中...",
+    "resolveWithAgent": "⚡ 使用 Agent 解决",
+    "accept": "✓ 接受",
+    "rejectRollback": "✗ 拒绝并回退",
+    "resolvingStatus": "Agent 正在为 {{repoName}} 解决冲突..."
+  },
+  "settings": {
+    "title": "设置",
+    "tabs": {
+      "general": "通用",
+      "agent": "Agent",
+      "notification": "通知",
+      "proxy": "代理"
+    },
+    "general": {
+      "theme": "主题",
+      "ide": "IDE",
+      "defaultSyncInterval": "默认同步间隔",
+      "syncIntervalPlaceholder": "如：30m, 1h, 2h",
+      "syncIntervalHint": "Go duration 格式：30m, 1h, 2h30m",
+      "syncOnStartup": "启动时同步",
+      "syncOnStartupDesc": "应用启动时自动同步所有仓库",
+      "openAtLogin": "登录时启动",
+      "openAtLoginDesc": "登录时自动启动 ForkSync",
+      "about": "关于",
+      "aboutText": "ForkSync — 保持 Fork 仓库同步更新",
+      "configPath": "配置：~/.forksync/config.yaml",
+      "dataPath": "数据：~/.forksync/repos.json"
+    },
+    "notification": {
+      "enable": "启用通知",
+      "description": "为同步事件显示系统通知"
+    },
+    "proxy": {
+      "enable": "启用代理",
+      "description": "通过代理路由 GitHub API 请求（HTTP/SOCKS5）",
+      "proxyUrl": "代理 URL",
+      "proxyUrlPlaceholder": "如：socks5://127.0.0.1:7890",
+      "supports": "支持 HTTP 和 SOCKS5 代理"
+    },
+    "agent": {
+      "strategies": {
+        "preserveOurs": "保留本地",
+        "preserveOursDesc": "保留本地修改，接受非冲突的上游变更",
+        "preserveTheirs": "保留上游",
+        "preserveTheirsDesc": "接受上游变更，仅必要时保留本地修改",
+        "agentResolve": "Agent 解决",
+        "agentResolveDesc": "让 AI Agent 自动解决冲突",
+        "manual": "手动解决",
+        "manualDesc": "始终手动解决冲突"
+      },
+      "detectedAgents": "检测到的 Agent",
+      "preferred": "首选",
+      "notInstalled": "未安装",
+      "setPreferred": "设为首选",
+      "noAgentsDetected": "未检测到 Agent CLI。",
+      "config": "Agent 配置",
+      "timeout": "Agent 超时",
+      "timeoutPlaceholder": "如：10m",
+      "conflictStrategy": "冲突策略",
+      "autoConfirm": "自动确认 Agent 结果",
+      "autoConfirmDesc": "Agent 成功解决冲突后跳过手动确认",
+      "sessionTTL": "会话有效期",
+      "sessionTTLPlaceholder": "如：24h",
+      "sessions": "会话（{{count}}）",
+      "cleanupExpired": "🧹 清理过期会话",
+      "noSessions": "暂无活跃会话。"
+    }
+  },
+  "ide": {
+    "config": "IDE 配置",
+    "defaultIde": "默认 IDE",
+    "notSet": "未设置",
+    "detectedIdes": "已检测到的 IDE",
+    "notDetected": "未检测到",
+    "customIde": "自定义 IDE",
+    "noCustomIde": "暂无自定义 IDE",
+    "namePlaceholder": "IDE 名称（如：Windsurf）",
+    "commandPlaceholder": "CLI 命令（如：windsurf）",
+    "addCustom": "+ 添加自定义 IDE",
+    "detecting": "检测中...",
+    "redetect": "🔍 重新检测",
+    "openFailed": "打开失败",
+    "openWith": "用 {{name}} 打开",
+    "selectIdeToOpen": "选择 IDE 打开",
+    "open": "打开",
+    "selectOtherIde": "选择其他 IDE",
+    "default": "（默认）",
+    "setDefault": "⚙️ 设置默认 IDE...",
+    "pathNotExist": "路径不存在: {{path}}",
+    "ideNotFound": "未找到 IDE: {{ideId}}",
+    "ideNotDetected": "{{name}} 未检测到，请确认已安装"
+  },
+  "agentBadge": {
+    "noAgentsInstalled": "未安装 Agent",
+    "connected": "● 已连接",
+    "more": "+{{count}} 更多"
+  },
+  "errorBoundary": {
+    "title": "出错了",
+    "message": "发生了意外错误。",
+    "retry": "重试"
+  },
+  "diffViewer": {
+    "noDiff": "暂无 Diff。"
+  },
+  "toast": {
+    "conflictsWarning": "\"{{name}}\" 存在未解决的冲突，请先解决",
+    "upToDate": "\"{{name}}\" 已是最新",
+    "syncSuccess": "已同步 {{count}} 个仓库，拉取 {{pulled}} 个提交",
+    "syncConflicts": "{{count}} 个仓库存在冲突",
+    "syncFailed": "{{count}} 个仓库同步失败",
+    "loadConfigFailed": "加载配置失败",
+    "updateConfigFailed": "更新配置失败"
+  },
+  "notify": {
+    "conflictsTitle": "{{count}} 个仓库存在冲突",
+    "conflictsBody": "{{names}} — {{files}} 个文件需要解决",
+    "failedTitle": "{{count}} 个仓库同步失败",
+    "failedBody": "{{names}}",
+    "completeTitle": "同步完成",
+    "completeBody": "已同步 {{count}} 个仓库，拉取 {{pulled}} 个提交"
+  },
+  "mainProcess": {
+    "selectRepoDir": "选择仓库目录"
+  }
+}

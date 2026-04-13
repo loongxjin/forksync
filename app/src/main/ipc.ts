@@ -6,6 +6,7 @@
  */
 
 import { ipcMain, dialog, app } from 'electron'
+import { t } from './i18n'
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { EngineClient } from './engine'
@@ -119,7 +120,7 @@ export function registerIpcHandlers(): void {
     try {
       const result = await dialog.showOpenDialog({
         properties: ['openDirectory'],
-        title: 'Select Repository Directory'
+        title: t('mainProcess.selectRepoDir')
       })
       return result
     } catch (err) {

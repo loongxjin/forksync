@@ -6,6 +6,7 @@
  */
 
 import { ipcMain } from 'electron'
+import { t } from './i18n'
 import { execFile } from 'child_process'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
@@ -153,17 +154,17 @@ async function detectAllIDEs(): Promise<IDEInfo[]> {
 
 async function openInIDE(repoPath: string, ideId: string): Promise<IDEOpenResult> {
   if (!existsSync(repoPath)) {
-    return { success: false, error: `路径不存在: ${repoPath}` }
+    return { success: false, error: t('ide.pathNotExist', { path: repoPath }) }
   }
 
   // Find IDE info from cache or re-detect
   const ides = cachedDetectedIDEs ?? (await detectAllIDEs())
   const ide = ides.find((i) => i.id === ideId)
   if (!ide) {
-    return { success: false, error: `未找到 IDE: ${ideId}` }
+    return { success: false, error: t('ide.ideNotFound', { ideId }) }
   }
   if (!ide.installed) {
-    return { success: false, error: `${ide.name} 未检测到，请确认已安装` }
+    return { success: false, error: t('ide.ideNotDetected', { name: ide.name }) }
   }
 
   try {

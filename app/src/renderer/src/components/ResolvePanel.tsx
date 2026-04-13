@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
@@ -25,6 +26,7 @@ export function ResolvePanel({
   onReject,
   loading
 }: ResolvePanelProps): JSX.Element {
+  const { t } = useTranslation()
   const [resolving, setResolving] = useState(false)
 
   const handleResolve = async (): Promise<void> => {
@@ -39,7 +41,7 @@ export function ResolvePanel({
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">Resolve Actions</h3>
+        <h3 className="text-sm font-medium">{t('resolvePanel.title')}</h3>
         <Badge
           variant={
             status === 'resolved'
@@ -55,20 +57,20 @@ export function ResolvePanel({
 
       {agentName && (
         <p className="text-xs text-muted-foreground">
-          Agent: <span className="text-foreground">{agentName}</span>
+          {t('resolvePanel.agent')} <span className="text-foreground">{agentName}</span>
         </p>
       )}
 
       {summary && (
         <div className="rounded-md bg-accent/30 p-3">
-          <p className="text-xs font-medium text-muted-foreground">Agent Summary</p>
+          <p className="text-xs font-medium text-muted-foreground">{t('resolvePanel.agentSummary')}</p>
           <p className="mt-1 text-sm">{summary}</p>
         </div>
       )}
 
       {resolvedFiles && resolvedFiles.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-muted-foreground">Resolved Files</p>
+          <p className="text-xs font-medium text-muted-foreground">{t('resolvePanel.resolvedFiles')}</p>
           <ul className="mt-1 space-y-0.5">
             {resolvedFiles.map((f) => (
               <li key={f} className="text-xs text-emerald-400">
@@ -82,23 +84,23 @@ export function ResolvePanel({
       <div className="flex gap-2">
         {status === 'conflict' && (
           <Button onClick={handleResolve} disabled={loading || resolving} size="sm">
-            {resolving ? 'Resolving...' : '⚡ Resolve with Agent'}
+            {resolving ? t('resolvePanel.resolving') : t('resolvePanel.resolveWithAgent')}
           </Button>
         )}
         {status === 'resolved' && (
           <>
             <Button onClick={onAccept} disabled={loading} size="sm" variant="default">
-              ✓ Accept
+              {t('resolvePanel.accept')}
             </Button>
             <Button onClick={onReject} disabled={loading} size="sm" variant="destructive">
-              ✗ Reject & Rollback
+              {t('resolvePanel.rejectRollback')}
             </Button>
           </>
         )}
         {status === 'resolving' && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span className="animate-pulse">🟠</span>
-            Agent is resolving conflicts for {repoName}...
+            {t('resolvePanel.resolvingStatus', { repoName })}
           </div>
         )}
       </div>

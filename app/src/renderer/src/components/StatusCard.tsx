@@ -1,4 +1,5 @@
 import { type RepoStatus } from '@/types/engine'
+import { useTranslation } from 'react-i18next'
 
 interface StatusCardProps {
   icon: string
@@ -27,18 +28,20 @@ export function StatusCard({ icon, label, count, color }: StatusCardProps): JSX.
 
 const STATUS_CONFIG: Record<
   RepoStatus,
-  { icon: string; label: string; color: string }
+  { icon: string; labelKey: string; color: string }
 > = {
-  synced: { icon: '🟢', label: 'Synced', color: '#22c55e' },
-  syncing: { icon: '🟡', label: 'Syncing', color: '#eab308' },
-  conflict: { icon: '🔴', label: 'Conflict', color: '#ef4444' },
-  resolving: { icon: '🟠', label: 'Resolving', color: '#f97316' },
-  resolved: { icon: '✅', label: 'Resolved', color: '#22c55e' },
-  error: { icon: '❌', label: 'Error', color: '#ef4444' },
-  unconfigured: { icon: '⚪', label: 'Unconfigured', color: '#6b7280' },
-  up_to_date: { icon: '⚪', label: 'Up to date', color: '#6b7280' }
+  synced: { icon: '🟢', labelKey: 'status.synced', color: '#22c55e' },
+  syncing: { icon: '🟡', labelKey: 'status.syncing', color: '#eab308' },
+  conflict: { icon: '🔴', labelKey: 'status.conflict', color: '#ef4444' },
+  resolving: { icon: '🟠', labelKey: 'status.resolving', color: '#f97316' },
+  resolved: { icon: '✅', labelKey: 'status.resolved', color: '#22c55e' },
+  error: { icon: '❌', labelKey: 'status.error', color: '#ef4444' },
+  unconfigured: { icon: '⚪', labelKey: 'status.unconfigured', color: '#6b7280' },
+  up_to_date: { icon: '⚪', labelKey: 'status.upToDate', color: '#6b7280' }
 }
 
 export function getStatusConfig(status: RepoStatus) {
-  return STATUS_CONFIG[status] ?? STATUS_CONFIG.unconfigured
+  const { t } = useTranslation()
+  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.unconfigured
+  return { icon: config.icon, label: t(config.labelKey), color: config.color }
 }

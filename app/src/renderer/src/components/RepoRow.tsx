@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import type { Repo, RepoStatus } from '@/types/engine'
 import { getStatusConfig } from '@/components/StatusCard'
@@ -38,6 +39,8 @@ interface RepoRowProps {
 }
 
 export function RepoRow({ repo, onSync, onRemove, onResolve }: RepoRowProps): JSX.Element {
+  const { t } = useTranslation()
+
   return (
     <div className="group flex items-start justify-between rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/30">
       <div className="min-w-0 flex-1">
@@ -55,12 +58,12 @@ export function RepoRow({ repo, onSync, onRemove, onResolve }: RepoRowProps): JS
         </div>
         {repo.origin && (
           <p className="mt-1 truncate text-xs text-muted-foreground">
-            origin: {repo.origin}
+            {t('repos.origin')} {repo.origin}
           </p>
         )}
         {repo.upstream && (
           <p className="truncate text-xs text-muted-foreground">
-            upstream: {repo.upstream}
+            {t('repos.upstream')} {repo.upstream}
           </p>
         )}
         {repo.errorMessage && (
@@ -74,24 +77,24 @@ export function RepoRow({ repo, onSync, onRemove, onResolve }: RepoRowProps): JS
           <button
             onClick={() => onSync(repo.name)}
             className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            title="Sync now"
+            title={t('repos.syncNow')}
           >
-            🔄 Sync
+            {t('repos.sync')}
           </button>
         )}
         {(repo.status === 'conflict' || repo.status === 'resolved') && (
           <button
             onClick={() => onResolve(repo.name)}
             className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            title="Resolve conflicts"
+            title={t('repos.resolveConflicts')}
           >
-            ⚡ Resolve
+            {t('repos.resolve')}
           </button>
         )}
         <button
           onClick={() => onRemove(repo.name)}
           className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-500"
-          title="Remove"
+          title={t('repos.remove')}
         >
           ✕
         </button>

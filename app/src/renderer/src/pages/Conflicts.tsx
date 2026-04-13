@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useRepos } from '@/contexts/RepoContext'
 import { RepoStatusBadge } from '@/components/RepoRow'
@@ -7,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import type { Repo } from '@/types/engine'
 
 export function Conflicts(): JSX.Element {
+  const { t } = useTranslation()
   const { repos, loading, initialized, refresh } = useRepos()
   const navigate = useNavigate()
 
@@ -24,17 +26,17 @@ export function Conflicts(): JSX.Element {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Conflicts</h2>
+        <h2 className="text-xl font-semibold">{t('conflicts.title')}</h2>
         <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
-          🔄 Refresh
+          {t('conflicts.refresh')}
         </Button>
       </div>
 
       {conflictRepos.length === 0 ? (
         <div className="py-8 text-center">
-          <p className="text-sm text-muted-foreground">No conflicts detected.</p>
+          <p className="text-sm text-muted-foreground">{t('conflicts.noConflicts')}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            All repositories are synced and up to date.
+            {t('conflicts.noConflictsHint')}
           </p>
         </div>
       ) : (
@@ -53,6 +55,7 @@ export function Conflicts(): JSX.Element {
 }
 
 function ConflictRow({ repo, onClick }: { repo: Repo; onClick: () => void }): JSX.Element {
+  const { t } = useTranslation()
   return (
     <button
       onClick={onClick}
@@ -62,7 +65,7 @@ function ConflictRow({ repo, onClick }: { repo: Repo; onClick: () => void }): JS
         <RepoStatusBadge status={repo.status} />
         <span className="font-medium">{repo.name}</span>
         {repo.behindBy > 0 && (
-          <Badge variant="muted">↓{repo.behindBy} behind</Badge>
+          <Badge variant="muted">{t('repos.behind', { count: repo.behindBy })}</Badge>
         )}
       </div>
       <div className="flex items-center gap-2">

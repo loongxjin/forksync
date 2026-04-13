@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,7 @@ interface AddRepoDialogProps {
 }
 
 export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX.Element | null {
+  const { t } = useTranslation()
   const [path, setPath] = useState('')
   const [upstream, setUpstream] = useState('')
   const [adding, setAdding] = useState(false)
@@ -104,26 +106,26 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg">
-        <h3 className="text-lg font-semibold">Add Repository</h3>
+        <h3 className="text-lg font-semibold">{t('addRepo.title')}</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Enter the local path to a git repository.
+          {t('addRepo.description')}
         </p>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div className="space-y-2">
-            <Label>Repository Path</Label>
+            <Label>{t('addRepo.repoPath')}</Label>
             <div className="flex gap-2">
               <div 
                 className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
               >
-                {path || 'No directory selected'}
+                {path || t('addRepo.noDirectorySelected')}
               </div>
               <Button 
                 type="button" 
                 variant="outline" 
                 onClick={handleSelectDirectory}
               >
-                选择目录
+                {t('common.selectDirectory')}
               </Button>
             </div>
           </div>
@@ -131,7 +133,7 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="upstream">
-                Upstream URL <span className="text-muted-foreground">(optional)</span>
+                {t('addRepo.upstreamUrl')}
               </Label>
               {path && (
                 <Button
@@ -142,7 +144,7 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
                   disabled={loadingBranches}
                   className="h-6 text-xs"
                 >
-                  {loadingBranches ? 'Loading...' : '↻ Refresh branches'}
+                  {loadingBranches ? t('common.loading') : `↻ ${t('common.refresh')}`}
                 </Button>
               )}
             </div>
@@ -153,7 +155,7 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
               onChange={(e) => handleUpstreamChange(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Auto-detected for GitHub forks.
+              {t('addRepo.autoDetected')}
             </p>
           </div>
 
@@ -175,44 +177,44 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
                     className="rounded border-input"
                   />
                   <Label htmlFor="enable-mapping" className="cursor-pointer">
-                    Custom Branch Mapping
+                    {t('addRepo.branchMapping')}
                   </Label>
                 </div>
-                <Badge variant="secondary">Optional</Badge>
+                <Badge variant="secondary">{t('common.optional')}</Badge>
               </div>
               
               {!enableMapping && (
                 <p className="text-xs text-muted-foreground">
-                  Default: sync branches with the same name (e.g., main → origin/main)
+                  {t('addRepo.branchMappingHint')}
                 </p>
               )}
               
               {enableMapping && (
                 <>
                   <p className="text-xs text-muted-foreground">
-                    Map a local branch to a different remote branch name.
+                    {t('addRepo.branchMappingDesc')}
                   </p>
                   
                   {loadingBranches ? (
-                    <div className="text-sm text-muted-foreground">Loading branches...</div>
+                    <div className="text-sm text-muted-foreground">{t('common.loading')}</div>
                   ) : (
                     <div className="flex items-center gap-3 p-3 rounded-md border border-border bg-background/50">
                       <div className="flex-1 space-y-1">
-                        <Label className="text-xs">Local Branch</Label>
+                        <Label className="text-xs">{t('addRepo.localBranch')}</Label>
                         {localBranches.length > 0 ? (
                           <select
                             value={branchMapping?.localBranch || ''}
                             onChange={(e) => updateBranchMapping('localBranch', e.target.value)}
                             className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm"
                           >
-                            <option value="">Select...</option>
+                            <option value="">{t('common.select')}</option>
                             {localBranches.map(branch => (
                               <option key={branch} value={branch}>{branch}</option>
                             ))}
                           </select>
                         ) : (
                           <Input
-                            placeholder="e.g., main"
+                            placeholder={t('addRepo.localPlaceholder')}
                             value={branchMapping?.localBranch || ''}
                             onChange={(e) => updateBranchMapping('localBranch', e.target.value)}
                             className="h-8"
@@ -223,21 +225,21 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
                       <div className="text-muted-foreground pt-5">→</div>
                       
                       <div className="flex-1 space-y-1">
-                        <Label className="text-xs">Remote Branch</Label>
+                        <Label className="text-xs">{t('addRepo.remoteBranch')}</Label>
                         {remoteBranches.length > 0 ? (
                           <select
                             value={branchMapping?.remoteBranch || ''}
                             onChange={(e) => updateBranchMapping('remoteBranch', e.target.value)}
                             className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm"
                           >
-                            <option value="">Select...</option>
+                            <option value="">{t('common.select')}</option>
                             {remoteBranches.map(branch => (
                               <option key={branch} value={branch}>{branch}</option>
                             ))}
                           </select>
                         ) : (
                           <Input
-                            placeholder="e.g., master"
+                            placeholder={t('addRepo.remotePlaceholder')}
                             value={branchMapping?.remoteBranch || ''}
                             onChange={(e) => updateBranchMapping('remoteBranch', e.target.value)}
                             className="h-8"
@@ -253,10 +255,10 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={handleClose}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={!path || adding}>
-              {adding ? 'Adding...' : 'Add'}
+              {adding ? t('addRepo.adding') : t('common.add')}
             </Button>
           </div>
         </form>

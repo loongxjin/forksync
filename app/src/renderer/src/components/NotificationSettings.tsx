@@ -1,5 +1,6 @@
 import { useSettings } from '@/contexts/SettingsContext'
 import { Label } from '@/components/ui/label'
+import { useTranslation } from 'react-i18next'
 
 function Toggle({
   checked,
@@ -36,19 +37,20 @@ function Toggle({
 
 export function NotificationSettings(): JSX.Element {
   const { engineConfig, configLoading, updateConfig } = useSettings()
+  const { t } = useTranslation()
 
   const isLoading = configLoading || !engineConfig
 
   return (
     <div className="space-y-6">
       <Toggle
-        label="Enable Notifications"
+        label={t('settings.notification.enable')}
         checked={engineConfig?.Notification?.Enabled ?? true}
         onChange={(val) => updateConfig('notification.enabled', String(val))}
         disabled={isLoading}
       />
       <p className="text-xs text-muted-foreground -mt-4">
-        Show system notifications for sync events
+        {t('settings.notification.description')}
       </p>
     </div>
   )

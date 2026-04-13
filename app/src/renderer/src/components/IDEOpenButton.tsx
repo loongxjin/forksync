@@ -4,6 +4,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useSettings } from '@/contexts/SettingsContext'
 import type { IDEInfo } from '@/types/ide'
 
@@ -12,6 +13,7 @@ interface IDEOpenButtonProps {
 }
 
 export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
+  const { t } = useTranslation()
   const { getInstalledIDEs, getDefaultIDE, setDefaultIDE, openInIDE, ideLoading } = useSettings()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
@@ -39,10 +41,10 @@ export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
       setOpening(false)
       setOpen(false)
       if (!result.success) {
-        alert(result.error ?? '打开失败')
+        alert(result.error ?? t('ide.openFailed'))
       }
     },
-    [repoPath, openInIDE]
+    [repoPath, openInIDE, t]
   )
 
   const handleMainClick = useCallback(() => {
@@ -69,15 +71,15 @@ export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
           onClick={handleMainClick}
           disabled={opening}
           className="rounded-l px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-          title={defaultIDE ? `用 ${defaultIDE.name} 打开` : '选择 IDE 打开'}
+          title={defaultIDE ? t('ide.openWith', { name: defaultIDE.name }) : t('ide.selectIdeToOpen')}
         >
-          {opening ? '⏳' : '<>'} {defaultIDE ? defaultIDE.name : '打开'}
+          {opening ? '⏳' : '<>'} {defaultIDE ? defaultIDE.name : t('ide.open')}
         </button>
         {installedIDEs.length > 1 && (
           <button
             onClick={() => setOpen(!open)}
             className="rounded-r border-l border-border px-1 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            title="选择其他 IDE"
+            title={t('ide.selectOtherIde')}
           >
             ▾
           </button>
@@ -96,7 +98,7 @@ export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
               {ide.id !== defaultIDE?.id && <span className="w-3" />}
               {ide.name}
               {ide.id === defaultIDE?.id && (
-                <span className="text-muted-foreground">(默认)</span>
+                <span className="text-muted-foreground">{t('ide.default')}</span>
               )}
             </button>
           ))}
@@ -105,7 +107,7 @@ export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
             onClick={handleSettingsClick}
             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
           >
-            ⚙️ 设置默认 IDE...
+            {t('ide.setDefault')}
           </button>
         </div>
       )}

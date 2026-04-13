@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface DiffViewerProps {
   diff: string
@@ -6,6 +7,7 @@ interface DiffViewerProps {
 }
 
 export function DiffViewer({ diff, className }: DiffViewerProps): JSX.Element {
+  const { t } = useTranslation()
   const lines = useMemo(() => {
     if (!diff) return []
     return diff.split('\n').map((line, i) => ({
@@ -16,7 +18,7 @@ export function DiffViewer({ diff, className }: DiffViewerProps): JSX.Element {
   }, [diff])
 
   if (!diff) {
-    return <p className="text-sm text-muted-foreground">No diff available.</p>
+    return <p className="text-sm text-muted-foreground">{t('diffViewer.noDiff')}</p>
   }
 
   return (

@@ -13,6 +13,7 @@ import {
 import type { Repo, ScannedRepo, SyncResult, BranchMapping } from '@/types/engine'
 import { engineApi } from '@/lib/api'
 import type { ToastState } from '@/components/ui/toast'
+import i18n from '@/i18n'
 
 // ---------------------------------------------------------------------------
 // State & Actions
@@ -155,14 +156,14 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         )
         const errors = results.filter((r) => r.status === 'error')
         if (conflicts.length > 0) {
-          showToast(`${conflicts.length} repo${conflicts.length > 1 ? 's' : ''} have conflicts`, 'warning')
+          showToast(i18n.t('toast.syncConflicts', { count: conflicts.length }), 'warning')
         } else if (errors.length > 0) {
-          showToast(`${errors.length} repo${errors.length > 1 ? 's' : ''} failed to sync`, 'error')
+          showToast(i18n.t('toast.syncFailed', { count: errors.length }), 'error')
         } else {
           const totalCommits = results.reduce((s, r) => s + (r.commitsPulled ?? 0), 0)
           if (totalCommits > 0) {
             showToast(
-              `Synced ${results.length} repo${results.length > 1 ? 's' : ''}, ${totalCommits} commits pulled`,
+              i18n.t('toast.syncSuccess', { count: results.length, pulled: totalCommits }),
               'success'
             )
           }
@@ -213,7 +214,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       // Don't allow sync if repo is in conflict/resolving/resolved state
       const repo = state.repos.find((r) => r.name === name)
       if (repo && (repo.status === 'conflict' || repo.status === 'resolving' || repo.status === 'resolved')) {
-        showToast(`"${name}" has unresolved conflicts, please resolve first`, 'warning')
+        showToast(i18n.t('toast.conflictsWarning', { name }), 'warning')
         return
       }
 
@@ -229,7 +230,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
             (r) => r.status === 'up_to_date' && r.repoName === name
           )
           if (upToDateResult) {
-            showToast(`"${name}" is already up to date`, 'info')
+            showToast(i18n.t('toast.upToDate', { name }), 'info')
           }
         } else {
           dispatch({ type: 'SET_ERROR', error: res.error })

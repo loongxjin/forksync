@@ -3,6 +3,7 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { IDEConfig } from '@/components/IDEConfig'
+import { useTranslation } from 'react-i18next'
 
 /** A simple toggle switch component */
 function Toggle({
@@ -40,6 +41,7 @@ function Toggle({
 
 export function GeneralSettings(): JSX.Element {
   const { theme, setTheme, engineConfig, configLoading, updateConfig } = useSettings()
+  const { t } = useTranslation()
 
   // Local state for sync interval (debounced save)
   const [syncInterval, setSyncInterval] = useState('')
@@ -89,19 +91,19 @@ export function GeneralSettings(): JSX.Element {
     <div className="space-y-6">
       {/* Theme */}
       <div className="space-y-2">
-        <Label>Theme</Label>
+        <Label>{t('settings.general.theme')}</Label>
         <div className="flex gap-2">
-          {(['dark', 'light', 'system'] as const).map((t) => (
+          {(['dark', 'light', 'system'] as const).map((themeVal) => (
             <button
-              key={t}
-              onClick={() => setTheme(t)}
+              key={themeVal}
+              onClick={() => setTheme(themeVal)}
               className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                theme === t
+                theme === themeVal
                   ? 'border-primary bg-primary text-primary-foreground'
                   : 'border-border bg-card text-foreground hover:bg-accent/50'
               }`}
             >
-              {t === 'dark' ? '🌙 Dark' : t === 'light' ? '☀️ Light' : '💻 System'}
+              {themeVal === 'dark' ? '🌙 ' + t('theme.dark') : themeVal === 'light' ? '☀️ ' + t('theme.light') : '💻 ' + t('theme.system')}
             </button>
           ))}
         </div>
@@ -109,7 +111,7 @@ export function GeneralSettings(): JSX.Element {
 
       {/* IDE Configuration */}
       <div className="space-y-2">
-        <Label>IDE</Label>
+        <Label>{t('settings.general.ide')}</Label>
         <IDEConfig />
       </div>
 
@@ -118,45 +120,45 @@ export function GeneralSettings(): JSX.Element {
 
       {/* Sync Interval */}
       <div className="space-y-2">
-        <Label>Default Sync Interval</Label>
+        <Label>{t('settings.general.defaultSyncInterval')}</Label>
         <div className="flex items-center gap-2">
           <Input
             value={syncInterval}
             onChange={(e) => setSyncInterval(e.target.value)}
-            placeholder="e.g. 30m, 1h, 2h"
+            placeholder={t('settings.general.syncIntervalPlaceholder')}
             className="max-w-[200px]"
             disabled={isLoading}
           />
-          {saving && <span className="text-xs text-muted-foreground">Saving...</span>}
+          {saving && <span className="text-xs text-muted-foreground">{t('common.saving')}</span>}
         </div>
         <p className="text-xs text-muted-foreground">
-          Go duration format: 30m, 1h, 2h30m
+          {t('settings.general.syncIntervalHint')}
         </p>
       </div>
 
       {/* Sync on Startup */}
       <div className="space-y-2">
         <Toggle
-          label="Sync on Startup"
+          label={t('settings.general.syncOnStartup')}
           checked={engineConfig?.Sync?.SyncOnStartup ?? false}
           onChange={handleSyncOnStartup}
           disabled={isLoading}
         />
         <p className="text-xs text-muted-foreground">
-          Automatically sync all repos when the app starts
+          {t('settings.general.syncOnStartupDesc')}
         </p>
       </div>
 
       {/* Auto Launch */}
       <div className="space-y-2">
         <Toggle
-          label="Open at Login"
+          label={t('settings.general.openAtLogin')}
           checked={engineConfig?.Sync?.AutoLaunch ?? false}
           onChange={handleAutoLaunch}
           disabled={isLoading}
         />
         <p className="text-xs text-muted-foreground">
-          Launch ForkSync automatically when you log in
+          {t('settings.general.openAtLoginDesc')}
         </p>
       </div>
 
@@ -165,12 +167,12 @@ export function GeneralSettings(): JSX.Element {
 
       {/* About */}
       <div className="space-y-1">
-        <Label className="text-muted-foreground">About</Label>
+        <Label className="text-muted-foreground">{t('settings.general.about')}</Label>
         <p className="text-xs text-muted-foreground">
-          ForkSync — Keep your fork repositories up to date
+          {t('settings.general.aboutText')}
         </p>
-        <p className="text-xs text-muted-foreground">Config: ~/.forksync/config.yaml</p>
-        <p className="text-xs text-muted-foreground">Data: ~/.forksync/repos.json</p>
+        <p className="text-xs text-muted-foreground">{t('settings.general.configPath')}</p>
+        <p className="text-xs text-muted-foreground">{t('settings.general.dataPath')}</p>
       </div>
     </div>
   )

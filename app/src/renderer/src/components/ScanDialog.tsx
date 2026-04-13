@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -30,6 +31,7 @@ export function ScanDialog({
   loading,
   initialDir
 }: ScanDialogProps): JSX.Element | null {
+  const { t } = useTranslation()
   const [dir, setDir] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState(false)
@@ -148,25 +150,25 @@ export function ScanDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg">
-        <h3 className="text-lg font-semibold">Scan Directory</h3>
+        <h3 className="text-lg font-semibold">{t('scanRepo.title')}</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Scan a directory for git repositories.
+          {t('scanRepo.description')}
         </p>
 
         <div className="mt-4 space-y-2">
-          <Label>Directory to Scan</Label>
+          <Label>{t('scanRepo.directoryToScan')}</Label>
           <div className="flex gap-2">
             <div 
               className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
             >
-              {dir || 'No directory selected'}
+              {dir || t('scanRepo.noDirectorySelected')}
             </div>
             <Button 
               type="button" 
               variant="outline" 
               onClick={handleSelectDirectory}
             >
-              选择目录
+              {t('common.selectDirectory')}
             </Button>
           </div>
           <Button 
@@ -174,7 +176,7 @@ export function ScanDialog({
             onClick={handleScan} 
             disabled={!dir || loading}
           >
-            {loading ? 'Scanning...' : 'Scan'}
+            {loading ? t('scanRepo.scanning') : t('scanRepo.scan')}
           </Button>
         </div>
 
@@ -182,7 +184,7 @@ export function ScanDialog({
           <div className="mt-4 space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-xs">
-                {scannedRepos.length} repos found
+                {t('scanRepo.reposFound', { count: scannedRepos.length })}
               </Label>
               <Button 
                 variant="ghost" 
@@ -190,7 +192,7 @@ export function ScanDialog({
                 onClick={selectAll}
                 className="h-6 text-xs"
               >
-                {selected.size === scannedRepos.length ? 'Deselect All' : 'Select All'}
+                {selected.size === scannedRepos.length ? t('scanRepo.deselectAll') : t('scanRepo.selectAll')}
               </Button>
             </div>
             <div className="max-h-80 space-y-2 overflow-y-auto">
@@ -216,8 +218,8 @@ export function ScanDialog({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">{repo.name}</span>
-                          {repo.isFork && <Badge variant="info">fork</Badge>}
-                          {hasMapping && <Badge variant="secondary">mapped</Badge>}
+                          {repo.isFork && <Badge variant="info">{t('scanRepo.fork')}</Badge>}
+                          {hasMapping && <Badge variant="secondary">{t('scanRepo.mapped')}</Badge>}
                         </div>
                         <p className="truncate text-xs text-muted-foreground">{repo.path}</p>
                         {repo.suggestedUpstream && (
@@ -237,7 +239,7 @@ export function ScanDialog({
                           }}
                           className="h-6 text-xs"
                         >
-                          {isExpanded ? 'Hide' : 'Map'}
+                          {isExpanded ? t('scanRepo.hide') : t('scanRepo.map')}
                         </Button>
                       )}
                     </label>
@@ -254,13 +256,13 @@ export function ScanDialog({
                             className="rounded border-input"
                           />
                           <Label htmlFor={`enable-mapping-${repo.path}`} className="text-xs cursor-pointer">
-                            Custom Branch Mapping
+                            {t('addRepo.branchMapping')}
                           </Label>
                         </div>
                         
                         {!config.enabled && (
                           <p className="text-xs text-muted-foreground">
-                            Default: sync branches with the same name
+                            {t('scanRepo.defaultSyncSameName')}
                           </p>
                         )}
                         
@@ -273,7 +275,7 @@ export function ScanDialog({
                                   onChange={(e) => updateRepoBranchMapping(repo.path, 'localBranch', e.target.value)}
                                   className="w-full h-7 px-2 rounded border border-input bg-background text-xs"
                                 >
-                                  <option value="">Local branch</option>
+                                  <option value="">{t('scanRepo.localBranch')}</option>
                                   {repo.localBranches.map(branch => (
                                     <option key={branch} value={branch}>{branch}</option>
                                   ))}
@@ -281,7 +283,7 @@ export function ScanDialog({
                               ) : (
                                 <input
                                   type="text"
-                                  placeholder="local branch"
+                                  placeholder={t('scanRepo.localBranchPlaceholder')}
                                   value={config.mapping?.localBranch || ''}
                                   onChange={(e) => updateRepoBranchMapping(repo.path, 'localBranch', e.target.value)}
                                   className="w-full h-7 px-2 rounded border border-input bg-background text-xs"
@@ -296,7 +298,7 @@ export function ScanDialog({
                                   onChange={(e) => updateRepoBranchMapping(repo.path, 'remoteBranch', e.target.value)}
                                   className="w-full h-7 px-2 rounded border border-input bg-background text-xs"
                                 >
-                                  <option value="">Remote branch</option>
+                                  <option value="">{t('scanRepo.remoteBranch')}</option>
                                   {repo.remoteBranches.map(branch => (
                                     <option key={branch} value={branch}>{branch}</option>
                                   ))}
@@ -304,7 +306,7 @@ export function ScanDialog({
                               ) : (
                                 <input
                                   type="text"
-                                  placeholder="remote branch"
+                                  placeholder={t('scanRepo.remoteBranchPlaceholder')}
                                   value={config.mapping?.remoteBranch || ''}
                                   onChange={(e) => updateRepoBranchMapping(repo.path, 'remoteBranch', e.target.value)}
                                   className="w-full h-7 px-2 rounded border border-input bg-background text-xs"
@@ -324,11 +326,11 @@ export function ScanDialog({
 
         <div className="mt-4 flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={handleClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           {selected.size > 0 && (
             <Button onClick={handleAddSelected} disabled={adding}>
-              {adding ? `Adding ${selected.size}...` : `Add ${selected.size} repos`}
+              {adding ? t('scanRepo.adding', { count: selected.size }) : t('scanRepo.addRepos', { count: selected.size })}
             </Button>
           )}
         </div>

@@ -1,4 +1,5 @@
 import './assets/main.css'
+import './i18n'
 import { useEffect } from 'react'
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { RepoProvider } from './contexts/RepoContext'

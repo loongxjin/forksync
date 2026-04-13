@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { useTranslation } from 'react-i18next'
 
 /** Toggle reused from other settings panels */
 function Toggle({
@@ -41,16 +42,17 @@ function Toggle({
   )
 }
 
-const conflictStrategies = [
-  { value: 'preserve_ours', label: 'Preserve Ours', desc: 'Keep local changes, accept upstream non-conflict changes' },
-  { value: 'preserve_theirs', label: 'Preserve Theirs', desc: 'Accept upstream changes, keep local non-conflict changes' },
-  { value: 'agent_resolve', label: 'Agent Resolve', desc: 'Let AI agent resolve conflicts automatically' },
-  { value: 'manual', label: 'Manual', desc: 'Always resolve conflicts manually' }
+const conflictStrategyKeys = [
+  { value: 'preserve_ours', labelKey: 'settings.agent.strategies.preserveOurs', descKey: 'settings.agent.strategies.preserveOursDesc' },
+  { value: 'preserve_theirs', labelKey: 'settings.agent.strategies.preserveTheirs', descKey: 'settings.agent.strategies.preserveTheirsDesc' },
+  { value: 'agent_resolve', labelKey: 'settings.agent.strategies.agentResolve', descKey: 'settings.agent.strategies.agentResolveDesc' },
+  { value: 'manual', labelKey: 'settings.agent.strategies.manual', descKey: 'settings.agent.strategies.manualDesc' }
 ]
 
 export function AgentConfig(): JSX.Element {
   const { agents, sessions, refreshAgents, refreshSessions, cleanup } = useAgents()
   const { engineConfig, configLoading, updateConfig } = useSettings()
+  const { t } = useTranslation()
 
   // Local state for debounced inputs
   const [timeout, setTimeout_] = useState('')
@@ -138,7 +140,7 @@ export function AgentConfig(): JSX.Element {
     <div className="space-y-4">
       {/* Detected Agents */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Detected Agents</Label>
+        <Label className="text-sm font-medium">{t('settings.agent.detectedAgents')}</Label>
         <div className="space-y-2">
           {agents.map((agent) => (
             <div
@@ -152,12 +154,12 @@ export function AgentConfig(): JSX.Element {
                   <span className="text-xs text-muted-foreground">v{agent.version}</span>
                 )}
                 {agent.name === currentPreferred && (
-                  <Badge variant="info">preferred</Badge>
+                  <Badge variant="info">{t('settings.agent.preferred')}</Badge>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">
-                  {agent.installed ? agent.path : 'not installed'}
+                  {agent.installed ? agent.path : t('settings.agent.notInstalled')}
                 </span>
                 {agent.installed && agent.name !== currentPreferred && (
                   <Button
@@ -166,14 +168,14 @@ export function AgentConfig(): JSX.Element {
                     onClick={() => handleSetPreferred(agent.name)}
                     disabled={isLoading}
                   >
-                    Set Preferred
+                    {t('settings.agent.setPreferred')}
                   </Button>
                 )}
               </div>
             </div>
           ))}
           {agents.length === 0 && (
-            <p className="text-sm text-muted-foreground">No agent CLIs detected.</p>
+            <p className="text-sm text-muted-foreground">{t('settings.agent.noAgentsDetected')}</p>
           )}
         </div>
       </div>
@@ -182,28 +184,28 @@ export function AgentConfig(): JSX.Element {
 
       {/* Agent Configuration */}
       <div className="space-y-4">
-        <Label className="text-sm font-medium">Agent Configuration</Label>
+        <Label className="text-sm font-medium">{t('settings.agent.config')}</Label>
 
         {/* Timeout */}
         <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Agent Timeout</Label>
+          <Label className="text-xs text-muted-foreground">{t('settings.agent.timeout')}</Label>
           <div className="flex items-center gap-2">
             <Input
               value={timeout}
               onChange={(e) => setTimeout_(e.target.value)}
-              placeholder="e.g. 10m"
+              placeholder={t('settings.agent.timeoutPlaceholder')}
               className="max-w-[200px]"
               disabled={isLoading}
             />
-            {savingTimeout && <span className="text-xs text-muted-foreground">Saving...</span>}
+            {savingTimeout && <span className="text-xs text-muted-foreground">{t('common.saving')}</span>}
           </div>
         </div>
 
         {/* Conflict Strategy */}
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Conflict Strategy</Label>
+          <Label className="text-xs text-muted-foreground">{t('settings.agent.conflictStrategy')}</Label>
           <div className="space-y-1">
-            {conflictStrategies.map((s) => (
+            {conflictStrategyKeys.map((s) => (
               <label
                 key={s.value}
                 className={`flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors ${
@@ -222,8 +224,8 @@ export function AgentConfig(): JSX.Element {
                   className="mt-0.5"
                 />
                 <div>
-                  <div className="text-sm font-medium">{s.label}</div>
-                  <div className="text-xs text-muted-foreground">{s.desc}</div>
+                  <div className="text-sm font-medium">{t(s.labelKey)}</div>
+                  <div className="text-xs text-muted-foreground">{t(s.descKey)}</div>
                 </div>
               </label>
             ))}
@@ -232,27 +234,27 @@ export function AgentConfig(): JSX.Element {
 
         {/* Auto Confirm */}
         <Toggle
-          label="Auto-confirm Agent Results"
+          label={t('settings.agent.autoConfirm')}
           checked={autoConfirmEnabled}
           onChange={handleAutoConfirm}
           disabled={isLoading}
         />
         <p className="text-xs text-muted-foreground -mt-3">
-          Skip manual confirmation when agent resolves conflicts successfully
+          {t('settings.agent.autoConfirmDesc')}
         </p>
 
         {/* Session TTL */}
         <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Session TTL</Label>
+          <Label className="text-xs text-muted-foreground">{t('settings.agent.sessionTTL')}</Label>
           <div className="flex items-center gap-2">
             <Input
               value={sessionTTL}
               onChange={(e) => setSessionTTL(e.target.value)}
-              placeholder="e.g. 24h"
+              placeholder={t('settings.agent.sessionTTLPlaceholder')}
               className="max-w-[200px]"
               disabled={isLoading}
             />
-            {savingTTL && <span className="text-xs text-muted-foreground">Saving...</span>}
+            {savingTTL && <span className="text-xs text-muted-foreground">{t('common.saving')}</span>}
           </div>
         </div>
       </div>
@@ -263,14 +265,14 @@ export function AgentConfig(): JSX.Element {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label className="text-sm font-medium">
-            Sessions ({sessions.length})
+            {t('settings.agent.sessions', { count: sessions.length })}
           </Label>
           <Button variant="outline" size="sm" onClick={handleCleanup}>
-            🧹 Cleanup Expired
+            {t('settings.agent.cleanupExpired')}
           </Button>
         </div>
         {sessions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No active sessions.</p>
+          <p className="text-sm text-muted-foreground">{t('settings.agent.noSessions')}</p>
         ) : (
           <div className="space-y-1">
             {sessions.map((s) => (

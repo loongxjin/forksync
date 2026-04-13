@@ -13,6 +13,7 @@ import {
 import { engineApi } from '@/lib/api'
 import type { IDEConfig, IDEInfo } from '@/types/ide'
 import type { EngineConfig } from '@/types/engine'
+import i18n from '@/i18n'
 
 // ---------------------------------------------------------------------------
 // State & Actions
@@ -166,7 +167,7 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
       if (result.success && result.data) {
         dispatch({ type: 'SET_ENGINE_CONFIG', config: result.data })
       } else {
-        dispatch({ type: 'SET_CONFIG_ERROR', error: result.error || 'Failed to load config' })
+        dispatch({ type: 'SET_CONFIG_ERROR', error: result.error || i18n.t('toast.loadConfigFailed') })
       }
     } catch (err) {
       dispatch({ type: 'SET_CONFIG_ERROR', error: err instanceof Error ? err.message : String(err) })
@@ -180,7 +181,7 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
         // Refresh full config after set
         await refreshConfig()
       } else {
-        dispatch({ type: 'SET_CONFIG_ERROR', error: result.error || 'Failed to update config' })
+        dispatch({ type: 'SET_CONFIG_ERROR', error: result.error || i18n.t('toast.updateConfigFailed') })
       }
     } catch (err) {
       dispatch({ type: 'SET_CONFIG_ERROR', error: err instanceof Error ? err.message : String(err) })

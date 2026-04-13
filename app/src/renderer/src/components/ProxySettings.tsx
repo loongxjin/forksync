@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '@/contexts/SettingsContext'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { useTranslation } from 'react-i18next'
 
 function Toggle({
   checked,
@@ -38,6 +39,7 @@ function Toggle({
 
 export function ProxySettings(): JSX.Element {
   const { engineConfig, configLoading, updateConfig } = useSettings()
+  const { t } = useTranslation()
 
   const [proxyUrl, setProxyUrl] = useState('socks5://127.0.0.1:7890')
   const [saving, setSaving] = useState(false)
@@ -83,31 +85,31 @@ export function ProxySettings(): JSX.Element {
   return (
     <div className="space-y-6">
       <Toggle
-        label="Enable Proxy"
+        label={t('settings.proxy.enable')}
         checked={proxyEnabled}
         onChange={handleToggleProxy}
         disabled={isLoading}
       />
       <p className="text-xs text-muted-foreground -mt-4">
-        Route GitHub API requests through a proxy (HTTP/SOCKS5)
+        {t('settings.proxy.description')}
       </p>
 
       <div className="border-t border-border" />
 
       <div className="space-y-2">
-        <Label>Proxy URL</Label>
+        <Label>{t('settings.proxy.proxyUrl')}</Label>
         <div className="flex items-center gap-2">
           <Input
             value={proxyUrl}
             onChange={(e) => setProxyUrl(e.target.value)}
-            placeholder="e.g. socks5://127.0.0.1:7890"
+            placeholder={t('settings.proxy.proxyUrlPlaceholder')}
             className="max-w-[320px]"
             disabled={isLoading || !proxyEnabled}
           />
-          {saving && <span className="text-xs text-muted-foreground">Saving...</span>}
+          {saving && <span className="text-xs text-muted-foreground">{t('common.saving')}</span>}
         </div>
         <p className="text-xs text-muted-foreground">
-          Supports HTTP and SOCKS5 proxies
+          {t('settings.proxy.supports')}
         </p>
       </div>
     </div>
