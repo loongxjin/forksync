@@ -39,7 +39,7 @@ function Toggle({
 export function ProxySettings(): JSX.Element {
   const { engineConfig, configLoading, updateConfig } = useSettings()
 
-  const [proxyUrl, setProxyUrl] = useState('')
+  const [proxyUrl, setProxyUrl] = useState('socks5://127.0.0.1:7890')
   const [saving, setSaving] = useState(false)
   const isEditingRef = useRef(false)
   const prevConfigUrlRef = useRef('')
