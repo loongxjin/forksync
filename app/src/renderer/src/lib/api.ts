@@ -20,7 +20,8 @@ import type {
   HistoryData,
   BranchMapping,
   EngineConfig,
-  ConfigSetData
+  ConfigSetData,
+  PostSyncCommandsData
 } from '@/types/engine'
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '@/types/ide'
 
@@ -60,6 +61,11 @@ export interface EngineAPI {
   // Config management
   configGet(): Promise<ApiResponse<EngineConfig>>
   configSet(key: string, value: string): Promise<ApiResponse<ConfigSetData>>
+
+  // Post-sync commands
+  postSyncList(repoName: string): Promise<ApiResponse<PostSyncCommandsData>>
+  postSyncAdd(repoName: string, name: string, cmd: string): Promise<ApiResponse<PostSyncCommandsData>>
+  postSyncRemove(repoName: string, cmdId: string): Promise<ApiResponse<PostSyncCommandsData>>
 
   // App settings
   setAutoLaunch(enabled: boolean): Promise<{ success: boolean; error?: string }>

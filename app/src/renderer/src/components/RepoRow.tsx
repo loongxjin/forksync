@@ -36,9 +36,10 @@ interface RepoRowProps {
   onSync: (name: string) => void
   onRemove: (name: string) => void
   onResolve: (name: string) => void
+  onSettings: (name: string) => void
 }
 
-export function RepoRow({ repo, onSync, onRemove, onResolve }: RepoRowProps): JSX.Element {
+export function RepoRow({ repo, onSync, onRemove, onResolve, onSettings }: RepoRowProps): JSX.Element {
   const { t } = useTranslation()
 
   return (
@@ -72,7 +73,14 @@ export function RepoRow({ repo, onSync, onRemove, onResolve }: RepoRowProps): JS
       </div>
 
       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-        <IDEOpenButton repoPath={repo.path} />
+        <button
+            onClick={() => onSettings(repo.name)}
+            className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            title={t('postSync.settings')}
+          >
+            ⚙️
+          </button>
+          <IDEOpenButton repoPath={repo.path} />
         {repo.status !== 'conflict' && repo.status !== 'resolving' && repo.status !== 'resolved' && (
           <button
             onClick={() => onSync(repo.name)}

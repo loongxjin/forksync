@@ -104,6 +104,18 @@ export function registerIpcHandlers(): void {
     return result
   })
 
+  ipcMain.handle('engine:postSyncList', async (_event, repoName: string) => {
+    return e.postSyncList(repoName)
+  })
+
+  ipcMain.handle('engine:postSyncAdd', async (_event, repoName: string, cmdName: string, cmd: string) => {
+    return e.postSyncAdd(repoName, cmdName, cmd)
+  })
+
+  ipcMain.handle('engine:postSyncRemove', async (_event, repoName: string, cmdId: string) => {
+    return e.postSyncRemove(repoName, cmdId)
+  })
+
   ipcMain.handle('app:setAutoLaunch', async (_event, enabled: boolean) => {
     try {
       app.setLoginItemSettings({

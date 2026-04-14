@@ -1,9 +1,11 @@
 package sync
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +20,10 @@ import (
 	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
-const defaultTimeout = 5 * time.Minute
+const (
+	defaultTimeout        = 5 * time.Minute
+	postSyncCommandTimeout = 60 * time.Second
+)
 
 // Syncer handles repository synchronization.
 type Syncer struct {
@@ -64,31 +69,33 @@ func (s *Syncer) SetLogger(l *logger.Logger) {
 
 // Result contains the result of syncing a single repo.
 type Result struct {
-	RepoID        string
-	RepoName      string
-	Status        string // types.RepoStatus values: synced, conflict, up_to_date, error
-	CommitsPulled int
-	ConflictFiles []string
-	ErrorMessage  string
-	AgentUsed     string // agent name if auto-resolve was attempted
-	ConflictsFound int   // number of conflicts detected
-	AutoResolved   int   // number of files auto-resolved by agent
-	PendingConfirm []string // files pending user confirmation
+	RepoID          string
+	RepoName        string
+	Status          string // types.RepoStatus values: synced, conflict, up_to_date, error
+	CommitsPulled   int
+	ConflictFiles   []string
+	ErrorMessage    string
+	AgentUsed       string    // agent name if auto-resolve was attempted
+	ConflictsFound  int       // number of conflicts detected
+	AutoResolved    int       // number of files auto-resolved by agent
+	PendingConfirm  []string  // files pending user confirmation
+	PostSyncResults []types.PostSyncResult
 }
 
 // ToSyncResult converts Result to types.SyncResult for JSON output.
 func (r *Result) ToSyncResult() types.SyncResult {
 	return types.SyncResult{
-		RepoID:         r.RepoID,
-		RepoName:       r.RepoName,
-		Status:         types.RepoStatus(r.Status),
-		CommitsPulled:  r.CommitsPulled,
-		ConflictFiles:  r.ConflictFiles,
-		ErrorMessage:   r.ErrorMessage,
-		AgentUsed:      r.AgentUsed,
-		ConflictsFound: r.ConflictsFound,
-		AutoResolved:   r.AutoResolved,
-		PendingConfirm: r.PendingConfirm,
+		RepoID:          r.RepoID,
+		RepoName:        r.RepoName,
+		Status:          types.RepoStatus(r.Status),
+		CommitsPulled:   r.CommitsPulled,
+		ConflictFiles:   r.ConflictFiles,
+		ErrorMessage:    r.ErrorMessage,
+		AgentUsed:       r.AgentUsed,
+		ConflictsFound:  r.ConflictsFound,
+		AutoResolved:    r.AutoResolved,
+		PendingConfirm:  r.PendingConfirm,
+		PostSyncResults: r.PostSyncResults,
 	}
 }
 
@@ -222,6 +229,11 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	// Success
 	result.Status = "synced"
 	s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
+	result.PostSyncResults = s.runPostSyncCommands(ctx, r)
+	if postSyncErr := s.postSyncError(result.PostSyncResults); postSyncErr != "" {
+		result.ErrorMessage = postSyncErr
+		s.updateRepoStatus(r.ID, types.RepoStatusSynced, result.ErrorMessage)
+	}
 	s.notifyResult(r.Name, result)
 	s.finalizeResult(result)
 	return result
@@ -311,6 +323,59 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 	return results
 }
 
+// runPostSyncCommands executes the repo's post-sync commands in order.
+// It stops on the first failure. The sync status remains "synced" regardless.
+func (s *Syncer) runPostSyncCommands(ctx context.Context, r types.Repo) []types.PostSyncResult {
+	if len(r.PostSyncCommands) == 0 {
+		return nil
+	}
+
+	var results []types.PostSyncResult
+	for _, cmd := range r.PostSyncCommands {
+		cmdCtx, cancel := context.WithTimeout(ctx, postSyncCommandTimeout)
+		c := exec.CommandContext(cmdCtx, "sh", "-c", cmd.Cmd)
+		c.Dir = r.Path
+
+		var stdout, stderr bytes.Buffer
+		c.Stdout = &stdout
+		c.Stderr = &stderr
+
+		err := c.Run()
+		cancel()
+
+		res := types.PostSyncResult{
+			Name: cmd.Name,
+			Cmd:  cmd.Cmd,
+		}
+
+		if err != nil {
+			res.Success = false
+			res.Error = strings.TrimSpace(stderr.String())
+			if res.Error == "" {
+				res.Error = err.Error()
+			}
+			results = append(results, res)
+			break // stop on first failure
+		}
+
+		res.Success = true
+		res.Output = strings.TrimSpace(stdout.String())
+		results = append(results, res)
+	}
+
+	return results
+}
+
+// postSyncError returns a summary error message if any post-sync command failed.
+func (s *Syncer) postSyncError(results []types.PostSyncResult) string {
+	for _, r := range results {
+		if !r.Success {
+			return fmt.Sprintf("post-sync command \"%s\" failed: %s", r.Name, r.Error)
+		}
+	}
+	return ""
+}
+
 func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg string) {
 	r, ok := s.store.Get(id)
 	if !ok {
@@ -390,6 +455,13 @@ func (s *Syncer) logResult(result *Result) {
 	switch result.Status {
 	case "synced":
 		s.logger.Info("%s: synced (%d commits pulled)", result.RepoName, result.CommitsPulled)
+		for _, ps := range result.PostSyncResults {
+			if ps.Success {
+				s.logger.Info("  post-sync [%s]: OK", ps.Name)
+			} else {
+				s.logger.Error("  post-sync [%s]: FAILED - %s", ps.Name, ps.Error)
+			}
+		}
 	case "up_to_date":
 		s.logger.Info("%s: already up to date", result.RepoName)
 	case "conflict":

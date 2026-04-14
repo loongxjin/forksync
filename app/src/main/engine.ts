@@ -29,6 +29,13 @@ import type {
 /** Default timeout for engine commands (10 minutes — agent resolve can be slow) */
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
 
+/** Post-sync command — mirrors Go PostSyncCommand */
+export interface PostSyncCommand {
+  id: string
+  name: string
+  cmd: string
+}
+
 export class EngineClient {
   private binaryPath: string
   private projectRoot: string
@@ -163,6 +170,21 @@ export class EngineClient {
   /** `forksync config set <key> <value> --json` */
   async configSet(key: string, value: string): Promise<ApiResponse<ConfigSetData>> {
     return this.exec<ConfigSetData>(['config', 'set', key, value])
+  }
+
+  /** `forksync repo post-sync list <name> --json` */
+  async postSyncList(repoName: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> {
+    return this.exec<{ commands: PostSyncCommand[] }>(['repo', 'post-sync', 'list', repoName])
+  }
+
+  /** `forksync repo post-sync add <name> --name <name> --cmd <cmd> --json` */
+  async postSyncAdd(repoName: string, cmdName: string, cmd: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> {
+    return this.exec<{ commands: PostSyncCommand[] }>(['repo', 'post-sync', 'add', repoName, '--name', cmdName, '--cmd', cmd])
+  }
+
+  /** `forksync repo post-sync remove <name> --id <cmd-id> --json` */
+  async postSyncRemove(repoName: string, cmdId: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> {
+    return this.exec<{ commands: PostSyncCommand[] }>(['repo', 'post-sync', 'remove', repoName, '--id', cmdId])
   }
 
   // -----------------------------------------------------------------------

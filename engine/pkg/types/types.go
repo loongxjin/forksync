@@ -52,24 +52,32 @@ type BranchMapping struct {
 	RemoteBranch string `json:"remoteBranch"`
 }
 
+// PostSyncCommand represents a shell command to run after successful sync.
+type PostSyncCommand struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Cmd  string `json:"cmd"`
+}
+
 // Repo represents a managed repository
 type Repo struct {
-	ID               string         `json:"id"`
-	Name             string         `json:"name"`
-	Path             string         `json:"path"`
-	Origin           string         `json:"origin"`
-	Upstream         string         `json:"upstream"`
-	Branch           string         `json:"branch"`
-	BranchMapping    *BranchMapping `json:"branchMapping,omitempty"`
-	AutoSync         bool           `json:"autoSync"`
-	SyncInterval     string         `json:"syncInterval"`
-	ConflictStrategy string         `json:"conflictStrategy"`
-	CreatedAt        time.Time      `json:"createdAt"`
-	LastSync         *Time          `json:"lastSync"`
-	Status           RepoStatus     `json:"status"`
-	AheadBy          int            `json:"aheadBy"`
-	BehindBy         int            `json:"behindBy"`
-	ErrorMessage     string         `json:"errorMessage,omitempty"`
+	ID                string            `json:"id"`
+	Name              string            `json:"name"`
+	Path              string            `json:"path"`
+	Origin            string            `json:"origin"`
+	Upstream          string            `json:"upstream"`
+	Branch            string            `json:"branch"`
+	BranchMapping     *BranchMapping     `json:"branchMapping,omitempty"`
+	AutoSync          bool              `json:"autoSync"`
+	SyncInterval      string            `json:"syncInterval"`
+	ConflictStrategy  string            `json:"conflictStrategy"`
+	PostSyncCommands  []PostSyncCommand `json:"postSyncCommands,omitempty"`
+	CreatedAt         time.Time         `json:"createdAt"`
+	LastSync          *Time             `json:"lastSync"`
+	Status            RepoStatus        `json:"status"`
+	AheadBy           int               `json:"aheadBy"`
+	BehindBy          int               `json:"behindBy"`
+	ErrorMessage      string            `json:"errorMessage,omitempty"`
 }
 
 // GetRemoteBranchForLocal returns the remote branch name for a given local branch.
@@ -95,16 +103,31 @@ type ScannedRepo struct {
 
 // SyncResult 同步结果
 type SyncResult struct {
-	RepoID         string     `json:"repoId"`
-	RepoName       string     `json:"repoName"`
-	Status         RepoStatus `json:"status"`
-	CommitsPulled  int        `json:"commitsPulled"`
-	ConflictFiles  []string   `json:"conflictFiles,omitempty"`
-	ErrorMessage   string     `json:"errorMessage,omitempty"`
-	AgentUsed      string     `json:"agentUsed,omitempty"`
-	ConflictsFound int        `json:"conflictsFound,omitempty"`
-	AutoResolved   int        `json:"autoResolved,omitempty"`
-	PendingConfirm []string   `json:"pendingConfirm,omitempty"`
+	RepoID           string            `json:"repoId"`
+	RepoName         string            `json:"repoName"`
+	Status           RepoStatus        `json:"status"`
+	CommitsPulled    int               `json:"commitsPulled"`
+	ConflictFiles    []string          `json:"conflictFiles,omitempty"`
+	ErrorMessage     string            `json:"errorMessage,omitempty"`
+	AgentUsed        string            `json:"agentUsed,omitempty"`
+	ConflictsFound   int               `json:"conflictsFound,omitempty"`
+	AutoResolved     int               `json:"autoResolved,omitempty"`
+	PendingConfirm   []string          `json:"pendingConfirm,omitempty"`
+	PostSyncResults  []PostSyncResult  `json:"postSyncResults,omitempty"`
+}
+
+// PostSyncResult represents the result of running a single post-sync command.
+type PostSyncResult struct {
+	Name    string `json:"name"`
+	Cmd     string `json:"cmd"`
+	Success bool   `json:"success"`
+	Output  string `json:"output,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// PostSyncCommandsData is the response for post-sync commands management.
+type PostSyncCommandsData struct {
+	Commands []PostSyncCommand `json:"commands"`
 }
 
 // ConflictFile 冲突文件（简化版，不再包含文件内容，由 agent 自行读取）

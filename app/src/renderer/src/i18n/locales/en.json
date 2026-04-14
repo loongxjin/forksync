@@ -259,5 +259,14 @@
   },
   "mainProcess": {
     "selectRepoDir": "Select Repository Directory"
+  },
+  "postSync": {
+    "title": "Post-Sync Commands",
+    "description": "Commands to run automatically after a successful sync",
+    "empty": "No post-sync commands configured",
+    "addCommand": "Add Command",
+    "commandNamePlaceholder": "e.g., npm link",
+    "commandPlaceholder": "e.g., npm link",
+    "settings": "Settings"
   }
 }
