@@ -128,7 +128,12 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   const [state, dispatch] = useReducer(repoReducer, initialState)
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Guard against concurrent refresh calls
+  const refreshingRef = useRef(false)
+
   const refresh = useCallback(async () => {
+    if (refreshingRef.current) return
+    refreshingRef.current = true
     dispatch({ type: 'SET_LOADING', loading: true })
     try {
       const res = await engineApi.status()
@@ -139,6 +144,8 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       }
     } catch (err) {
       dispatch({ type: 'SET_ERROR', error: (err as Error).message })
+    } finally {
+      refreshingRef.current = false
     }
   }, [])
 

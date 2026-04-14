@@ -59,7 +59,7 @@
   },
   "repos": {
     "title": "仓库",
-    "refresh": "🔄 刷新",
+    "refresh": "刷新",
     "scan": "📂 扫描",
     "addRepo": "+ 添加仓库",
     "loading": "加载中...",
@@ -119,7 +119,7 @@
   },
   "conflicts": {
     "title": "冲突",
-    "refresh": "🔄 刷新",
+    "refresh": "刷新",
     "noConflicts": "未检测到冲突。",
     "noConflictsHint": "所有仓库已同步且最新。",
     "back": "← 返回",

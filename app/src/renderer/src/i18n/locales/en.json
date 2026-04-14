@@ -59,7 +59,7 @@
   },
   "repos": {
     "title": "Repositories",
-    "refresh": "🔄 Refresh",
+    "refresh": "Refresh",
     "scan": "📂 Scan",
     "addRepo": "+ Add Repo",
     "loading": "Loading...",
@@ -119,7 +119,7 @@
   },
   "conflicts": {
     "title": "Conflicts",
-    "refresh": "🔄 Refresh",
+    "refresh": "Refresh",
     "noConflicts": "No conflicts detected.",
     "noConflictsHint": "All repositories are synced and up to date.",
     "back": "← Back",

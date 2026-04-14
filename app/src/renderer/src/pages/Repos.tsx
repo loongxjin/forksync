@@ -98,6 +98,9 @@ export function Repos(): JSX.Element {
         <h2 className="text-xl font-semibold">{t('repos.title')}</h2>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
+            <span className={loading ? 'inline-block animate-spin' : ''}>
+              {loading ? '⟳' : '🔄'}
+            </span>{' '}
             {t('repos.refresh')}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowScan(true)}>
