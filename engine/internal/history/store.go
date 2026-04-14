@@ -30,6 +30,7 @@ type Record struct {
 	ErrorMessage   string    `json:"errorMessage"`
 	Summary        string    `json:"summary"`
 	SummaryStatus  string    `json:"summaryStatus"`
+	OldHEAD        string    `json:"oldHEAD"`
 	CreatedAt      time.Time `json:"createdAt"`
 }
 
@@ -82,6 +83,7 @@ CREATE INDEX IF NOT EXISTS idx_sync_history_created_at ON sync_history(created_a
 var migrations = []string{
 	"ALTER TABLE sync_history ADD COLUMN summary TEXT DEFAULT ''",
 	"ALTER TABLE sync_history ADD COLUMN summary_status TEXT DEFAULT ''",
+	"ALTER TABLE sync_history ADD COLUMN old_head TEXT DEFAULT ''",
 }
 
 func (s *Store) migrate() error {
@@ -110,11 +112,11 @@ func (s *Store) Record(r Record) (int64, error) {
 	}
 
 	result, err := s.db.Exec(`
-		INSERT INTO sync_history (repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, summary, summary_status, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO sync_history (repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, summary, summary_status, old_head, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.RepoID, r.RepoName, r.Status, r.CommitsPulled, string(conflictFiles),
 		r.AgentUsed, r.ConflictsFound, r.AutoResolved, r.ErrorMessage,
-		r.Summary, r.SummaryStatus, r.CreatedAt,
+		r.Summary, r.SummaryStatus, r.OldHEAD, r.CreatedAt,
 	)
 	if err != nil {
 		return 0, err
@@ -129,7 +131,7 @@ func (s *Store) Recent(n int) ([]Record, error) {
 	defer s.mu.Unlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), created_at
+		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
 		FROM sync_history ORDER BY created_at DESC LIMIT ?`, n)
 	if err != nil {
 		return nil, err
@@ -145,7 +147,7 @@ func (s *Store) ByRepo(repoID string, n int) ([]Record, error) {
 	defer s.mu.Unlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), created_at
+		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
 		FROM sync_history WHERE repo_id = ? ORDER BY created_at DESC LIMIT ?`, repoID, n)
 	if err != nil {
 		return nil, err
@@ -185,7 +187,7 @@ func (s *Store) GetByID(id int64) (*Record, error) {
 	defer s.mu.Unlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), created_at
+		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
 		FROM sync_history WHERE id = ?`, id)
 	if err != nil {
 		return nil, err
@@ -208,7 +210,7 @@ func (s *Store) LatestByRepo(repoID string) (*Record, error) {
 	defer s.mu.Unlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), created_at
+		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
 		FROM sync_history WHERE repo_id = ? ORDER BY created_at DESC LIMIT 1`, repoID)
 	if err != nil {
 		return nil, err
@@ -300,7 +302,7 @@ func scanRecords(rows *sql.Rows) ([]Record, error) {
 
 		if err := rows.Scan(&r.ID, &r.RepoID, &r.RepoName, &r.Status, &r.CommitsPulled,
 			&conflictFilesJSON, &r.AgentUsed, &r.ConflictsFound, &r.AutoResolved,
-			&r.ErrorMessage, &r.Summary, &r.SummaryStatus, &createdAtStr); err != nil {
+			&r.ErrorMessage, &r.Summary, &r.SummaryStatus, &r.OldHEAD, &createdAtStr); err != nil {
 			return nil, err
 		}
 

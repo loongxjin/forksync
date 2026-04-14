@@ -121,8 +121,8 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	}
 	branch := r.Branch
 	if branch == "" {
-		if out, err := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD").CombinedOutput(); err == nil {
-			branch = strings.TrimSpace(string(out))
+		if b, err := s.gitOps.GetCurrentBranch(ctx, r.Path); err == nil {
+			branch = b
 		}
 	}
 	if branch == "" {
@@ -490,6 +490,7 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 		AutoResolved:   result.AutoResolved,
 		ErrorMessage:   result.ErrorMessage,
 		SummaryStatus:  summaryStatus,
+		OldHEAD:        result.OldHEAD,
 		CreatedAt:      time.Now(),
 	})
 	if err != nil {
@@ -538,10 +539,21 @@ func (s *Syncer) finalizeResult(result *Result) {
 
 // triggerSummarize fetches commit list and enqueues a summarization task.
 func (s *Syncer) triggerSummarize(result *Result, historyID int64) {
-	// Get commit list from git log (oldHEAD..upstreamRef)
-	commits := s.getRecentCommits(result.RepoPath, result.OldHEAD, result.UpstreamRef)
-	if len(commits) == 0 {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	commits, err := s.gitOps.GetCommitLog(ctx, result.RepoPath, result.OldHEAD, result.UpstreamRef)
+	if err != nil || len(commits) == 0 {
 		return
+	}
+
+	// Map git.CommitInfo to summarizer.CommitInfo
+	var summarizerCommits []summarizer.CommitInfo
+	for _, c := range commits {
+		summarizerCommits = append(summarizerCommits, summarizer.CommitInfo{
+			Hash:    c.Hash,
+			Message: c.Message,
+		})
 	}
 
 	// Determine language from config (default zh)
@@ -553,38 +565,9 @@ func (s *Syncer) triggerSummarize(result *Result, historyID int64) {
 	s.summarizer.Enqueue(summarizer.Task{
 		HistoryID: historyID,
 		RepoName:  result.RepoName,
-		Commits:   commits,
+		Commits:   summarizerCommits,
 		Language:  lang,
 	})
-}
-
-// getRecentCommits gets the list of commits merged from upstream during the sync.
-// It uses oldHEAD..upstreamRef to only include the commits pulled in this sync.
-func (s *Syncer) getRecentCommits(repoPath, oldHEAD, upstreamRef string) []summarizer.CommitInfo {
-	if oldHEAD == "" || upstreamRef == "" {
-		return nil
-	}
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "log",
-		fmt.Sprintf("%s..%s", oldHEAD, upstreamRef), "--pretty=format:%h%x09%s")
-
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		s.log(fmt.Sprintf("get commits error: %v", err))
-		return nil
-	}
-
-	var commits []summarizer.CommitInfo
-	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
-		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) == 2 {
-			commits = append(commits, summarizer.CommitInfo{
-				Hash:    parts[0],
-				Message: parts[1],
-			})
-		}
-	}
-	return commits
 }
 
 // log is a helper that logs to the configured logger or std log.
@@ -595,6 +578,7 @@ func (s *Syncer) log(msg string) {
 		log.Print(msg)
 	}
 }
+
 
 // shell returns the system shell for executing commands.
 // Uses "cmd" on Windows, "sh" on all other platforms.

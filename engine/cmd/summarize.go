@@ -1,13 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
-	"log"
-	"os/exec"
-	"strings"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/internal/summarizer"
@@ -108,12 +107,26 @@ func runSummarize(cmd *cobra.Command, args []string) error {
 	// Update status to generating
 	_ = histStore.UpdateSummary(record.ID, "", "generating")
 
-	// Get commits (upstream/branch..HEAD)
+	// Get commits (oldHEAD..upstreamRef)
 	upstreamRef := resolveUpstreamRef(r)
-	commits := getCommitsFromRepo(r.Path, upstreamRef)
-	if len(commits) == 0 {
+	if record.OldHEAD == "" {
+		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		return fmt.Errorf("no old HEAD recorded for %q, cannot determine pulled commits", args[0])
+	}
+
+	gitOps := git.NewOperations()
+	gitCommits, err := gitOps.GetCommitLog(cmd.Context(), r.Path, record.OldHEAD, upstreamRef)
+	if err != nil || len(gitCommits) == 0 {
 		_ = histStore.UpdateSummary(record.ID, "", "failed")
 		return fmt.Errorf("no commits found for summarization")
+	}
+
+	var commits []summarizer.CommitInfo
+	for _, c := range gitCommits {
+		commits = append(commits, summarizer.CommitInfo{
+			Hash:    c.Hash,
+			Message: c.Message,
+		})
 	}
 
 	// Determine language from config (default zh)
@@ -148,34 +161,6 @@ func runSummarize(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// getCommitsFromRepo fetches the commits merged from upstream (upstream/branch..HEAD).
-func getCommitsFromRepo(repoPath, upstreamRef string) []summarizer.CommitInfo {
-	if upstreamRef == "" {
-		return nil
-	}
-
-	cmd := exec.Command("git", "-C", repoPath, "log",
-		fmt.Sprintf("%s..HEAD", upstreamRef), "--pretty=format:%h%x09%s")
-
-	output, err := cmd.Output()
-	if err != nil {
-		log.Printf("get commits error: %v", err)
-		return nil
-	}
-
-	var commits []summarizer.CommitInfo
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		parts := strings.SplitN(line, "\t", 2)
-		if len(parts) == 2 {
-			commits = append(commits, summarizer.CommitInfo{
-				Hash:    parts[0],
-				Message: parts[1],
-			})
-		}
-	}
-	return commits
-}
-
 // resolveUpstreamRef computes the upstream remote/branch ref for a repo.
 func resolveUpstreamRef(r types.Repo) string {
 	remoteName := "upstream"
@@ -184,8 +169,9 @@ func resolveUpstreamRef(r types.Repo) string {
 	}
 	branch := r.Branch
 	if branch == "" {
-		if out, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").CombinedOutput(); err == nil {
-			branch = strings.TrimSpace(string(out))
+		gitOps := git.NewOperations()
+		if b, err := gitOps.GetCurrentBranch(context.Background(), r.Path); err == nil {
+			branch = b
 		}
 	}
 	if branch == "" {

@@ -16,6 +16,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/internal/summarizer"
@@ -481,9 +482,22 @@ func triggerResolveSummary(r types.Repo, cfg *config.Config, cfgMgr *config.Mana
 
 	// Get commits
 	upstreamRef := resolveUpstreamRef(r)
-	commits := getCommitsFromRepo(r.Path, upstreamRef)
-	if len(commits) == 0 {
+	if record.OldHEAD == "" {
+		_ = histStore.UpdateSummary(record.ID, "", "failed")
 		return
+	}
+	gitOps := git.NewOperations()
+	gitCommits, err := gitOps.GetCommitLog(context.Background(), r.Path, record.OldHEAD, upstreamRef)
+	if err != nil || len(gitCommits) == 0 {
+		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		return
+	}
+	var commits []summarizer.CommitInfo
+	for _, c := range gitCommits {
+		commits = append(commits, summarizer.CommitInfo{
+			Hash:    c.Hash,
+			Message: c.Message,
+		})
 	}
 
 	// Determine language
