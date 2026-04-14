@@ -45,7 +45,8 @@ export class EngineClient {
     // Production: bundled binary in resources
     // Development: use `go run`
     if (app.isPackaged) {
-      this.binaryPath = join(process.resourcesPath, 'forksync')
+      const ext = process.platform === 'win32' ? '.exe' : ''
+      this.binaryPath = join(process.resourcesPath, `forksync${ext}`)
       this.projectRoot = ''
       this.engineDir = ''
     } else {

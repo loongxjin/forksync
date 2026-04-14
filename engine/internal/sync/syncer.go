@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -333,7 +334,8 @@ func (s *Syncer) runPostSyncCommands(ctx context.Context, r types.Repo) []types.
 	var results []types.PostSyncResult
 	for _, cmd := range r.PostSyncCommands {
 		cmdCtx, cancel := context.WithTimeout(ctx, postSyncCommandTimeout)
-		c := exec.CommandContext(cmdCtx, "sh", "-c", cmd.Cmd)
+		sh, flag := shell()
+		c := exec.CommandContext(cmdCtx, sh, flag, cmd.Cmd)
 		c.Dir = r.Path
 
 		var stdout, stderr bytes.Buffer
@@ -475,4 +477,13 @@ func (s *Syncer) logResult(result *Result) {
 func (s *Syncer) finalizeResult(result *Result) {
 	s.recordHistory(result)
 	s.logResult(result)
+}
+
+// shell returns the system shell for executing commands.
+// Uses "cmd" on Windows, "sh" on all other platforms.
+func shell() (string, string) {
+	if runtime.GOOS == "windows" {
+		return "cmd", "/c"
+	}
+	return "sh", "-c"
 }

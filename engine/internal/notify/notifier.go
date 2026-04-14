@@ -3,9 +3,10 @@ package notify
 import (
 	"fmt"
 	"os/exec"
+	"runtime"
 )
 
-// Notifier sends macOS system notifications.
+// Notifier sends system notifications.
 type Notifier struct {
 	enabled bool
 }
@@ -43,6 +44,23 @@ func (n *Notifier) NotifyError(repoName string, errMsg string) {
 }
 
 func (n *Notifier) send(title, message string) {
+	if runtime.GOOS == "windows" {
+		// Use PowerShell toast notification on Windows
+		script := fmt.Sprintf(
+			"[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null; "+
+				"[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType = WindowsRuntime] | Out-Null; "+
+				"$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); "+
+				"$textNodes = $template.GetElementsByTagName('text'); "+
+				"$textNodes.Item(0).AppendChild($template.CreateTextNode(%q)) | Out-Null; "+
+				"$textNodes.Item(1).AppendChild($template.CreateTextNode(%q)) | Out-Null; "+
+				"$toast = [Windows.UI.Notifications.ToastNotification]::new($template); "+
+				"[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('ForkSync').Show($toast)",
+			title, message,
+		)
+		exec.Command("powershell", "-NoProfile", "-Command", script).Run()
+		return
+	}
+	// macOS: use osascript
 	script := fmt.Sprintf(`display notification %q with title %q`, message, title)
 	exec.Command("osascript", "-e", script).Run()
 }

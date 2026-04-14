@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -203,6 +204,10 @@ func (s *JSONStore) saveUnsafe() error {
 	tmp := s.path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
 		return err
+	}
+	// Windows requires removing the target before rename
+	if runtime.GOOS == "windows" {
+		_ = os.Remove(s.path)
 	}
 	return os.Rename(tmp, s.path)
 }
