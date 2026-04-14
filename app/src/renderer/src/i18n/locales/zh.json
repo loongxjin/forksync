@@ -265,8 +265,7 @@
     "description": "同步成功后自动执行的命令",
     "empty": "暂无 post-sync 命令",
     "addCommand": "添加命令",
-    "commandNamePlaceholder": "如：npm link",
-    "commandPlaceholder": "如：npm link",
+    "commandPlaceholder": "输入命令，如 npm link",
     "settings": "设置"
   }
 }

@@ -69,13 +69,22 @@ func loadRepoStore() (repo.Store, error) {
 func runPostSyncList(cmd *cobra.Command, args []string) error {
 	store, err := loadRepoStore()
 	if err != nil {
+		if isJSON() {
+			outputJSON(types.PostSyncCommandsData{}, err)
+			return nil
+		}
 		return err
 	}
 
 	name := args[0]
 	r, ok := store.GetByName(name)
 	if !ok {
-		return fmt.Errorf("repo %q not found", name)
+		err := fmt.Errorf("repo %q not found", name)
+		if isJSON() {
+			outputJSON(types.PostSyncCommandsData{}, err)
+			return nil
+		}
+		return err
 	}
 
 	data := types.PostSyncCommandsData{
@@ -103,13 +112,22 @@ func runPostSyncList(cmd *cobra.Command, args []string) error {
 func runPostSyncAdd(cmd *cobra.Command, args []string) error {
 	store, err := loadRepoStore()
 	if err != nil {
+		if isJSON() {
+			outputJSON(types.PostSyncCommandsData{}, err)
+			return nil
+		}
 		return err
 	}
 
 	name := args[0]
 	r, ok := store.GetByName(name)
 	if !ok {
-		return fmt.Errorf("repo %q not found", name)
+		err := fmt.Errorf("repo %q not found", name)
+		if isJSON() {
+			outputJSON(types.PostSyncCommandsData{}, err)
+			return nil
+		}
+		return err
 	}
 
 	newCmd := types.PostSyncCommand{
@@ -120,6 +138,10 @@ func runPostSyncAdd(cmd *cobra.Command, args []string) error {
 	r.PostSyncCommands = append(r.PostSyncCommands, newCmd)
 
 	if err := store.Update(r); err != nil {
+		if isJSON() {
+			outputJSON(types.PostSyncCommandsData{}, err)
+			return nil
+		}
 		return fmt.Errorf("update repo: %w", err)
 	}
 
@@ -138,13 +160,22 @@ func runPostSyncAdd(cmd *cobra.Command, args []string) error {
 func runPostSyncRemove(cmd *cobra.Command, args []string) error {
 	store, err := loadRepoStore()
 	if err != nil {
+		if isJSON() {
+			outputJSON(types.PostSyncCommandsData{}, err)
+			return nil
+		}
 		return err
 	}
 
 	name := args[0]
 	r, ok := store.GetByName(name)
 	if !ok {
-		return fmt.Errorf("repo %q not found", name)
+		err := fmt.Errorf("repo %q not found", name)
+		if isJSON() {
+			outputJSON(types.PostSyncCommandsData{}, err)
+			return nil
+		}
+		return err
 	}
 
 	found := false
@@ -158,11 +189,20 @@ func runPostSyncRemove(cmd *cobra.Command, args []string) error {
 	}
 
 	if !found {
-		return fmt.Errorf("post-sync command with ID %q not found", postSyncID)
+		err := fmt.Errorf("post-sync command with ID %q not found", postSyncID)
+		if isJSON() {
+			outputJSON(types.PostSyncCommandsData{}, err)
+			return nil
+		}
+		return err
 	}
 
 	r.PostSyncCommands = filtered
 	if err := store.Update(r); err != nil {
+		if isJSON() {
+			outputJSON(types.PostSyncCommandsData{}, err)
+			return nil
+		}
 		return fmt.Errorf("update repo: %w", err)
 	}
 

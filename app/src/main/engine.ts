@@ -172,19 +172,19 @@ export class EngineClient {
     return this.exec<ConfigSetData>(['config', 'set', key, value])
   }
 
-  /** `forksync repo post-sync list <name> --json` */
+  /** `forksync post-sync list <name> --json` */
   async postSyncList(repoName: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> {
-    return this.exec<{ commands: PostSyncCommand[] }>(['repo', 'post-sync', 'list', repoName])
+    return this.exec<{ commands: PostSyncCommand[] }>(['post-sync', 'list', repoName])
   }
 
-  /** `forksync repo post-sync add <name> --name <name> --cmd <cmd> --json` */
+  /** `forksync post-sync add <name> --name <name> --cmd <cmd> --json` */
   async postSyncAdd(repoName: string, cmdName: string, cmd: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> {
-    return this.exec<{ commands: PostSyncCommand[] }>(['repo', 'post-sync', 'add', repoName, '--name', cmdName, '--cmd', cmd])
+    return this.exec<{ commands: PostSyncCommand[] }>(['post-sync', 'add', repoName, '--name', cmdName, '--cmd', cmd])
   }
 
-  /** `forksync repo post-sync remove <name> --id <cmd-id> --json` */
+  /** `forksync post-sync remove <name> --id <cmd-id> --json` */
   async postSyncRemove(repoName: string, cmdId: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> {
-    return this.exec<{ commands: PostSyncCommand[] }>(['repo', 'post-sync', 'remove', repoName, '--id', cmdId])
+    return this.exec<{ commands: PostSyncCommand[] }>(['post-sync', 'remove', repoName, '--id', cmdId])
   }
 
   // -----------------------------------------------------------------------

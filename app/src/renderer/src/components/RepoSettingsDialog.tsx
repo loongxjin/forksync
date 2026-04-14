@@ -9,12 +9,16 @@ interface RepoSettingsDialogProps {
   onClose: () => void
 }
 
+function autoName(cmd: string): string {
+  const parts = cmd.trim().split(/\s+/)
+  return parts[0] || cmd.trim()
+}
+
 export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDialogProps): JSX.Element | null {
   const { t } = useTranslation()
   const [commands, setCommands] = useState<PostSyncCommand[]>([])
   const [loading, setLoading] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
-  const [newName, setNewName] = useState('')
   const [newCmd, setNewCmd] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -36,19 +40,17 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
     if (open) {
       loadCommands()
       setShowAddForm(false)
-      setNewName('')
       setNewCmd('')
     }
   }, [open, loadCommands])
 
   const handleAdd = async (): Promise<void> => {
-    if (!newName.trim() || !newCmd.trim()) return
+    if (!newCmd.trim()) return
     setSaving(true)
     try {
-      const res = await engineApi.postSyncAdd(repoName, newName.trim(), newCmd.trim())
+      const res = await engineApi.postSyncAdd(repoName, autoName(newCmd), newCmd.trim())
       if (res.success) {
         setCommands(res.data.commands ?? [])
-        setNewName('')
         setNewCmd('')
         setShowAddForm(false)
       }
@@ -106,14 +108,11 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
                 key={cmd.id}
                 className="flex items-center justify-between rounded border border-border bg-background px-3 py-2"
               >
-                <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium">{cmd.name}</span>
-                  <code className="ml-2 text-xs text-muted-foreground">{cmd.cmd}</code>
-                </div>
+                <code className="min-w-0 flex-1 truncate text-sm">{cmd.cmd}</code>
                 <button
                   onClick={() => handleRemove(cmd.id)}
                   disabled={saving}
-                  className="ml-2 rounded px-1.5 py-0.5 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
+                  className="ml-2 shrink-0 rounded px-1.5 py-0.5 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
                 >
                   🗑
                 </button>
@@ -124,14 +123,7 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
 
         {/* Add command form */}
         {showAddForm ? (
-          <div className="space-y-2 rounded border border-border bg-background p-3">
-            <input
-              type="text"
-              placeholder={t('postSync.commandNamePlaceholder')}
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              className="w-full rounded border border-border bg-card px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-            />
+          <div className="flex items-center gap-2">
             <input
               type="text"
               placeholder={t('postSync.commandPlaceholder')}
@@ -139,28 +131,30 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
               onChange={(e) => setNewCmd(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleAdd()
-              }}
-              className="w-full rounded border border-border bg-card px-3 py-1.5 text-sm font-mono placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => {
+                if (e.key === 'Escape') {
                   setShowAddForm(false)
-                  setNewName('')
                   setNewCmd('')
-                }}
-                className="rounded px-3 py-1 text-xs text-muted-foreground hover:bg-accent"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={handleAdd}
-                disabled={saving || !newName.trim() || !newCmd.trim()}
-                className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
-                {saving ? t('common.saving') : t('common.add')}
-              </button>
-            </div>
+                }
+              }}
+              autoFocus
+              className="flex-1 rounded border border-border bg-card px-3 py-1.5 text-sm font-mono placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+            <button
+              onClick={handleAdd}
+              disabled={saving || !newCmd.trim()}
+              className="shrink-0 rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {t('common.add')}
+            </button>
+            <button
+              onClick={() => {
+                setShowAddForm(false)
+                setNewCmd('')
+              }}
+              className="shrink-0 rounded px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent"
+            >
+              {t('common.cancel')}
+            </button>
           </div>
         ) : (
           <button
