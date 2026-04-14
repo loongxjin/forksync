@@ -116,6 +116,14 @@ export function registerIpcHandlers(): void {
     return e.postSyncRemove(repoName, cmdId)
   })
 
+  ipcMain.handle('engine:summarize', async (_event, repoName: string) => {
+    return e.summarize(repoName)
+  })
+
+  ipcMain.handle('engine:summarizeRetry', async (_event, repoName: string) => {
+    return e.summarizeRetry(repoName)
+  })
+
   ipcMain.handle('app:setAutoLaunch', async (_event, enabled: boolean) => {
     try {
       app.setLoginItemSettings({

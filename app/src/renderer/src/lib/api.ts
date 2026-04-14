@@ -67,6 +67,10 @@ export interface EngineAPI {
   postSyncAdd(repoName: string, name: string, cmd: string): Promise<ApiResponse<PostSyncCommandsData>>
   postSyncRemove(repoName: string, cmdId: string): Promise<ApiResponse<PostSyncCommandsData>>
 
+  // AI Summary
+  summarize(repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>>
+  summarizeRetry(repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>>
+
   // App settings
   setAutoLaunch(enabled: boolean): Promise<{ success: boolean; error?: string }>
 }

@@ -245,5 +245,7 @@ type SyncHistoryRecord struct {
 	ConflictsFound int      `json:"conflictsFound"`
 	AutoResolved   int      `json:"autoResolved"`
 	ErrorMessage   string   `json:"errorMessage"`
+	Summary        string   `json:"summary"`
+	SummaryStatus  string   `json:"summaryStatus"`
 	CreatedAt      string   `json:"createdAt"`
 }

@@ -188,6 +188,16 @@ export class EngineClient {
     return this.exec<{ commands: PostSyncCommand[] }>(['post-sync', 'remove', repoName, '--id', cmdId])
   }
 
+  /** `forksync summarize <repo-name> --json` */
+  async summarize(repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> {
+    return this.exec<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName])
+  }
+
+  /** `forksync summarize <repo-name> --retry --json` */
+  async summarizeRetry(repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> {
+    return this.exec<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName, '--retry'])
+  }
+
   // -----------------------------------------------------------------------
   // Private — spawn + parse logic
   // -----------------------------------------------------------------------

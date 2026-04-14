@@ -23,6 +23,9 @@ type SyncConfig struct {
 	DefaultInterval string `mapstructure:"default_interval" yaml:"default_interval"`
 	SyncOnStartup   bool   `mapstructure:"sync_on_startup" yaml:"sync_on_startup"`
 	AutoLaunch      bool   `mapstructure:"auto_launch" yaml:"auto_launch"`
+	AutoSummary     bool   `mapstructure:"auto_summary" yaml:"auto_summary"`
+	SummaryAgent    string `mapstructure:"summary_agent" yaml:"summary_agent"`
+	SummaryLanguage string `mapstructure:"summary_language" yaml:"summary_language"`
 }
 
 type AgentConfig struct {
@@ -85,6 +88,9 @@ func (m *Manager) Load() (*Config, error) {
 	m.viper.SetDefault("sync.default_interval", "30m")
 	m.viper.SetDefault("sync.sync_on_startup", true)
 	m.viper.SetDefault("sync.auto_launch", false)
+	m.viper.SetDefault("sync.auto_summary", false)
+	m.viper.SetDefault("sync.summary_agent", "")
+	m.viper.SetDefault("sync.summary_language", "zh")
 	m.viper.SetDefault("agent.priority", []string{"claude", "opencode", "droid", "codex"})
 	m.viper.SetDefault("agent.timeout", "10m")
 	m.viper.SetDefault("agent.conflict_strategy", "preserve_ours")
@@ -126,6 +132,9 @@ var validConfigKeys = map[string]string{
 	"sync.default_interval": "string",
 	"sync.sync_on_startup":  "bool",
 	"sync.auto_launch":     "bool",
+	"sync.auto_summary":    "bool",
+	"sync.summary_agent":   "string",
+	"sync.summary_language": "string",
 	// agent
 	"agent.preferred":             "string",
 	"agent.priority":              "[]string",
@@ -176,6 +185,12 @@ func (m *Manager) Get(key string) (interface{}, error) {
 		return cfg.Sync.SyncOnStartup, nil
 	case "sync.auto_launch":
 		return cfg.Sync.AutoLaunch, nil
+	case "sync.auto_summary":
+		return cfg.Sync.AutoSummary, nil
+	case "sync.summary_agent":
+		return cfg.Sync.SummaryAgent, nil
+	case "sync.summary_language":
+		return cfg.Sync.SummaryLanguage, nil
 	// agent
 	case "agent.preferred":
 		return cfg.Agent.Preferred, nil
@@ -233,6 +248,16 @@ func (m *Manager) Set(key string, value string) error {
 			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
 		}
 		cfg.Sync.AutoLaunch = v
+	case "sync.auto_summary":
+		v, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
+		}
+		cfg.Sync.AutoSummary = v
+	case "sync.summary_agent":
+		cfg.Sync.SummaryAgent = value
+	case "sync.summary_language":
+		cfg.Sync.SummaryLanguage = value
 	// agent
 	case "agent.preferred":
 		cfg.Agent.Preferred = value

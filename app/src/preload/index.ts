@@ -60,6 +60,10 @@ const api = {
     ipcRenderer.invoke('engine:postSyncAdd', repoName, cmdName, cmd),
   postSyncRemove: (repoName: string, cmdId: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> =>
     ipcRenderer.invoke('engine:postSyncRemove', repoName, cmdId),
+  summarize: (repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> =>
+    ipcRenderer.invoke('engine:summarize', repoName),
+  summarizeRetry: (repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> =>
+    ipcRenderer.invoke('engine:summarizeRetry', repoName),
   setAutoLaunch: (enabled: boolean): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('app:setAutoLaunch', enabled),
   openDirectory: (): Promise<{ canceled: boolean; filePaths?: string[]; error?: string }> =>

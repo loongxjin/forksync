@@ -2,13 +2,16 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"path/filepath"
 
+	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
+	"github.com/loongxjin/forksync/engine/internal/summarizer"
 	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
@@ -48,6 +51,16 @@ func runSync(cmd *cobra.Command, args []string) error {
 	if err == nil {
 		syncer.SetHistoryStore(histStore)
 		defer histStore.Close()
+
+		// Set up summarizer if auto_summary is enabled
+		if cfg != nil && cfg.Sync.AutoSummary {
+			agentRegistry := agent.NewRegistry(cfg.Agent.Preferred)
+			summarizerInst := summarizer.NewSummarizer(histStore, agentRegistry, cfg)
+			summarizerInst.SetLogger(log.Default())
+			summarizerInst.Start()
+			syncer.SetSummarizer(summarizerInst)
+			defer summarizerInst.Stop()
+		}
 	}
 
 	// Set up logger

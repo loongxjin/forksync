@@ -47,7 +47,7 @@ func TestRecord_AndRecent(t *testing.T) {
 		CreatedAt:      now,
 	}
 
-	err := store.Record(r)
+	_, err := store.Record(r)
 	require.NoError(t, err)
 
 	records, err := store.Recent(10)
@@ -69,7 +69,7 @@ func TestRecent_Limit(t *testing.T) {
 	store := newTestStore(t)
 
 	for i := 0; i < 5; i++ {
-		err := store.Record(Record{
+		_, err := store.Record(Record{
 			RepoID:    "repo-1",
 			RepoName:  "myrepo",
 			Status:    "synced",
@@ -89,7 +89,7 @@ func TestByRepo(t *testing.T) {
 	store := newTestStore(t)
 
 	for _, repoID := range []string{"repo-a", "repo-b", "repo-a"} {
-		err := store.Record(Record{
+		_, err := store.Record(Record{
 			RepoID:    repoID,
 			RepoName:  repoID,
 			Status:    "synced",
@@ -117,7 +117,8 @@ func TestSummary(t *testing.T) {
 		{RepoID: "r4", RepoName: "r4", Status: "synced", CreatedAt: time.Now()},
 	}
 	for _, r := range records {
-		require.NoError(t, store.Record(r))
+		_, err := store.Record(r)
+		require.NoError(t, err)
 	}
 
 	totalSyncs, conflicts, errors, _, err := store.Summary()
@@ -137,10 +138,104 @@ func TestRecord_EmptyConflictFiles(t *testing.T) {
 		ConflictFiles: nil,
 		CreatedAt:     time.Now(),
 	}
-	require.NoError(t, store.Record(r))
+	_, err := store.Record(r)
+	require.NoError(t, err)
 
 	records, err := store.Recent(1)
 	require.NoError(t, err)
 	require.Len(t, records, 1)
 	assert.Equal(t, []string(nil), records[0].ConflictFiles)
+}
+
+func TestRecord_ReturnsID(t *testing.T) {
+	store := newTestStore(t)
+
+	r := Record{
+		RepoID:    "repo-1",
+		RepoName:  "myrepo",
+		Status:    "synced",
+		CreatedAt: time.Now(),
+	}
+	id, err := store.Record(r)
+	require.NoError(t, err)
+	assert.Greater(t, id, int64(0))
+
+	// Second record should have a higher ID
+	r2 := Record{
+		RepoID:    "repo-2",
+		RepoName:  "other",
+		Status:    "synced",
+		CreatedAt: time.Now(),
+	}
+	id2, err := store.Record(r2)
+	require.NoError(t, err)
+	assert.Greater(t, id2, id)
+}
+
+func TestUpdateSummary(t *testing.T) {
+	store := newTestStore(t)
+
+	r := Record{
+		RepoID:    "repo-1",
+		RepoName:  "myrepo",
+		Status:    "synced",
+		CreatedAt: time.Now(),
+	}
+	id, err := store.Record(r)
+	require.NoError(t, err)
+
+	// Update summary
+	err = store.UpdateSummary(id, "This is a test summary", "done")
+	require.NoError(t, err)
+
+	// Verify via GetByID
+	record, err := store.GetByID(id)
+	require.NoError(t, err)
+	assert.Equal(t, "This is a test summary", record.Summary)
+	assert.Equal(t, "done", record.SummaryStatus)
+}
+
+func TestLatestByRepo(t *testing.T) {
+	store := newTestStore(t)
+
+	_, err := store.Record(Record{
+		RepoID:    "repo-a",
+		RepoName:  "repo-a",
+		Status:    "synced",
+		CreatedAt: time.Now().Add(-2 * time.Hour),
+	})
+	require.NoError(t, err)
+
+	_, err = store.Record(Record{
+		RepoID:    "repo-a",
+		RepoName:  "repo-a",
+		Status:    "conflict",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	record, err := store.LatestByRepo("repo-a")
+	require.NoError(t, err)
+	assert.Equal(t, "conflict", record.Status)
+}
+
+func TestMigration_AddsSummaryColumns(t *testing.T) {
+	store := newTestStore(t)
+
+	// Record and query should work with new columns
+	r := Record{
+		RepoID:        "repo-1",
+		RepoName:      "test",
+		Status:        "synced",
+		Summary:       "test summary",
+		SummaryStatus: "done",
+		CreatedAt:     time.Now(),
+	}
+	id, err := store.Record(r)
+	require.NoError(t, err)
+
+	record, err := store.GetByID(id)
+	require.NoError(t, err)
+	assert.Equal(t, "test summary", record.Summary)
+	assert.Equal(t, "done", record.SummaryStatus)
 }

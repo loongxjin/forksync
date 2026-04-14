@@ -231,6 +231,8 @@ export interface SyncHistoryRecord {
   conflictsFound: number
   autoResolved: number
   errorMessage: string
+  summary: string
+  summaryStatus: string
   createdAt: string
 }
 
@@ -272,6 +274,9 @@ export interface EngineConfig {
     DefaultInterval: string
     SyncOnStartup: boolean
     AutoLaunch: boolean
+    AutoSummary: boolean
+    SummaryAgent: string
+    SummaryLanguage: string
   }
   Agent: {
     Preferred: string

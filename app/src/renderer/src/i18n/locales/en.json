@@ -161,7 +161,11 @@
       "about": "About",
       "aboutText": "ForkSync — Keep your fork repositories up to date",
       "configPath": "Config: ~/.forksync/config.yaml",
-      "dataPath": "Data: ~/.forksync/repos.json"
+      "dataPath": "Data: ~/.forksync/repos.json",
+      "autoSummary": "Auto-generate AI summary after sync",
+      "autoSummaryDesc": "Automatically generate an AI summary of synced commits",
+      "summaryAgent": "Summary Agent",
+      "summaryAgentAuto": "Auto"
     },
     "notification": {
       "enable": "Enable Notifications",
@@ -247,7 +251,8 @@
     "syncConflicts": "{{count}} repo(s) have conflicts",
     "syncFailed": "{{count}} repo(s) failed to sync",
     "loadConfigFailed": "Failed to load config",
-    "updateConfigFailed": "Failed to update config"
+    "updateConfigFailed": "Failed to update config",
+    "summaryRetryFailed": "Summary retry failed, please try again later"
   },
   "notify": {
     "conflictsTitle": "Conflicts in {{count}} repo(s)",
@@ -267,5 +272,12 @@
     "addCommand": "Add Command",
     "commandPlaceholder": "e.g., npm link",
     "settings": "Settings"
+  },
+  "summary": {
+    "generating": "Generating AI summary...",
+    "failed": "Summary generation failed",
+    "retry": "Retry",
+    "expand": "Expand",
+    "collapse": "Collapse"
   }
 }
