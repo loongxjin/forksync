@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/config"
@@ -24,9 +25,7 @@ func init() {
 
 func runStatus(cmd *cobra.Command, args []string) error {
 	cfgMgr := config.NewManager()
-	if _, err := cfgMgr.Load(); err != nil {
-		// Non-fatal
-	}
+	cfg, _ := cfgMgr.Load()
 
 	store := repo.NewJSONStore(cfgMgr.ConfigDir())
 	if err := store.Load(); err != nil {
@@ -38,11 +37,27 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("list repos: %w", err)
 	}
 
-	gitOps := git.NewOperations()
+	var gitOps *git.Operations
+	if cfg != nil && cfg.Proxy.Enabled && cfg.Proxy.URL != "" {
+		gitOps = git.NewOperationsWithProxy(cfg.Proxy.URL)
+	} else {
+		gitOps = git.NewOperations()
+	}
 
-	// Update ahead/behind for each repo and refresh stale conflict statuses
-	for i, r := range repos {
-		if r.Status != types.RepoStatusSyncing {
+	// Update ahead/behind for each repo concurrently and refresh stale conflict statuses
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8)
+	for i := range repos {
+		if repos[i].Status == types.RepoStatusSyncing {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			r := repos[idx]
+
 			// For repos in conflict/resolving/resolved state, re-check the actual
 			// git merge state. If the user has manually resolved and committed,
 			// the stored status is stale and should be corrected.
@@ -50,17 +65,17 @@ func runStatus(cmd *cobra.Command, args []string) error {
 				isMerging, unmergedFiles, err := gitOps.IsMergingState(cmd.Context(), r.Path)
 				if err == nil && !isMerging {
 					// No merge in progress — conflicts were resolved externally
-					repos[i].Status = types.RepoStatusSynced
-					repos[i].ErrorMessage = ""
-					if updateErr := store.Update(repos[i]); updateErr != nil {
+					repos[idx].Status = types.RepoStatusSynced
+					repos[idx].ErrorMessage = ""
+					if updateErr := store.Update(repos[idx]); updateErr != nil {
 						logger.Error("status: failed to update repo", "repo", r.Name, "error", updateErr)
 					}
 				} else if err == nil && isMerging && len(unmergedFiles) == 0 {
 					// MERGE_HEAD exists but no unmerged files — user staged all
 					// resolutions but hasn't committed yet. Still in conflict state
 					// but update the status to reflect this transitional state.
-					repos[i].Status = types.RepoStatusResolved
-					if updateErr := store.Update(repos[i]); updateErr != nil {
+					repos[idx].Status = types.RepoStatusResolved
+					if updateErr := store.Update(repos[idx]); updateErr != nil {
 						logger.Error("status: failed to update repo", "repo", r.Name, "error", updateErr)
 					}
 				} else if err == nil && isMerging && len(unmergedFiles) > 0 && r.Status == types.RepoStatusResolving {
@@ -68,9 +83,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 					// the repo is in "resolving" state. This means the agent has
 					// exited (crashed, timed out, etc.) without finishing.
 					// Roll back to "conflict" so the user can retry.
-					repos[i].Status = types.RepoStatusConflict
-					repos[i].ErrorMessage = "agent exited unexpectedly, conflict resolution incomplete"
-					if updateErr := store.Update(repos[i]); updateErr != nil {
+					repos[idx].Status = types.RepoStatusConflict
+					repos[idx].ErrorMessage = "agent exited unexpectedly, conflict resolution incomplete"
+					if updateErr := store.Update(repos[idx]); updateErr != nil {
 						logger.Error("status: failed to update repo", "repo", r.Name, "error", updateErr)
 					}
 				}
@@ -82,16 +97,17 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			}
 			statusResult, err := gitOps.Status(cmd.Context(), r)
 			if err == nil && statusResult != nil {
-				repos[i].AheadBy = statusResult.AheadBy
-				repos[i].BehindBy = statusResult.BehindBy
-				if repos[i].Status == types.RepoStatusUnconfigured && r.Upstream != "" {
-					repos[i].Status = types.RepoStatusSynced
+				repos[idx].AheadBy = statusResult.AheadBy
+				repos[idx].BehindBy = statusResult.BehindBy
+				if repos[idx].Status == types.RepoStatusUnconfigured && r.Upstream != "" {
+					repos[idx].Status = types.RepoStatusSynced
 				}
 			} else if err != nil {
 				logger.Error("status: status check failed", "repo", r.Name, "error", err)
 			}
-		}
+		}(i)
 	}
+	wg.Wait()
 
 	// Detect installed agents
 	registry := agent.NewRegistry("")
