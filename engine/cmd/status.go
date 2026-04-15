@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
@@ -53,7 +53,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 					repos[i].Status = types.RepoStatusSynced
 					repos[i].ErrorMessage = ""
 					if updateErr := store.Update(repos[i]); updateErr != nil {
-						log.Printf("status: failed to update repo %s: %v", r.Name, updateErr)
+						logger.Error("status: failed to update repo", "repo", r.Name, "error", updateErr)
 					}
 				} else if err == nil && isMerging && len(unmergedFiles) == 0 {
 					// MERGE_HEAD exists but no unmerged files — user staged all
@@ -61,7 +61,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 					// but update the status to reflect this transitional state.
 					repos[i].Status = types.RepoStatusResolved
 					if updateErr := store.Update(repos[i]); updateErr != nil {
-						log.Printf("status: failed to update repo %s: %v", r.Name, updateErr)
+						logger.Error("status: failed to update repo", "repo", r.Name, "error", updateErr)
 					}
 				} else if err == nil && isMerging && len(unmergedFiles) > 0 && r.Status == types.RepoStatusResolving {
 					// MERGE_HEAD exists and there are still unmerged files, but
@@ -71,14 +71,14 @@ func runStatus(cmd *cobra.Command, args []string) error {
 					repos[i].Status = types.RepoStatusConflict
 					repos[i].ErrorMessage = "agent exited unexpectedly, conflict resolution incomplete"
 					if updateErr := store.Update(repos[i]); updateErr != nil {
-						log.Printf("status: failed to update repo %s: %v", r.Name, updateErr)
+						logger.Error("status: failed to update repo", "repo", r.Name, "error", updateErr)
 					}
 				}
 			}
 
 			// Fetch latest refs before calculating ahead/behind
 			if fetchErr := gitOps.Fetch(cmd.Context(), r); fetchErr != nil {
-				log.Printf("status: fetch failed for %s: %v", r.Name, fetchErr)
+				logger.Error("status: fetch failed", "repo", r.Name, "error", fetchErr)
 			}
 			statusResult, err := gitOps.Status(cmd.Context(), r)
 			if err == nil && statusResult != nil {
@@ -88,7 +88,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 					repos[i].Status = types.RepoStatusSynced
 				}
 			} else if err != nil {
-				log.Printf("status: status check failed for %s: %v", r.Name, err)
+				logger.Error("status: status check failed", "repo", r.Name, "error", err)
 			}
 		}
 	}
