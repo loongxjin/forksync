@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"github.com/loongxjin/forksync/engine/internal/config"
@@ -66,16 +65,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 		defer histStore.Close()
 	}
 
-	// Set up logger
-	logDir := filepath.Join(cfgMgr.ConfigDir(), "logs")
-	log, err := logger.New(logDir)
-	if err == nil {
-		syncer.SetLogger(log)
-		defer log.Close()
-	}
-
 	// Create and start scheduler (nil notifier — notifications handled by Electron layer)
 	scheduler := sched.NewScheduler(syncer, nil, cfg)
+
+	// Ensure logger is closed on exit
+	defer logger.Close()
 
 	// Set up signal handling for graceful shutdown
 	ctx, cancel := context.WithCancel(cmd.Context())

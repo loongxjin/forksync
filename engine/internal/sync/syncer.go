@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -37,7 +36,6 @@ type Syncer struct {
 	sessionMgr    *session.Manager
 	historyStore  *history.Store
 	summarizer    *summarizer.Summarizer
-	logger        *logger.Logger
 	mu            sync.Mutex
 	active        map[string]bool // tracks repos currently syncing
 }
@@ -64,11 +62,6 @@ func (s *Syncer) SetSessionManager(mgr *session.Manager) {
 // SetHistoryStore sets the sync history store for recording sync results.
 func (s *Syncer) SetHistoryStore(h *history.Store) {
 	s.historyStore = h
-}
-
-// SetLogger sets the file logger for sync operations.
-func (s *Syncer) SetLogger(l *logger.Logger) {
-	s.logger = l
 }
 
 // SetSummarizer sets the AI summarizer for generating sync summaries.
@@ -185,7 +178,9 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 
 	// Update status to syncing
 	r.Status = types.RepoStatusSyncing
-	_ = s.store.Update(r)
+	if updateErr := s.store.Update(r); updateErr != nil {
+		logger.Error("syncer: failed to update repo to syncing", "repo", r.Name, "error", updateErr)
+	}
 
 	// Step 1: Fetch
 	if err := s.gitOps.Fetch(ctx, r); err != nil {
@@ -347,14 +342,28 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 		}}
 	}
 
-	var results []*Result
+	// Filter repos with upstream
+	var targetRepos []types.Repo
 	for _, r := range repos {
-		if r.Upstream == "" {
-			continue // skip repos without upstream
+		if r.Upstream != "" {
+			targetRepos = append(targetRepos, r)
 		}
-		result := s.SyncRepo(ctx, r)
-		results = append(results, result)
 	}
+
+	results := make([]*Result, len(targetRepos))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8) // limit concurrency to avoid overwhelming network/disk
+
+	for i, r := range targetRepos {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int, repo types.Repo) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			results[idx] = s.SyncRepo(ctx, repo)
+		}(i, r)
+	}
+	wg.Wait()
 
 	return results
 }
@@ -424,7 +433,9 @@ func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg str
 		now := types.Time{Time: time.Now()}
 		r.LastSync = &now
 	}
-	_ = s.store.Update(r)
+	if updateErr := s.store.Update(r); updateErr != nil {
+		logger.Error("syncer: failed to update repo status", "repo", r.Name, "error", updateErr)
+	}
 }
 
 // NewSyncerFromConfig creates a Syncer using config defaults.
@@ -494,7 +505,7 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 		CreatedAt:      time.Now(),
 	})
 	if err != nil {
-		s.log(fmt.Sprintf("record history error: %v", err))
+		logger.Error("record history error", "error", err)
 		return 0
 	}
 	result.HistoryID = id
@@ -503,25 +514,22 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 
 // logResult writes the sync result to the log file.
 func (s *Syncer) logResult(result *Result) {
-	if s.logger == nil {
-		return
-	}
 	switch result.Status {
 	case "synced":
-		s.logger.Info("%s: synced (%d commits pulled)", result.RepoName, result.CommitsPulled)
+		logger.Info("repo synced", "repo", result.RepoName, "commits_pulled", result.CommitsPulled)
 		for _, ps := range result.PostSyncResults {
 			if ps.Success {
-				s.logger.Info("  post-sync [%s]: OK", ps.Name)
+				logger.Info("post-sync OK", "command", ps.Name)
 			} else {
-				s.logger.Error("  post-sync [%s]: FAILED - %s", ps.Name, ps.Error)
+				logger.Error("post-sync failed", "command", ps.Name, "error", ps.Error)
 			}
 		}
 	case "up_to_date":
-		s.logger.Info("%s: already up to date", result.RepoName)
+		logger.Info("repo already up to date", "repo", result.RepoName)
 	case "conflict":
-		s.logger.Warn("%s: conflicts in %d files", result.RepoName, len(result.ConflictFiles))
+		logger.Warn("repo conflicts", "repo", result.RepoName, "files", len(result.ConflictFiles))
 	case "error":
-		s.logger.Error("%s: %s", result.RepoName, result.ErrorMessage)
+		logger.Error("repo sync error", "repo", result.RepoName, "error", result.ErrorMessage)
 	}
 }
 
@@ -530,10 +538,12 @@ func (s *Syncer) finalizeResult(result *Result) {
 	historyID := s.recordHistory(result)
 	s.logResult(result)
 
-	// Trigger async summary if: auto_summary enabled, synced, commits pulled > 0, summarizer available
+	// Trigger summary if: auto_summary enabled, synced, commits pulled > 0, summarizer available
 	if s.summarizer != nil && s.cfg != nil && s.cfg.Sync.AutoSummary &&
 		result.Status == "synced" && result.CommitsPulled > 0 && historyID > 0 {
-		go s.triggerSummarize(result, historyID)
+		// Run synchronously so that Enqueue completes before SyncRepo returns.
+		// This ensures StopAndWait can properly wait for the summarizer task.
+		s.triggerSummarize(result, historyID)
 	}
 }
 
@@ -543,7 +553,18 @@ func (s *Syncer) triggerSummarize(result *Result, historyID int64) {
 	defer cancel()
 
 	commits, err := s.gitOps.GetCommitLog(ctx, result.RepoPath, result.OldHEAD, result.UpstreamRef)
-	if err != nil || len(commits) == 0 {
+	if err != nil {
+		logger.Error("triggerSummarize: failed to get commit log", "repo", result.RepoName, "error", err)
+		if s.historyStore != nil {
+			_ = s.historyStore.UpdateSummary(historyID, "", "failed")
+		}
+		return
+	}
+	if len(commits) == 0 {
+		logger.Info("triggerSummarize: no commits to summarize", "repo", result.RepoName, "historyID", historyID)
+		if s.historyStore != nil {
+			_ = s.historyStore.UpdateSummary(historyID, "", "done")
+		}
 		return
 	}
 
@@ -570,14 +591,6 @@ func (s *Syncer) triggerSummarize(result *Result, historyID int64) {
 	})
 }
 
-// log is a helper that logs to the configured logger or std log.
-func (s *Syncer) log(msg string) {
-	if s.logger != nil {
-		s.logger.Info(msg)
-	} else {
-		log.Print(msg)
-	}
-}
 
 
 // shell returns the system shell for executing commands.

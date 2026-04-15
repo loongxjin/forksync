@@ -9,7 +9,7 @@ import (
 )
 
 // DefaultTimeout for agent CLI invocations.
-const DefaultTimeout = 30 * time.Second
+const DefaultTimeout = 3 * time.Minute
 
 // Executor invokes agent CLIs to generate summaries.
 type Executor struct {
@@ -19,6 +19,11 @@ type Executor struct {
 // NewExecutor creates a new Executor with the default timeout.
 func NewExecutor() *Executor {
 	return &Executor{timeout: DefaultTimeout}
+}
+
+// NewExecutorWithTimeout creates a new Executor with a custom timeout.
+func NewExecutorWithTimeout(timeout time.Duration) *Executor {
+	return &Executor{timeout: timeout}
 }
 
 // Summarize calls the specified agent CLI to generate a summary of the given commits.

@@ -6,12 +6,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/loongxjin/forksync/engine/internal/logger"
 
 	_ "modernc.org/sqlite"
 )
@@ -94,7 +95,7 @@ func (s *Store) migrate() error {
 	for _, m := range migrations {
 		if _, err := s.db.Exec(m); err != nil {
 			if !strings.Contains(err.Error(), "duplicate column") {
-				log.Printf("[history] migration failed: %v", err)
+				logger.Error("[history] migration failed", "error", err)
 			}
 		}
 	}

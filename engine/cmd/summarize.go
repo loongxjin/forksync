@@ -8,6 +8,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/internal/summarizer"
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -58,6 +59,8 @@ func runSummarize(cmd *cobra.Command, args []string) error {
 	}
 	defer histStore.Close()
 
+	defer logger.Close()
+
 	// Get the latest history record for this repo
 	record, err := histStore.LatestByRepo(r.ID)
 	if err != nil {
@@ -105,19 +108,25 @@ func runSummarize(cmd *cobra.Command, args []string) error {
 	}
 
 	// Update status to generating
-	_ = histStore.UpdateSummary(record.ID, "", "generating")
+	if updateErr := histStore.UpdateSummary(record.ID, "", "generating"); updateErr != nil {
+		logger.Error("summarize: failed to set generating status", "error", updateErr)
+	}
 
 	// Get commits (oldHEAD..upstreamRef)
 	upstreamRef := resolveUpstreamRef(r)
 	if record.OldHEAD == "" {
-		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
+			logger.Error("summarize: failed to set failed status (no old HEAD)", "error", updateErr)
+		}
 		return fmt.Errorf("no old HEAD recorded for %q, cannot determine pulled commits", args[0])
 	}
 
 	gitOps := git.NewOperations()
 	gitCommits, err := gitOps.GetCommitLog(cmd.Context(), r.Path, record.OldHEAD, upstreamRef)
 	if err != nil || len(gitCommits) == 0 {
-		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
+			logger.Error("summarize: failed to set failed status (no commits)", "error", updateErr)
+		}
 		return fmt.Errorf("no commits found for summarization")
 	}
 
@@ -139,12 +148,16 @@ func runSummarize(cmd *cobra.Command, args []string) error {
 	executor := summarizer.NewExecutor()
 	summary, err := executor.Summarize(cmd.Context(), commits, lang, agentName)
 	if err != nil {
-		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
+			logger.Error("summarize: failed to set failed status after error", "error", updateErr)
+		}
 		return fmt.Errorf("summarization failed: %w", err)
 	}
 
 	// Save result
-	_ = histStore.UpdateSummary(record.ID, summary, "done")
+	if updateErr := histStore.UpdateSummary(record.ID, summary, "done"); updateErr != nil {
+		logger.Error("summarize: failed to save summary result", "error", updateErr)
+	}
 
 	if isJSON() {
 		outputJSON(SummarizeData{

@@ -8,6 +8,7 @@ import (
 	"log"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/config"
@@ -33,15 +34,23 @@ type Summarizer struct {
 	logger        *log.Logger
 	closeOnce     sync.Once
 	closed        atomic.Bool
+	wg            sync.WaitGroup // tracks in-flight tasks
 }
 
 // NewSummarizer creates a new Summarizer with a buffered task queue.
 func NewSummarizer(historyStore *history.Store, agentRegistry *agent.Registry, cfg *config.Config) *Summarizer {
+	executor := NewExecutor()
+	// Allow override via sync.summary_timeout config (default: 3m)
+	if cfg != nil && cfg.Sync.SummaryTimeout != "" {
+		if d, err := time.ParseDuration(cfg.Sync.SummaryTimeout); err == nil && d > 0 {
+			executor = NewExecutorWithTimeout(d)
+		}
+	}
 	return &Summarizer{
 		queue:         make(chan Task, 10),
 		historyStore:  historyStore,
 		agentRegistry: agentRegistry,
-		executor:      NewExecutor(),
+		executor:      executor,
 		config:        cfg,
 		logger:        log.Default(),
 	}
@@ -69,6 +78,7 @@ func (s *Summarizer) Enqueue(task Task) {
 	}
 	select {
 	case s.queue <- task:
+		s.wg.Add(1)
 		s.logger.Printf("[summarizer] enqueued summary task for %s (history #%d)", task.RepoName, task.HistoryID)
 	default:
 		s.logger.Printf("[summarizer] queue full, dropping summary task for %s", task.RepoName)
@@ -81,6 +91,7 @@ func (s *Summarizer) Enqueue(task Task) {
 func (s *Summarizer) worker() {
 	for task := range s.queue {
 		s.processTask(task)
+		s.wg.Done()
 	}
 }
 
@@ -135,19 +146,19 @@ func (s *Summarizer) failTask(task Task, errMsg string) {
 	s.logger.Printf("[summarizer] summary failed for %s (history #%d): %s", task.RepoName, task.HistoryID, errMsg)
 }
 
-// RetrySummarize retries a failed summarization for a specific history record.
-func (s *Summarizer) RetrySummarize(task Task) error {
-	// Only retry failed records
-	record, err := s.historyStore.GetByID(task.HistoryID)
-	if err != nil {
-		return fmt.Errorf("get record: %w", err)
+// WaitIdle blocks until all enqueued tasks have been processed.
+// It should be called before Stop to ensure no in-flight work is lost.
+func (s *Summarizer) WaitIdle(ctx context.Context) {
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		s.logger.Printf("[summarizer] WaitIdle timed out, some tasks may not have completed")
 	}
-	if record.SummaryStatus != "failed" && record.SummaryStatus != "" {
-		return fmt.Errorf("record %d is not in failed state (current: %s)", task.HistoryID, record.SummaryStatus)
-	}
-
-	s.Enqueue(task)
-	return nil
 }
 
 // Stop signals the worker to stop (non-blocking).
@@ -157,4 +168,25 @@ func (s *Summarizer) Stop() {
 		s.closed.Store(true)
 		close(s.queue)
 	})
+}
+
+// StopAndWait stops the summarizer and waits for in-flight tasks to complete.
+func (s *Summarizer) StopAndWait(ctx context.Context) {
+	s.Stop()
+	// Drain remaining tasks from the queue so wg.Done() is called for each.
+	for task := range s.queue {
+		s.processTask(task)
+		s.wg.Done()
+	}
+	// Wait for any task still being processed by the worker.
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		s.logger.Printf("[summarizer] StopAndWait timed out")
+	}
 }

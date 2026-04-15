@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
+	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/loongxjin/forksync/engine/pkg/version"
 	"github.com/spf13/cobra"
@@ -16,6 +19,15 @@ var rootCmd = &cobra.Command{
 	Use:   "forksync",
 	Short: "ForkSync - Auto-sync your fork repos",
 	Long:  "ForkSync keeps your GitHub fork repositories up to date with their upstream sources.",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Skip logger init for version command
+		if cmd.Name() == "version" {
+			return nil
+		}
+		cfgMgr := config.NewManager()
+		logDir := filepath.Join(cfgMgr.ConfigDir(), "logs")
+		return logger.Init(logDir)
+	},
 }
 
 func init() {

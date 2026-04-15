@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -18,6 +17,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/internal/summarizer"
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -154,7 +154,9 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 
 	// Update repo status to resolving
 	r.Status = types.RepoStatusResolving
-	_ = store.Update(r)
+	if updateErr := store.Update(r); updateErr != nil {
+		logger.Error("resolve: failed to update repo to resolving", "repo", r.Name, "error", updateErr)
+	}
 
 	// resolved tracks whether the agent finished successfully.
 	// Used by the defer guard and signal handler to decide whether
@@ -168,7 +170,9 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		if !resolved.Load() {
 			r.Status = types.RepoStatusConflict
 			r.ErrorMessage = "agent process exited unexpectedly, conflict resolution incomplete"
-			_ = store.Update(r)
+			if updateErr := store.Update(r); updateErr != nil {
+				logger.Error("resolve: failed to roll back repo", "repo", r.Name, "error", updateErr)
+			}
 		}
 	}()
 
@@ -182,7 +186,9 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		if _, ok := <-sigCh; ok && !resolved.Load() {
 			r.Status = types.RepoStatusConflict
 			r.ErrorMessage = "agent process was terminated, conflict resolution incomplete"
-			_ = store.Update(r)
+			if updateErr := store.Update(r); updateErr != nil {
+				logger.Error("resolve: failed to roll back repo on signal", "repo", r.Name, "error", updateErr)
+			}
 		}
 	}()
 
@@ -196,7 +202,9 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		resolved.Store(true) // agent finished (with error) — we handle the status
 		r.Status = types.RepoStatusConflict
 		r.ErrorMessage = fmt.Sprintf("agent resolve failed: %v", err)
-		_ = store.Update(r)
+		if updateErr := store.Update(r); updateErr != nil {
+			logger.Error("resolve: failed to update repo after agent error", "repo", r.Name, "error", updateErr)
+		}
 		return fmt.Errorf("agent resolve: %w", err)
 	}
 
@@ -206,7 +214,9 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		resolved.Store(true) // agent finished but left conflicts — we handle the status
 		r.Status = types.RepoStatusConflict
 		r.ErrorMessage = fmt.Sprintf("agent left %d unresolved conflicts", len(remaining))
-		_ = store.Update(r)
+		if updateErr := store.Update(r); updateErr != nil {
+			logger.Error("resolve: failed to update repo after unresolved conflicts", "repo", r.Name, "error", updateErr)
+		}
 
 		if isJSON() {
 			outputJSON(types.ResolveData{
@@ -232,7 +242,9 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	resolved.Store(true)
 	r.Status = types.RepoStatusResolved
 	r.ErrorMessage = ""
-	_ = store.Update(r)
+	if updateErr := store.Update(r); updateErr != nil {
+		logger.Error("resolve: failed to update repo to resolved", "repo", r.Name, "error", updateErr)
+	}
 
 	// Auto-confirm or wait for user
 	confirmBeforeCommit := true
@@ -299,7 +311,9 @@ func completeAgentResolve(ctx context.Context, r types.Repo, store repo.Store, r
 	// Update status
 	r.Status = types.RepoStatusSynced
 	r.ErrorMessage = ""
-	_ = store.Update(r)
+	if updateErr := store.Update(r); updateErr != nil {
+		logger.Error("resolve: failed to update repo after complete", "repo", r.Name, "error", updateErr)
+	}
 
 	if isJSON() {
 		outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
@@ -323,7 +337,9 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error 
 
 	r.Status = types.RepoStatusConflict
 	r.ErrorMessage = ""
-	_ = store.Update(r)
+	if updateErr := store.Update(r); updateErr != nil {
+		logger.Error("resolve: failed to update repo after reject", "repo", r.Name, "error", updateErr)
+	}
 
 	if isJSON() {
 		outputJSON(types.RejectData{RepoID: r.ID, RolledBack: true}, nil)
@@ -357,7 +373,9 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 	if _, err := os.Stat(mergeHead); err != nil {
 		r.Status = types.RepoStatusSynced
 		r.ErrorMessage = ""
-		_ = store.Update(r)
+		if updateErr := store.Update(r); updateErr != nil {
+			logger.Error("resolve: failed to update repo after accept (no merge)", "repo", r.Name, "error", updateErr)
+		}
 
 		if isJSON() {
 			outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
@@ -389,7 +407,9 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 
 	r.Status = types.RepoStatusSynced
 	r.ErrorMessage = ""
-	_ = store.Update(r)
+	if updateErr := store.Update(r); updateErr != nil {
+		logger.Error("resolve: failed to update repo after accept", "repo", r.Name, "error", updateErr)
+	}
 
 	// Update existing conflict history record to "synced" and trigger AI summary if enabled.
 	triggerResolveSummary(r, cfg, cfgMgr)
@@ -447,7 +467,7 @@ func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
 func triggerResolveSummary(r types.Repo, cfg *config.Config, cfgMgr *config.Manager) {
 	histStore, err := history.NewStore(cfgMgr.ConfigDir())
 	if err != nil {
-		log.Printf("[resolve-accept] open history store: %v", err)
+		logger.Error("[resolve-accept] open history store", "error", err)
 		return
 	}
 	defer histStore.Close()
@@ -455,12 +475,14 @@ func triggerResolveSummary(r types.Repo, cfg *config.Config, cfgMgr *config.Mana
 	// Find the latest history record for this repo (the conflict one)
 	record, err := histStore.LatestByRepo(r.ID)
 	if err != nil {
-		log.Printf("[resolve-accept] find history record: %v", err)
+		logger.Error("[resolve-accept] find history record", "error", err)
 		return
 	}
 
 	// Update the existing conflict record to "synced"
-	_ = histStore.UpdateStatus(record.ID, "synced")
+	if updateErr := histStore.UpdateStatus(record.ID, "synced"); updateErr != nil {
+		logger.Error("[resolve-accept] update history status", "error", updateErr)
+	}
 
 	// Trigger AI summary if enabled
 	if cfg == nil || !cfg.Sync.AutoSummary {
@@ -476,20 +498,26 @@ func triggerResolveSummary(r types.Repo, cfg *config.Config, cfgMgr *config.Mana
 		}
 	}
 	if agentName == "" || !summarizer.IsAgentAvailable(agentName) {
-		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
+			logger.Error("[resolve-accept] update summary failed (no agent)", "error", updateErr)
+		}
 		return
 	}
 
 	// Get commits
 	upstreamRef := resolveUpstreamRef(r)
 	if record.OldHEAD == "" {
-		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
+			logger.Error("[resolve-accept] update summary failed (no old HEAD)", "error", updateErr)
+		}
 		return
 	}
 	gitOps := git.NewOperations()
 	gitCommits, err := gitOps.GetCommitLog(context.Background(), r.Path, record.OldHEAD, upstreamRef)
 	if err != nil || len(gitCommits) == 0 {
-		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
+			logger.Error("[resolve-accept] update summary failed (no commits)", "error", updateErr)
+		}
 		return
 	}
 	var commits []summarizer.CommitInfo
@@ -507,17 +535,23 @@ func triggerResolveSummary(r types.Repo, cfg *config.Config, cfgMgr *config.Mana
 	}
 
 	// Update status to generating
-	_ = histStore.UpdateSummary(record.ID, "", "generating")
+	if updateErr := histStore.UpdateSummary(record.ID, "", "generating"); updateErr != nil {
+		logger.Error("[resolve-accept] update summary status to generating", "error", updateErr)
+	}
 
 	// Execute summarization synchronously
 	executor := summarizer.NewExecutor()
 	summary, err := executor.Summarize(context.Background(), commits, lang, agentName)
 	if err != nil {
-		log.Printf("[resolve-accept] summarization failed: %v", err)
-		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		logger.Error("[resolve-accept] summarization failed", "error", err)
+		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
+			logger.Error("[resolve-accept] update summary failed after error", "error", updateErr)
+		}
 		return
 	}
 
-	_ = histStore.UpdateSummary(record.ID, summary, "done")
-	log.Printf("[resolve-accept] summary generated for %s by %s", r.Name, agentName)
+	if updateErr := histStore.UpdateSummary(record.ID, summary, "done"); updateErr != nil {
+		logger.Error("[resolve-accept] update summary to done", "error", updateErr)
+	}
+	logger.Info("[resolve-accept] summary generated", "repo", r.Name, "agent", agentName)
 }
