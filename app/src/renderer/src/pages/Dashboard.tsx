@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useRepos } from '@/contexts/RepoContext'
 import { useAgents } from '@/contexts/AgentContext'
 import { useSettings } from '@/contexts/SettingsContext'
+import { useHistory } from '@/contexts/HistoryContext'
 import { StatusCard, getStatusConfig } from '@/components/StatusCard'
 import { AgentStatusBadge } from '@/components/AgentStatusBadge'
 import { Button } from '@/components/ui/button'
@@ -14,26 +15,14 @@ import type { TFunction } from 'i18next'
 
 export function Dashboard(): JSX.Element {
   const { t } = useTranslation()
-  const { repos, loading, initialized, error, refresh, syncAll, startupSyncDone, markStartupSyncDone, showToast } = useRepos()
+  const { repos, loading, initialized, error, refresh, syncAll, syncResults, startupSyncDone, markStartupSyncDone, showToast } = useRepos()
   const { agents, preferred, sessions, initialized: agentsInitialized, refreshAgents, refreshSessions } = useAgents()
   const { engineConfig } = useSettings()
-  const [history, setHistory] = useState<SyncHistoryRecord[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
+  const { records: history, loading: historyLoading, initialized: historyInitialized, lastLoadAt, loadHistory, clearHistory } = useHistory()
+  const hasSyncing = useMemo(() => repos.some((r) => r.status === 'syncing'), [repos])
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  const loadHistory = useCallback(async () => {
-    setHistoryLoading(true)
-    try {
-      const res = await engineApi.history(undefined, 20)
-      if (res.success && res.data) {
-        setHistory(res.data.records ?? [])
-      }
-    } catch {
-      // history is best-effort
-    } finally {
-      setHistoryLoading(false)
-    }
-  }, [])
+  const syncResultsMountedRef = useRef(false)
+  const HISTORY_CACHE_MS = 30000 // 30 seconds
 
   useEffect(() => {
     if (!initialized) {
@@ -61,10 +50,28 @@ export function Dashboard(): JSX.Element {
     }
   }, [initialized, repos.length, engineConfig, syncAll, startupSyncDone, markStartupSyncDone])
 
-  // Load history on mount and after sync
+  // Load history on mount: skip if cached recently and no sync is in progress
   useEffect(() => {
+    const now = Date.now()
+    const shouldSkip =
+      historyInitialized &&
+      !hasSyncing &&
+      history.length > 0 &&
+      now - lastLoadAt < HISTORY_CACHE_MS
+
+    if (!shouldSkip) {
+      loadHistory()
+    }
+  }, [loadHistory, historyInitialized, history.length, lastLoadAt, hasSyncing])
+
+  // Reload history after sync operations complete
+  useEffect(() => {
+    if (!syncResultsMountedRef.current) {
+      syncResultsMountedRef.current = true
+      return
+    }
     loadHistory()
-  }, [loadHistory, loading])
+  }, [syncResults, loadHistory])
 
   // Poll for generating summaries.
   // Re-evaluates whenever history changes: starts polling when generating items exist,
@@ -171,7 +178,7 @@ export function Dashboard(): JSX.Element {
                 if (confirm(t('dashboard.clearHistoryConfirm'))) {
                   const res = await engineApi.historyCleanup()
                   if (res.success) {
-                    setHistory([])
+                    clearHistory()
                   } else {
                     alert(res.error || t('dashboard.clearFailed'))
                   }
