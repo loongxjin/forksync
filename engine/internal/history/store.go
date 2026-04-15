@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -97,13 +98,22 @@ func (s *Store) migrate() error {
 	if _, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY)`); err != nil {
 		return fmt.Errorf("create migration table: %w", err)
 	}
-	// Run pending migrations in order
+	// Run pending migrations in order.
+	// If a migration fails with "duplicate column", treat it as already applied
+	// and record it so the transition from the old additive scheme is seamless.
 	for _, m := range migrations {
 		var applied string
 		if err := s.db.QueryRow(`SELECT name FROM schema_migrations WHERE name = ?`, m.Name).Scan(&applied); err == nil {
 			continue // already applied
 		}
 		if _, err := s.db.Exec(m.SQL); err != nil {
+			if strings.Contains(err.Error(), "duplicate column") {
+				// Column already exists from the old migration scheme — record it and continue.
+				if _, insertErr := s.db.Exec(`INSERT INTO schema_migrations (name) VALUES (?)`, m.Name); insertErr != nil {
+					return fmt.Errorf("record migration %s: %w", m.Name, insertErr)
+				}
+				continue
+			}
 			return fmt.Errorf("migration %s failed: %w", m.Name, err)
 		}
 		if _, err := s.db.Exec(`INSERT INTO schema_migrations (name) VALUES (?)`, m.Name); err != nil {
