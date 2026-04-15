@@ -167,12 +167,7 @@ type StatusResult struct {
 
 // Status returns the ahead/behind count against the upstream branch.
 func (o *Operations) Status(ctx context.Context, repo types.Repo) (*StatusResult, error) {
-	// Try go-git first
-	result, err := o.statusGoGit(ctx, repo)
-	if err == nil {
-		return result, nil
-	}
-	// Fallback to CLI
+	// Use CLI directly for reliability and performance
 	return o.statusCLI(ctx, repo)
 }
 
