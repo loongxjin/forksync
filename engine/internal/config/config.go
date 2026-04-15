@@ -57,7 +57,10 @@ type Manager struct {
 }
 
 func NewManager() *Manager {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "."
+	}
 	return &Manager{
 		configDir: filepath.Join(home, ".forksync"),
 		viper:     viper.New(),

@@ -32,8 +32,7 @@ func init() {
 }
 
 func runHistory(cmd *cobra.Command, args []string) error {
-	cfgMgr := config.NewManager()
-	cfgMgr.Load() // ignore error — history works without config
+	_, cfgMgr := getSharedConfig()
 
 	store, err := history.NewStore(cfgMgr.ConfigDir())
 	if err != nil {

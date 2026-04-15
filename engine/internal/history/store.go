@@ -8,11 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
-
-	"github.com/loongxjin/forksync/engine/internal/logger"
 
 	_ "modernc.org/sqlite"
 )
@@ -37,7 +34,7 @@ type Record struct {
 
 // Store is the SQLite-backed sync history store.
 type Store struct {
-	mu sync.Mutex
+	mu sync.RWMutex
 	db *sql.DB
 }
 
@@ -80,23 +77,37 @@ CREATE INDEX IF NOT EXISTS idx_sync_history_repo_id ON sync_history(repo_id);
 CREATE INDEX IF NOT EXISTS idx_sync_history_created_at ON sync_history(created_at);
 `
 
-// Migration statements for adding summary columns (safe to run multiple times).
-var migrations = []string{
-	"ALTER TABLE sync_history ADD COLUMN summary TEXT DEFAULT ''",
-	"ALTER TABLE sync_history ADD COLUMN summary_status TEXT DEFAULT ''",
-	"ALTER TABLE sync_history ADD COLUMN old_head TEXT DEFAULT ''",
+// migration defines a single schema migration step.
+type migration struct {
+	Name string
+	SQL  string
+}
+
+var migrations = []migration{
+	{Name: "add_summary", SQL: "ALTER TABLE sync_history ADD COLUMN summary TEXT DEFAULT ''"},
+	{Name: "add_summary_status", SQL: "ALTER TABLE sync_history ADD COLUMN summary_status TEXT DEFAULT ''"},
+	{Name: "add_old_head", SQL: "ALTER TABLE sync_history ADD COLUMN old_head TEXT DEFAULT ''"},
 }
 
 func (s *Store) migrate() error {
 	if _, err := s.db.Exec(schema); err != nil {
 		return err
 	}
-	// Run additive migrations — ignore "duplicate column" errors
+	// Ensure migration tracking table exists
+	if _, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY)`); err != nil {
+		return fmt.Errorf("create migration table: %w", err)
+	}
+	// Run pending migrations in order
 	for _, m := range migrations {
-		if _, err := s.db.Exec(m); err != nil {
-			if !strings.Contains(err.Error(), "duplicate column") {
-				logger.Error("[history] migration failed", "error", err)
-			}
+		var applied string
+		if err := s.db.QueryRow(`SELECT name FROM schema_migrations WHERE name = ?`, m.Name).Scan(&applied); err == nil {
+			continue // already applied
+		}
+		if _, err := s.db.Exec(m.SQL); err != nil {
+			return fmt.Errorf("migration %s failed: %w", m.Name, err)
+		}
+		if _, err := s.db.Exec(`INSERT INTO schema_migrations (name) VALUES (?)`, m.Name); err != nil {
+			return fmt.Errorf("record migration %s: %w", m.Name, err)
 		}
 	}
 	return nil
@@ -122,14 +133,17 @@ func (s *Store) Record(r Record) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	id, _ := result.LastInsertId()
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("get last insert id: %w", err)
+	}
 	return id, nil
 }
 
 // Recent returns the most recent N sync history records, ordered by created_at DESC.
 func (s *Store) Recent(n int) ([]Record, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
 		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
@@ -144,8 +158,8 @@ func (s *Store) Recent(n int) ([]Record, error) {
 
 // ByRepo returns recent sync history for a specific repo, limited to N records.
 func (s *Store) ByRepo(repoID string, n int) ([]Record, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
 		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
@@ -184,8 +198,8 @@ func (s *Store) UpdateStatus(id int64, status string) error {
 
 // GetByID returns a single history record by ID.
 func (s *Store) GetByID(id int64) (*Record, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
 		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
@@ -207,8 +221,8 @@ func (s *Store) GetByID(id int64) (*Record, error) {
 
 // LatestByRepo returns the most recent history record for a specific repo.
 func (s *Store) LatestByRepo(repoID string) (*Record, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
 		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
@@ -230,8 +244,8 @@ func (s *Store) LatestByRepo(repoID string) (*Record, error) {
 
 // Summary returns aggregated stats: total syncs, conflicts, errors, and last sync time.
 func (s *Store) Summary() (totalSyncs int, conflicts int, errors int, lastSync time.Time, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	var lastSyncStr string
 	err = s.db.QueryRow(`
@@ -259,7 +273,10 @@ func (s *Store) ClearAll() (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("get rows affected: %w", err)
+	}
 	return n, nil
 }
 
@@ -272,7 +289,10 @@ func (s *Store) ClearByRepo(repoID string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("get rows affected: %w", err)
+	}
 	return n, nil
 }
 
@@ -285,7 +305,10 @@ func (s *Store) ClearBefore(before time.Time) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	n, _ := res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("get rows affected: %w", err)
+	}
 	return n, nil
 }
 
@@ -313,7 +336,10 @@ func scanRecords(rows *sql.Rows) ([]Record, error) {
 
 		parsed, err := time.Parse("2006-01-02T15:04:05Z07:00", createdAtStr)
 		if err != nil {
-			parsed, _ = time.Parse(time.RFC3339, createdAtStr)
+			parsed, err = time.Parse(time.RFC3339, createdAtStr)
+			if err != nil {
+				parsed = time.Time{}
+			}
 		}
 		r.CreatedAt = parsed
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+	"strings"
 )
 
 // Notifier sends system notifications.
@@ -44,7 +45,8 @@ func (n *Notifier) NotifyError(repoName string, errMsg string) {
 }
 
 func (n *Notifier) send(title, message string) {
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		// Use PowerShell toast notification on Windows
 		script := fmt.Sprintf(
 			"[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null; "+
@@ -58,9 +60,16 @@ func (n *Notifier) send(title, message string) {
 			title, message,
 		)
 		exec.Command("powershell", "-NoProfile", "-Command", script).Run()
-		return
+	case "darwin":
+		// macOS: use osascript
+		exec.Command("osascript", "-e", fmt.Sprintf(`display notification %q with title %q`, message, title)).Run()
+	case "linux":
+		// Linux: use notify-send
+		exec.Command("notify-send", escapeNotifySend(title), escapeNotifySend(message)).Run()
 	}
-	// macOS: use osascript
-	script := fmt.Sprintf(`display notification %q with title %q`, message, title)
-	exec.Command("osascript", "-e", script).Run()
+}
+
+// escapeNotifySend escapes special shell characters for notify-send arguments.
+func escapeNotifySend(s string) string {
+	return strings.NewReplacer("\\", "\\\\", "'", "\\'").Replace(s)
 }

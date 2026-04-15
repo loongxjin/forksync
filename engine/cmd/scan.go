@@ -3,10 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
-	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/github"
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -37,8 +35,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load config for GitHub token
-	cfgMgr := config.NewManager()
-	cfg, _ := cfgMgr.Load()
+	cfg, _ := getSharedConfig()
 	ghToken := ""
 	if cfg != nil {
 		ghToken = cfg.GitHub.Token
@@ -55,10 +52,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 
 		// Skip hidden directories and common non-project dirs
-		if d.IsDir() && (d.Name()[0] == '.' || d.Name() == "node_modules" || d.Name() == "vendor") {
+		name := d.Name()
+		if d.IsDir() && (len(name) == 0 || name[0] == '.' || name == "node_modules" || name == "vendor") {
 			return filepath.SkipDir
 		}
-
 		// Check if this is a git repo
 		if !d.IsDir() {
 			return nil
@@ -102,24 +99,20 @@ func runScan(cmd *cobra.Command, args []string) error {
 		localBranches, _ := gitOps.GetLocalBranches(cmd.Context(), path)
 		scanned.LocalBranches = localBranches
 
-		fetchCmd := exec.CommandContext(cmd.Context(), "git", "fetch", "origin", "--dry-run")
-		fetchCmd.Dir = path
-		_ = fetchCmd.Run()
-
 		originBranches, _ := gitOps.GetRemoteBranches(cmd.Context(), path, "origin")
 		scanned.RemoteBranches = originBranches
 
 		for _, r := range remotes {
 			if r.Name == "upstream" {
 				upstreamBranches, _ := gitOps.GetRemoteBranches(cmd.Context(), path, "upstream")
-				branchMap := make(map[string]bool)
+				branchMap := make(map[string]struct{})
 				for _, b := range scanned.RemoteBranches {
-					branchMap[b] = true
+					branchMap[b] = struct{}{}
 				}
 				for _, b := range upstreamBranches {
-					if !branchMap[b] {
+					if _, ok := branchMap[b]; !ok {
 						scanned.RemoteBranches = append(scanned.RemoteBranches, b)
-						branchMap[b] = true
+						branchMap[b] = struct{}{}
 					}
 				}
 				break

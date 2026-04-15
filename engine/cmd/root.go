@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/loongxjin/forksync/engine/pkg/version"
@@ -24,7 +23,7 @@ var rootCmd = &cobra.Command{
 		if cmd.Name() == "version" {
 			return nil
 		}
-		cfgMgr := config.NewManager()
+		_, cfgMgr := getSharedConfig()
 		logDir := filepath.Join(cfgMgr.ConfigDir(), "logs")
 		return logger.Init(logDir)
 	},
@@ -64,7 +63,6 @@ func outputJSON[T any](data T, err error) {
 	enc.SetIndent("", "  ")
 	if encodeErr := enc.Encode(resp); encodeErr != nil {
 		fmt.Fprintf(os.Stderr, "error encoding json: %v\n", encodeErr)
-		os.Exit(1)
 	}
 }
 

@@ -106,7 +106,10 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 }
 
 func runAgentSessions(cmd *cobra.Command, args []string) error {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("get home directory: %w", err)
+	}
 	sessionDir := filepath.Join(home, ".forksync", "sessions")
 
 	store := session.NewSessionStore(sessionDir)
@@ -150,7 +153,10 @@ func runAgentSessions(cmd *cobra.Command, args []string) error {
 }
 
 func runAgentCleanup(cmd *cobra.Command, args []string) error {
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("get home directory: %w", err)
+	}
 	sessionDir := filepath.Join(home, ".forksync", "sessions")
 
 	store := session.NewSessionStore(sessionDir)

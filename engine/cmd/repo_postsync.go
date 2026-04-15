@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
@@ -58,7 +57,7 @@ func init() {
 }
 
 func loadRepoStore() (repo.Store, error) {
-	cfgMgr := config.NewManager()
+	_, cfgMgr := getSharedConfig()
 	store := repo.NewJSONStore(cfgMgr.ConfigDir())
 	if err := store.Load(); err != nil {
 		return nil, fmt.Errorf("load repo store: %w", err)

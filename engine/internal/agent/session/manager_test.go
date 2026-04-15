@@ -180,7 +180,7 @@ func TestManager_CloseAll(t *testing.T) {
 	_, _ = mgr.GetOrCreate(context.Background(), "repo-1", "/path/1")
 	_, _ = mgr.GetOrCreate(context.Background(), "repo-2", "/path/2")
 
-	if err := mgr.CloseAll(); err != nil {
+	if err := mgr.CloseAll(context.Background()); err != nil {
 		t.Fatalf("CloseAll: %v", err)
 	}
 }

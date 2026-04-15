@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
-	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
@@ -24,8 +23,7 @@ func init() {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	cfgMgr := config.NewManager()
-	cfg, _ := cfgMgr.Load()
+	cfg, cfgMgr := getSharedConfig()
 
 	store := repo.NewJSONStore(cfgMgr.ConfigDir())
 	if err := store.Load(); err != nil {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -13,13 +12,13 @@ import (
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
+	"github.com/loongxjin/forksync/engine/internal/conflict"
+	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
-	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
-	"github.com/loongxjin/forksync/engine/internal/summarizer"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -59,8 +58,7 @@ func init() {
 }
 
 func runResolve(cmd *cobra.Command, args []string) error {
-	cfgMgr := config.NewManager()
-	cfg, _ := cfgMgr.Load()
+	cfg, cfgMgr := getSharedConfig()
 
 	store := repo.NewJSONStore(cfgMgr.ConfigDir())
 	if err := store.Load(); err != nil {
@@ -93,7 +91,7 @@ func runResolve(cmd *cobra.Command, args []string) error {
 	}
 
 	// Detect conflict files
-	conflictPaths := detectConflicts(cmd.Context(), r.Path)
+	conflictPaths := conflict.DetectConflicts(cmd.Context(), r.Path)
 	if len(conflictPaths) == 0 {
 		if isJSON() {
 			outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
@@ -209,7 +207,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	}
 
 	// Verify: check for remaining conflict markers
-	remaining := detectConflicts(ctx, r.Path)
+	remaining := conflict.DetectConflicts(ctx, r.Path)
 	if len(remaining) > 0 {
 		resolved.Store(true) // agent finished but left conflicts — we handle the status
 		r.Status = types.RepoStatusConflict
@@ -230,9 +228,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	}
 
 	// Get diff for user confirmation
-	diffCmd := exec.CommandContext(ctx, "git", "diff")
-	diffCmd.Dir = r.Path
-	diffBytes, _ := diffCmd.Output()
+	diffBytes, _ := git.NewOperations().Diff(ctx, r.Path)
 	diff := string(diffBytes)
 
 	result.Diff = diff
@@ -292,20 +288,17 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 // completeAgentResolve stages files and completes the merge.
 func completeAgentResolve(ctx context.Context, r types.Repo, store repo.Store, result *agent.AgentResult) error {
 	// Stage all resolved files
+	gitOps := git.NewOperations()
 	for _, f := range result.ResolvedFiles {
-		gitAddCmd := exec.CommandContext(ctx, "git", "add", f)
-		gitAddCmd.Dir = r.Path
-		if output, err := gitAddCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("git add %s: %s: %w", f, string(output), err)
+		if err := gitOps.StageFile(ctx, r.Path, f); err != nil {
+			return fmt.Errorf("git add %s: %w", f, err)
 		}
 	}
 
 	// Commit — skip pre-commit hooks since this is an automated merge commit
-	commitMsg := fmt.Sprintf("Merge upstream (agent-resolved conflicts)")
-	commitCmd := exec.CommandContext(ctx, "git", "commit", "-m", commitMsg, "--no-verify")
-	commitCmd.Dir = r.Path
-	if output, err := commitCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git commit: %s: %w", string(output), err)
+	commitMsg := "Merge upstream (agent-resolved conflicts)"
+	if err := gitOps.Commit(ctx, r.Path, commitMsg, true); err != nil {
+		return fmt.Errorf("git commit: %w", err)
 	}
 
 	// Update status
@@ -326,12 +319,11 @@ func completeAgentResolve(ctx context.Context, r types.Repo, store repo.Store, r
 // runResolveReject rolls back agent changes using git checkout.
 func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error {
 	// Checkout all conflicted files to restore pre-resolution state
-	conflictPaths := detectConflicts(cmd.Context(), r.Path)
+	conflictPaths := conflict.DetectConflicts(cmd.Context(), r.Path)
+	gitOps := git.NewOperations()
 	for _, f := range conflictPaths {
-		checkoutCmd := exec.CommandContext(cmd.Context(), "git", "checkout", "--", f)
-		checkoutCmd.Dir = r.Path
-		if output, err := checkoutCmd.CombinedOutput(); err != nil {
-			outputText("⚠️  checkout %s failed: %s", f, string(output))
+		if err := gitOps.CheckoutFile(cmd.Context(), r.Path, f); err != nil {
+			outputText("⚠️  checkout %s failed: %v", f, err)
 		}
 	}
 
@@ -351,7 +343,7 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error 
 
 // runResolveAccept checks for remaining conflicts and completes the merge.
 func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, cfgMgr *config.Manager) error {
-	remaining := detectConflicts(cmd.Context(), r.Path)
+	remaining := conflict.DetectConflicts(cmd.Context(), r.Path)
 
 	if len(remaining) > 0 {
 		if isJSON() {
@@ -385,23 +377,16 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 		return nil
 	}
 
+	gitOps := git.NewOperations()
 	// Stage all resolved files before committing.
-	addCmd := exec.CommandContext(cmd.Context(), "git", "add", "-A")
-	addCmd.Dir = r.Path
-	if output, err := addCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git add: %s: %w", string(output), err)
+	if err := gitOps.StageAll(cmd.Context(), r.Path); err != nil {
+		return fmt.Errorf("git add: %w", err)
 	}
 
 	// Complete the merge.
-	commitCmd := exec.CommandContext(cmd.Context(), "git", "commit", "--no-edit", "--no-verify")
-	commitCmd.Dir = r.Path
-	output, err := commitCmd.CombinedOutput()
-	if err != nil {
-		commitCmd = exec.CommandContext(cmd.Context(), "git", "commit", "-m", "Merge upstream changes (agent-resolved conflicts)", "--no-verify")
-		commitCmd.Dir = r.Path
-		output, err = commitCmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("git commit: %s: %w", string(output), err)
+	if err := gitOps.CommitNoEdit(cmd.Context(), r.Path, true); err != nil {
+		if err := gitOps.Commit(cmd.Context(), r.Path, "Merge upstream changes (agent-resolved conflicts)", true); err != nil {
+			return fmt.Errorf("git commit: %w", err)
 		}
 	}
 
@@ -412,7 +397,7 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 	}
 
 	// Update existing conflict history record to "synced" and trigger AI summary if enabled.
-	triggerResolveSummary(r, cfg, cfgMgr)
+	triggerResolveSummary(cmd.Context(), r, cfg, cfgMgr)
 
 	if isJSON() {
 		outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
@@ -422,22 +407,6 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 	return nil
 }
 
-// detectConflicts finds files with unresolved conflicts via git diff.
-func detectConflicts(ctx context.Context, repoPath string) []string {
-	cmd := exec.CommandContext(ctx, "git", "diff", "--name-only", "--diff-filter=U")
-	cmd.Dir = repoPath
-	output, err := cmd.Output()
-	if err != nil {
-		return nil
-	}
-	var files []string
-	for _, f := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		if f != "" {
-			files = append(files, f)
-		}
-	}
-	return files
-}
 
 // toConflictFiles converts string paths to ConflictFile slices.
 func toConflictFiles(paths []string) []types.ConflictFile {
@@ -464,7 +433,7 @@ func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
 
 // triggerResolveSummary updates the conflict history record to "synced" and triggers
 // AI summary generation if auto_summary is enabled.
-func triggerResolveSummary(r types.Repo, cfg *config.Config, cfgMgr *config.Manager) {
+func triggerResolveSummary(ctx context.Context, r types.Repo, cfg *config.Config, cfgMgr *config.Manager) {
 	histStore, err := history.NewStore(cfgMgr.ConfigDir())
 	if err != nil {
 		logger.Error("[resolve-accept] open history store", "error", err)
@@ -472,86 +441,22 @@ func triggerResolveSummary(r types.Repo, cfg *config.Config, cfgMgr *config.Mana
 	}
 	defer histStore.Close()
 
-	// Find the latest history record for this repo (the conflict one)
 	record, err := histStore.LatestByRepo(r.ID)
 	if err != nil {
 		logger.Error("[resolve-accept] find history record", "error", err)
 		return
 	}
 
-	// Update the existing conflict record to "synced"
 	if updateErr := histStore.UpdateStatus(record.ID, "synced"); updateErr != nil {
 		logger.Error("[resolve-accept] update history status", "error", updateErr)
 	}
 
-	// Trigger AI summary if enabled
 	if cfg == nil || !cfg.Sync.AutoSummary {
 		return
 	}
 
-	// Determine agent
-	agentName := cfg.Sync.SummaryAgent
-	if agentName == "" {
-		registry := agent.NewRegistry("")
-		if prov, err := registry.GetPreferred(); err == nil {
-			agentName = prov.Name()
-		}
-	}
-	if agentName == "" || !summarizer.IsAgentAvailable(agentName) {
-		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
-			logger.Error("[resolve-accept] update summary failed (no agent)", "error", updateErr)
-		}
-		return
-	}
-
-	// Get commits
-	upstreamRef := resolveUpstreamRef(r)
-	if record.OldHEAD == "" {
-		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
-			logger.Error("[resolve-accept] update summary failed (no old HEAD)", "error", updateErr)
-		}
-		return
-	}
-	gitOps := git.NewOperations()
-	gitCommits, err := gitOps.GetCommitLog(context.Background(), r.Path, record.OldHEAD, upstreamRef)
-	if err != nil || len(gitCommits) == 0 {
-		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
-			logger.Error("[resolve-accept] update summary failed (no commits)", "error", updateErr)
-		}
-		return
-	}
-	var commits []summarizer.CommitInfo
-	for _, c := range gitCommits {
-		commits = append(commits, summarizer.CommitInfo{
-			Hash:    c.Hash,
-			Message: c.Message,
-		})
-	}
-
-	// Determine language
-	lang := cfg.Sync.SummaryLanguage
-	if lang == "" {
-		lang = "zh"
-	}
-
-	// Update status to generating
-	if updateErr := histStore.UpdateSummary(record.ID, "", "generating"); updateErr != nil {
-		logger.Error("[resolve-accept] update summary status to generating", "error", updateErr)
-	}
-
-	// Execute summarization synchronously
-	executor := summarizer.NewExecutor()
-	summary, err := executor.Summarize(context.Background(), commits, lang, agentName)
+	_, err = generateSummary(ctx, cfg, histStore, record, r)
 	if err != nil {
-		logger.Error("[resolve-accept] summarization failed", "error", err)
-		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
-			logger.Error("[resolve-accept] update summary failed after error", "error", updateErr)
-		}
-		return
+		logger.Error("[resolve-accept] summary generation failed", "error", err)
 	}
-
-	if updateErr := histStore.UpdateSummary(record.ID, summary, "done"); updateErr != nil {
-		logger.Error("[resolve-accept] update summary to done", "error", updateErr)
-	}
-	logger.Info("[resolve-accept] summary generated", "repo", r.Name, "agent", agentName)
 }

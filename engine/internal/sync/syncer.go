@@ -107,11 +107,8 @@ func (r *Result) ToSyncResult() types.SyncResult {
 
 // SyncRepo syncs a single repository.
 func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
-	// Compute upstream ref for summarizer (same logic as mergeCLI)
-	remoteName := "upstream"
-	if r.Upstream == "" {
-		remoteName = "origin"
-	}
+	// Compute upstream ref for summarizer
+	remoteName := r.RemoteName()
 	branch := r.Branch
 	if branch == "" {
 		if b, err := s.gitOps.GetCurrentBranch(ctx, r.Path); err == nil {
@@ -214,8 +211,8 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 
 	// Step 3: Merge
 	// Remember HEAD before merge for summarizer
-	if out, err := exec.CommandContext(ctx, "git", "-C", r.Path, "rev-parse", "HEAD").Output(); err == nil {
-		result.OldHEAD = strings.TrimSpace(string(out))
+	if head, err := s.gitOps.GetHEAD(ctx, r.Path); err == nil {
+		result.OldHEAD = head
 	}
 
 	mergeResult, err := s.gitOps.Merge(ctx, r)
@@ -308,9 +305,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 
 	// Stage resolved files
 	for _, file := range result.ResolvedFiles {
-		gitAddCmd := exec.CommandContext(ctx, "git", "add", file)
-		gitAddCmd.Dir = r.Path
-		if err := gitAddCmd.Run(); err != nil {
+		if err := s.gitOps.StageFile(ctx, r.Path, file); err != nil {
 			return false
 		}
 	}
@@ -322,10 +317,8 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	}
 
 	// Complete the merge with a commit
-	commitCmd := exec.CommandContext(ctx, "git", "commit", "-m",
-		fmt.Sprintf("Merge upstream (auto-resolved by %s)", s.sessionMgr.ProviderName()))
-	commitCmd.Dir = r.Path
-	if commitErr := commitCmd.Run(); commitErr != nil {
+	commitMsg := fmt.Sprintf("Merge upstream (auto-resolved by %s)", s.sessionMgr.ProviderName())
+	if err := s.gitOps.Commit(ctx, r.Path, commitMsg, true); err != nil {
 		return false
 	}
 
@@ -441,7 +434,7 @@ func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg str
 // NewSyncerFromConfig creates a Syncer using config defaults.
 func NewSyncerFromConfig(cfg *config.Config, store repo.Store) *Syncer {
 	var gitOps *git.Operations
-	if cfg.Proxy.Enabled && cfg.Proxy.URL != "" {
+	if cfg != nil && cfg.Proxy.Enabled && cfg.Proxy.URL != "" {
 		gitOps = git.NewOperationsWithProxy(cfg.Proxy.URL)
 	} else {
 		gitOps = git.NewOperations()

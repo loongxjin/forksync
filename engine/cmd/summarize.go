@@ -4,13 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/loongxjin/forksync/engine/internal/agent"
-	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
-	"github.com/loongxjin/forksync/engine/internal/summarizer"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -40,8 +37,7 @@ type SummarizeData struct {
 }
 
 func runSummarize(cmd *cobra.Command, args []string) error {
-	cfgMgr := config.NewManager()
-	cfg, _ := cfgMgr.Load()
+	cfg, cfgMgr := getSharedConfig()
 
 	repoStore := repo.NewJSONStore(cfgMgr.ConfigDir())
 	if err := repoStore.Load(); err != nil {
@@ -61,18 +57,15 @@ func runSummarize(cmd *cobra.Command, args []string) error {
 
 	defer logger.Close()
 
-	// Get the latest history record for this repo
 	record, err := histStore.LatestByRepo(r.ID)
 	if err != nil {
 		return fmt.Errorf("no sync history found for %q", args[0])
 	}
 
-	// If retry mode, only allow retrying failed records
 	if summarizeRetry && record.SummaryStatus != "failed" {
 		return fmt.Errorf("latest sync for %q is not in failed state (current: %s)", args[0], record.SummaryStatus)
 	}
 
-	// If not retry and summary already done, skip
 	if !summarizeRetry && record.SummaryStatus == "done" {
 		if isJSON() {
 			outputJSON(SummarizeData{
@@ -88,75 +81,9 @@ func runSummarize(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Determine agent
-	agentName := ""
-	if cfg != nil {
-		agentName = cfg.Sync.SummaryAgent
-	}
-	if agentName == "" {
-		registry := agent.NewRegistry("")
-		if prov, err := registry.GetPreferred(); err == nil {
-			agentName = prov.Name()
-		}
-	}
-	if agentName == "" {
-		return fmt.Errorf("no agent available. Install Claude Code or OpenCode, or configure sync.summary_agent")
-	}
-
-	if !summarizer.IsAgentAvailable(agentName) {
-		return fmt.Errorf("agent %q is not installed", agentName)
-	}
-
-	// Update status to generating
-	if updateErr := histStore.UpdateSummary(record.ID, "", "generating"); updateErr != nil {
-		logger.Error("summarize: failed to set generating status", "error", updateErr)
-	}
-
-	// Get commits (oldHEAD..upstreamRef)
-	upstreamRef := resolveUpstreamRef(r)
-	if record.OldHEAD == "" {
-		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
-			logger.Error("summarize: failed to set failed status (no old HEAD)", "error", updateErr)
-		}
-		return fmt.Errorf("no old HEAD recorded for %q, cannot determine pulled commits", args[0])
-	}
-
-	gitOps := git.NewOperations()
-	gitCommits, err := gitOps.GetCommitLog(cmd.Context(), r.Path, record.OldHEAD, upstreamRef)
-	if err != nil || len(gitCommits) == 0 {
-		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
-			logger.Error("summarize: failed to set failed status (no commits)", "error", updateErr)
-		}
-		return fmt.Errorf("no commits found for summarization")
-	}
-
-	var commits []summarizer.CommitInfo
-	for _, c := range gitCommits {
-		commits = append(commits, summarizer.CommitInfo{
-			Hash:    c.Hash,
-			Message: c.Message,
-		})
-	}
-
-	// Determine language from config (default zh)
-	lang := "zh"
-	if cfg != nil && cfg.Sync.SummaryLanguage != "" {
-		lang = cfg.Sync.SummaryLanguage
-	}
-
-	// Execute summarization
-	executor := summarizer.NewExecutor()
-	summary, err := executor.Summarize(cmd.Context(), commits, lang, agentName)
+	summary, err := generateSummary(cmd.Context(), cfg, histStore, record, r)
 	if err != nil {
-		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
-			logger.Error("summarize: failed to set failed status after error", "error", updateErr)
-		}
-		return fmt.Errorf("summarization failed: %w", err)
-	}
-
-	// Save result
-	if updateErr := histStore.UpdateSummary(record.ID, summary, "done"); updateErr != nil {
-		logger.Error("summarize: failed to save summary result", "error", updateErr)
+		return err
 	}
 
 	if isJSON() {
@@ -167,7 +94,7 @@ func runSummarize(cmd *cobra.Command, args []string) error {
 			SummaryStatus: "done",
 		}, nil)
 	} else {
-		outputText("📝 %s — summarized by %s", record.RepoName, agentName)
+		outputText("📝 %s — summarized", record.RepoName)
 		outputText("   %s", summary)
 	}
 
@@ -175,15 +102,12 @@ func runSummarize(cmd *cobra.Command, args []string) error {
 }
 
 // resolveUpstreamRef computes the upstream remote/branch ref for a repo.
-func resolveUpstreamRef(r types.Repo) string {
-	remoteName := "upstream"
-	if r.Upstream == "" {
-		remoteName = "origin"
-	}
+func resolveUpstreamRef(ctx context.Context, r types.Repo) string {
+	remoteName := r.RemoteName()
 	branch := r.Branch
 	if branch == "" {
 		gitOps := git.NewOperations()
-		if b, err := gitOps.GetCurrentBranch(context.Background(), r.Path); err == nil {
+		if b, err := gitOps.GetCurrentBranch(ctx, r.Path); err == nil {
 			branch = b
 		}
 	}

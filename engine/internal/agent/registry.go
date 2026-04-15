@@ -59,7 +59,7 @@ func (r *Registry) GetPreferred() (AgentProvider, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("没有发现已安装的 agent CLI，请安装 Claude Code、OpenCode、Droid 或 Codex")
+	return nil, fmt.Errorf("no agent CLI found; install Claude Code, OpenCode, Droid, or Codex")
 }
 
 // GetByName returns a specific agent provider by name.

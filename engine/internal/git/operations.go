@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -23,6 +24,7 @@ var errStop = errors.New("stop")
 // Operations provides git operations with go-git primary and CLI fallback.
 type Operations struct {
 	proxyURL string
+	mu       sync.Mutex // protects os.Setenv calls for go-git proxy
 }
 
 // NewOperations creates a new Operations instance.
@@ -75,11 +77,15 @@ func (o *Operations) IsGitRepo(_ context.Context, path string) bool {
 func (o *Operations) Fetch(ctx context.Context, repo types.Repo) error {
 	// Set proxy env for go-git (it uses Go's http client which respects proxy env)
 	if o.proxyURL != "" {
+		o.mu.Lock()
 		os.Setenv("HTTP_PROXY", o.proxyURL)
 		os.Setenv("HTTPS_PROXY", o.proxyURL)
+		o.mu.Unlock()
 		defer func() {
+			o.mu.Lock()
 			os.Unsetenv("HTTP_PROXY")
 			os.Unsetenv("HTTPS_PROXY")
+			o.mu.Unlock()
 		}()
 	}
 
@@ -98,10 +104,7 @@ func (o *Operations) fetchGoGit(ctx context.Context, repo types.Repo) error {
 		return fmt.Errorf("open repo: %w", err)
 	}
 
-	remoteName := "upstream"
-	if repo.Upstream == "" {
-		remoteName = "origin"
-	}
+	remoteName := repo.RemoteName()
 
 	remote, err := r.Remote(remoteName)
 	if err != nil {
@@ -131,10 +134,7 @@ func (o *Operations) fetchGoGit(ctx context.Context, repo types.Repo) error {
 }
 
 func (o *Operations) fetchCLI(ctx context.Context, repo types.Repo) error {
-	remoteName := "upstream"
-	if repo.Upstream == "" {
-		remoteName = "origin"
-	}
+	remoteName := repo.RemoteName()
 
 	// Ensure the remote exists before fetching
 	remotes, _ := o.getRemotesCLI(ctx, repo.Path)
@@ -189,10 +189,7 @@ func (o *Operations) statusGoGit(_ context.Context, repo types.Repo) (*StatusRes
 
 	branch := head.Name().Short()
 	remoteBranchName := repo.GetRemoteBranchForLocal(branch)
-	remoteBranch := fmt.Sprintf("refs/remotes/upstream/%s", remoteBranchName)
-	if repo.Upstream == "" {
-		remoteBranch = fmt.Sprintf("refs/remotes/origin/%s", remoteBranchName)
-	}
+	remoteBranch := fmt.Sprintf("refs/remotes/%s/%s", repo.RemoteName(), remoteBranchName)
 
 	remoteRef, err := r.Reference(plumbing.ReferenceName(remoteBranch), true)
 	if err != nil {
@@ -209,14 +206,14 @@ func (o *Operations) statusGoGit(_ context.Context, repo types.Repo) (*StatusRes
 
 func (o *Operations) countDivergence(r *git.Repository, local, remote plumbing.Hash) (ahead, behind int, err error) {
 	// Build set of remote ancestors with bounded iteration
-	remoteAncestors := make(map[plumbing.Hash]bool)
+	remoteAncestors := make(map[plumbing.Hash]struct{})
 	remoteIter, err := r.Log(&git.LogOptions{From: remote})
 	if err != nil {
 		return 0, 0, fmt.Errorf("remote log: %w", err)
 	}
 	defer remoteIter.Close()
 	_ = remoteIter.ForEach(func(c *object.Commit) error {
-		remoteAncestors[c.Hash] = true
+		remoteAncestors[c.Hash] = struct{}{}
 		return nil
 	})
 
@@ -227,7 +224,7 @@ func (o *Operations) countDivergence(r *git.Repository, local, remote plumbing.H
 	}
 	defer localIter.Close()
 	err = localIter.ForEach(func(c *object.Commit) error {
-		if c.Hash == remote || remoteAncestors[c.Hash] {
+		if _, ok := remoteAncestors[c.Hash]; c.Hash == remote || ok {
 			return errStop
 		}
 		ahead++
@@ -238,14 +235,14 @@ func (o *Operations) countDivergence(r *git.Repository, local, remote plumbing.H
 	}
 
 	// Build set of local ancestors
-	localAncestors := make(map[plumbing.Hash]bool)
+	localAncestors := make(map[plumbing.Hash]struct{})
 	localIter2, err := r.Log(&git.LogOptions{From: local})
 	if err != nil {
 		return 0, 0, fmt.Errorf("local log 2: %w", err)
 	}
 	defer localIter2.Close()
 	_ = localIter2.ForEach(func(c *object.Commit) error {
-		localAncestors[c.Hash] = true
+		localAncestors[c.Hash] = struct{}{}
 		return nil
 	})
 
@@ -256,7 +253,7 @@ func (o *Operations) countDivergence(r *git.Repository, local, remote plumbing.H
 	}
 	defer remoteIter2.Close()
 	err = remoteIter2.ForEach(func(c *object.Commit) error {
-		if c.Hash == local || localAncestors[c.Hash] {
+		if _, ok := localAncestors[c.Hash]; c.Hash == local || ok {
 			return errStop
 		}
 		behind++
@@ -277,10 +274,7 @@ func (o *Operations) statusCLI(ctx context.Context, repo types.Repo) (*StatusRes
 	}
 	branch := strings.TrimSpace(string(output))
 
-	remoteName := "upstream"
-	if repo.Upstream == "" {
-		remoteName = "origin"
-	}
+	remoteName := repo.RemoteName()
 	remoteBranchName := repo.GetRemoteBranchForLocal(branch)
 	upstreamRef := fmt.Sprintf("%s/%s", remoteName, remoteBranchName)
 
@@ -323,10 +317,7 @@ func (o *Operations) Merge(ctx context.Context, repo types.Repo) (*MergeResult, 
 }
 
 func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResult, error) {
-	remoteName := "upstream"
-	if repo.Upstream == "" {
-		remoteName = "origin"
-	}
+	remoteName := repo.RemoteName()
 
 	branch := repo.Branch
 	if branch == "" {
@@ -456,15 +447,15 @@ func (o *Operations) getRemotesCLI(ctx context.Context, repoPath string) ([]Remo
 		return nil, err
 	}
 
-	seen := make(map[string]bool)
+	seen := make(map[string]struct{})
 	var result []RemoteInfo
 	for _, line := range strings.Split(string(output), "\n") {
 		parts := strings.Fields(line)
 		if len(parts) >= 2 && strings.HasSuffix(parts[len(parts)-1], "(fetch)") {
 			name := parts[0]
 			remoteURL := parts[1]
-			if !seen[name] {
-				seen[name] = true
+			if _, ok := seen[name]; !ok {
+				seen[name] = struct{}{}
 				result = append(result, RemoteInfo{Name: name, URL: remoteURL})
 			}
 		}
@@ -583,4 +574,56 @@ func (o *Operations) GetCurrentBranch(ctx context.Context, repoPath string) (str
 		return "", err
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+// GetHEAD returns the current HEAD commit hash.
+func (o *Operations) GetHEAD(ctx context.Context, repoPath string) (string, error) {
+	output, err := o.runGit(ctx, repoPath, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// StageFile stages a single file.
+func (o *Operations) StageFile(ctx context.Context, repoPath, file string) error {
+	_, err := o.runGitCombined(ctx, repoPath, "add", file)
+	return err
+}
+
+// StageAll stages all changes.
+func (o *Operations) StageAll(ctx context.Context, repoPath string) error {
+	_, err := o.runGitCombined(ctx, repoPath, "add", "-A")
+	return err
+}
+
+// Commit creates a new commit with the given message.
+func (o *Operations) Commit(ctx context.Context, repoPath, message string, noVerify bool) error {
+	args := []string{"commit", "-m", message}
+	if noVerify {
+		args = append(args, "--no-verify")
+	}
+	_, err := o.runGitCombined(ctx, repoPath, args...)
+	return err
+}
+
+// CommitNoEdit creates a commit using the default merge message.
+func (o *Operations) CommitNoEdit(ctx context.Context, repoPath string, noVerify bool) error {
+	args := []string{"commit", "--no-edit"}
+	if noVerify {
+		args = append(args, "--no-verify")
+	}
+	_, err := o.runGitCombined(ctx, repoPath, args...)
+	return err
+}
+
+// CheckoutFile restores a file to the HEAD state.
+func (o *Operations) CheckoutFile(ctx context.Context, repoPath, file string) error {
+	_, err := o.runGitCombined(ctx, repoPath, "checkout", "--", file)
+	return err
+}
+
+// Diff returns the unstaged diff output for the repository.
+func (o *Operations) Diff(ctx context.Context, repoPath string) ([]byte, error) {
+	return o.runGit(ctx, repoPath, "diff")
 }

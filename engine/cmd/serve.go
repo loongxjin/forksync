@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
@@ -42,8 +41,7 @@ type ServeStatus struct {
 }
 
 func runServe(cmd *cobra.Command, args []string) error {
-	cfgMgr := config.NewManager()
-	cfg, _ := cfgMgr.Load()
+	cfg, cfgMgr := getSharedConfig()
 
 	// Override interval from flag if provided
 	if serveInterval != "" && cfg != nil {
@@ -91,7 +89,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		enc.Encode(status)
+		if err := enc.Encode(status); err != nil {
+			fmt.Fprintf(os.Stderr, "error encoding status: %v\n", err)
+		}
 	} else {
 		intervalStr := "30m"
 		if cfg != nil && cfg.Sync.DefaultInterval != "" {

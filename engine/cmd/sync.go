@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
-	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/notify"
@@ -31,8 +30,7 @@ func init() {
 }
 
 func runSync(cmd *cobra.Command, args []string) error {
-	cfgMgr := config.NewManager()
-	cfg, _ := cfgMgr.Load()
+	cfg, cfgMgr := getSharedConfig()
 
 	store := repo.NewJSONStore(cfgMgr.ConfigDir())
 	if err := store.Load(); err != nil {
@@ -60,7 +58,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 			summarizerInst = summarizer.NewSummarizer(histStore, agentRegistry, cfg)
 				summarizerInst.SetLogger(logger.StdLogger())
 				summarizerInst.Start()
-			syncer.SetSummarizer(summarizerInst)
+				syncer.SetSummarizer(summarizerInst)
 		}
 
 		defer func() {

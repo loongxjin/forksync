@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -36,8 +37,10 @@ func (t Time) MarshalJSON() ([]byte, error) {
 }
 
 func (t *Time) UnmarshalJSON(data []byte) error {
-	str := string(data)
-	str = str[1 : len(str)-1]
+	str := strings.Trim(string(data), `"`)
+	if str == "" || str == "null" {
+		return nil
+	}
 	parsed, err := time.Parse(time.RFC3339, str)
 	if err != nil {
 		return err
@@ -88,6 +91,14 @@ func (r *Repo) GetRemoteBranchForLocal(localBranch string) string {
 		return r.BranchMapping.RemoteBranch
 	}
 	return localBranch
+}
+
+// RemoteName returns the name of the upstream remote ("upstream" if configured, "origin" otherwise).
+func (r *Repo) RemoteName() string {
+	if r.Upstream == "" {
+		return "origin"
+	}
+	return "upstream"
 }
 
 // ScannedRepo 扫描结果

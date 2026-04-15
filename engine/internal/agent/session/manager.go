@@ -106,7 +106,7 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 		// Resume failed — the session is stale on the agent side.
 		// Discard it and create a fresh one, then retry.
 		m.invalidateSession(repoID)
-		sess, retryErr := m.createSessionUnlocked(ctx, repoID, repoPath)
+		sess, retryErr := m.createSessionLocked(ctx, repoID, repoPath)
 		if retryErr != nil {
 			_ = m.store.UpdateStatus(repoID, "failed")
 			return nil, fmt.Errorf("resume failed (%v); recreate session also failed: %w", err, retryErr)
@@ -155,9 +155,9 @@ func (m *Manager) invalidateSession(repoID string) {
 	_ = m.store.UpdateStatus(repoID, "failed")
 }
 
-// createSessionUnlocked creates a new session without acquiring the mutex.
-// Callers that already hold m.mu should use createSession instead.
-func (m *Manager) createSessionUnlocked(ctx context.Context, repoID, repoPath string) (*agent.Session, error) {
+// createSessionLocked creates a new session after acquiring the mutex.
+// Safe to call when the caller does not already hold m.mu.
+func (m *Manager) createSessionLocked(ctx context.Context, repoID, repoPath string) (*agent.Session, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.createSession(ctx, repoID, repoPath)
@@ -199,13 +199,13 @@ func (m *Manager) createSession(ctx context.Context, repoID, repoPath string) (*
 }
 
 // CloseAll terminates all active sessions and clears the in-memory cache.
-func (m *Manager) CloseAll() error {
+func (m *Manager) CloseAll(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	var lastErr error
 	for repoID, sess := range m.active {
-		if err := m.provider.EndSession(context.Background(), sess.ID); err != nil {
+		if err := m.provider.EndSession(ctx, sess.ID); err != nil {
 			lastErr = err
 		}
 		delete(m.active, repoID)

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/spf13/cobra"
@@ -23,8 +22,7 @@ func init() {
 }
 
 func runRemove(cmd *cobra.Command, args []string) error {
-	cfgMgr := config.NewManager()
-	_, _ = cfgMgr.Load()
+	_, cfgMgr := getSharedConfig()
 
 	store := repo.NewJSONStore(cfgMgr.ConfigDir())
 	if err := store.Load(); err != nil {

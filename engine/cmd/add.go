@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/github"
 	"github.com/loongxjin/forksync/engine/internal/repo"
@@ -36,8 +35,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load config early for GitHub token
-	cfgMgr := config.NewManager()
-	cfg, _ := cfgMgr.Load()
+	cfg, cfgMgr := getSharedConfig()
 
 	gitOps := git.NewOperations()
 

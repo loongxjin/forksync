@@ -14,6 +14,7 @@ import (
 var (
 	defaultLogger *slog.Logger
 	rotateWriter  *dailyRotateWriter
+	mu            sync.RWMutex
 )
 
 // Init creates the default file logger in the given directory.
@@ -23,6 +24,8 @@ func Init(dir string) error {
 	if err != nil {
 		return err
 	}
+
+	mu.Lock()
 	rotateWriter = w
 
 	handler := slog.NewTextHandler(w, &slog.HandlerOptions{
@@ -30,51 +33,72 @@ func Init(dir string) error {
 	})
 	defaultLogger = slog.New(handler)
 	slog.SetDefault(defaultLogger)
+	mu.Unlock()
 	return nil
 }
 
 // Close flushes and closes the current log file.
 func Close() error {
+	mu.Lock()
+	defer mu.Unlock()
 	if rotateWriter != nil {
-		return rotateWriter.Close()
+		err := rotateWriter.Close()
+		rotateWriter = nil
+		defaultLogger = nil
+		return err
 	}
 	return nil
 }
 
 // Info logs an informational message.
 func Info(msg string, args ...any) {
-	if defaultLogger != nil {
-		defaultLogger.Info(msg, args...)
+	mu.RLock()
+	lg := defaultLogger
+	mu.RUnlock()
+	if lg != nil {
+		lg.Info(msg, args...)
 	}
 }
 
 // Error logs an error message.
 func Error(msg string, args ...any) {
-	if defaultLogger != nil {
-		defaultLogger.Error(msg, args...)
+	mu.RLock()
+	lg := defaultLogger
+	mu.RUnlock()
+	if lg != nil {
+		lg.Error(msg, args...)
 	}
 }
 
 // Warn logs a warning message.
 func Warn(msg string, args ...any) {
-	if defaultLogger != nil {
-		defaultLogger.Warn(msg, args...)
+	mu.RLock()
+	lg := defaultLogger
+	mu.RUnlock()
+	if lg != nil {
+		lg.Warn(msg, args...)
 	}
 }
 
 // Debug logs a debug message.
 func Debug(msg string, args ...any) {
-	if defaultLogger != nil {
-		defaultLogger.Debug(msg, args...)
+	mu.RLock()
+	lg := defaultLogger
+	mu.RUnlock()
+	if lg != nil {
+		lg.Debug(msg, args...)
 	}
 }
 
 // StdLogger returns a standard library *log.Logger backed by the same file writer.
 func StdLogger() *log.Logger {
-	if rotateWriter == nil {
+	mu.RLock()
+	rw := rotateWriter
+	mu.RUnlock()
+	if rw == nil {
 		return log.Default()
 	}
-	return log.New(rotateWriter, "", 0)
+	return log.New(rw, "", 0)
 }
 
 // dailyRotateWriter writes to a log file that rotates daily.
