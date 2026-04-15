@@ -1,9 +1,13 @@
 package sync
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"os/exec"
+	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,10 +19,14 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
+	"github.com/loongxjin/forksync/engine/internal/summarizer"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
-const defaultTimeout = 5 * time.Minute
+const (
+	defaultTimeout        = 5 * time.Minute
+	postSyncCommandTimeout = 60 * time.Second
+)
 
 // Syncer handles repository synchronization.
 type Syncer struct {
@@ -28,6 +36,7 @@ type Syncer struct {
 	notifier      *notify.Notifier
 	sessionMgr    *session.Manager
 	historyStore  *history.Store
+	summarizer    *summarizer.Summarizer
 	logger        *logger.Logger
 	mu            sync.Mutex
 	active        map[string]bool // tracks repos currently syncing
@@ -62,41 +71,70 @@ func (s *Syncer) SetLogger(l *logger.Logger) {
 	s.logger = l
 }
 
+// SetSummarizer sets the AI summarizer for generating sync summaries.
+func (s *Syncer) SetSummarizer(sm *summarizer.Summarizer) {
+	s.summarizer = sm
+}
+
 // Result contains the result of syncing a single repo.
 type Result struct {
-	RepoID        string
-	RepoName      string
-	Status        string // types.RepoStatus values: synced, conflict, up_to_date, error
-	CommitsPulled int
-	ConflictFiles []string
-	ErrorMessage  string
-	AgentUsed     string // agent name if auto-resolve was attempted
-	ConflictsFound int   // number of conflicts detected
-	AutoResolved   int   // number of files auto-resolved by agent
-	PendingConfirm []string // files pending user confirmation
+	RepoID          string
+	RepoName        string
+	RepoPath        string // used by summarizer to get commit list
+	UpstreamRef     string // upstream remote/branch ref for commit diff, e.g. "upstream/main"
+	OldHEAD         string // HEAD before merge, used to compute pulled commits
+	Status          string // types.RepoStatus values: synced, conflict, up_to_date, error
+	CommitsPulled   int
+	ConflictFiles   []string
+	ErrorMessage    string
+	AgentUsed       string    // agent name if auto-resolve was attempted
+	ConflictsFound  int       // number of conflicts detected
+	AutoResolved    int       // number of files auto-resolved by agent
+	PendingConfirm  []string  // files pending user confirmation
+	PostSyncResults []types.PostSyncResult
+	HistoryID       int64     // ID of the created history record
 }
 
 // ToSyncResult converts Result to types.SyncResult for JSON output.
 func (r *Result) ToSyncResult() types.SyncResult {
 	return types.SyncResult{
-		RepoID:         r.RepoID,
-		RepoName:       r.RepoName,
-		Status:         types.RepoStatus(r.Status),
-		CommitsPulled:  r.CommitsPulled,
-		ConflictFiles:  r.ConflictFiles,
-		ErrorMessage:   r.ErrorMessage,
-		AgentUsed:      r.AgentUsed,
-		ConflictsFound: r.ConflictsFound,
-		AutoResolved:   r.AutoResolved,
-		PendingConfirm: r.PendingConfirm,
+		RepoID:          r.RepoID,
+		RepoName:        r.RepoName,
+		Status:          types.RepoStatus(r.Status),
+		CommitsPulled:   r.CommitsPulled,
+		ConflictFiles:   r.ConflictFiles,
+		ErrorMessage:    r.ErrorMessage,
+		AgentUsed:       r.AgentUsed,
+		ConflictsFound:  r.ConflictsFound,
+		AutoResolved:    r.AutoResolved,
+		PendingConfirm:  r.PendingConfirm,
+		PostSyncResults: r.PostSyncResults,
 	}
 }
 
 // SyncRepo syncs a single repository.
 func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
+	// Compute upstream ref for summarizer (same logic as mergeCLI)
+	remoteName := "upstream"
+	if r.Upstream == "" {
+		remoteName = "origin"
+	}
+	branch := r.Branch
+	if branch == "" {
+		if b, err := s.gitOps.GetCurrentBranch(ctx, r.Path); err == nil {
+			branch = b
+		}
+	}
+	if branch == "" {
+		branch = "main"
+	}
+	upstreamRef := fmt.Sprintf("%s/%s", remoteName, r.GetRemoteBranchForLocal(branch))
+
 	result := &Result{
-		RepoID:   r.ID,
-		RepoName: r.Name,
+		RepoID:      r.ID,
+		RepoName:    r.Name,
+		RepoPath:    r.Path,
+		UpstreamRef: upstreamRef,
 	}
 
 	// Check if already syncing
@@ -180,6 +218,11 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	result.CommitsPulled = statusResult.BehindBy
 
 	// Step 3: Merge
+	// Remember HEAD before merge for summarizer
+	if out, err := exec.CommandContext(ctx, "git", "-C", r.Path, "rev-parse", "HEAD").Output(); err == nil {
+		result.OldHEAD = strings.TrimSpace(string(out))
+	}
+
 	mergeResult, err := s.gitOps.Merge(ctx, r)
 	if err != nil {
 		result.Status = "error"
@@ -222,6 +265,11 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	// Success
 	result.Status = "synced"
 	s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
+	result.PostSyncResults = s.runPostSyncCommands(ctx, r)
+	if postSyncErr := s.postSyncError(result.PostSyncResults); postSyncErr != "" {
+		result.ErrorMessage = postSyncErr
+		s.updateRepoStatus(r.ID, types.RepoStatusSynced, result.ErrorMessage)
+	}
 	s.notifyResult(r.Name, result)
 	s.finalizeResult(result)
 	return result
@@ -311,6 +359,60 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 	return results
 }
 
+// runPostSyncCommands executes the repo's post-sync commands in order.
+// It stops on the first failure. The sync status remains "synced" regardless.
+func (s *Syncer) runPostSyncCommands(ctx context.Context, r types.Repo) []types.PostSyncResult {
+	if len(r.PostSyncCommands) == 0 {
+		return nil
+	}
+
+	var results []types.PostSyncResult
+	for _, cmd := range r.PostSyncCommands {
+		cmdCtx, cancel := context.WithTimeout(ctx, postSyncCommandTimeout)
+		sh, flag := shell()
+		c := exec.CommandContext(cmdCtx, sh, flag, cmd.Cmd)
+		c.Dir = r.Path
+
+		var stdout, stderr bytes.Buffer
+		c.Stdout = &stdout
+		c.Stderr = &stderr
+
+		err := c.Run()
+		cancel()
+
+		res := types.PostSyncResult{
+			Name: cmd.Name,
+			Cmd:  cmd.Cmd,
+		}
+
+		if err != nil {
+			res.Success = false
+			res.Error = strings.TrimSpace(stderr.String())
+			if res.Error == "" {
+				res.Error = err.Error()
+			}
+			results = append(results, res)
+			break // stop on first failure
+		}
+
+		res.Success = true
+		res.Output = strings.TrimSpace(stdout.String())
+		results = append(results, res)
+	}
+
+	return results
+}
+
+// postSyncError returns a summary error message if any post-sync command failed.
+func (s *Syncer) postSyncError(results []types.PostSyncResult) string {
+	for _, r := range results {
+		if !r.Success {
+			return fmt.Sprintf("post-sync command \"%s\" failed: %s", r.Name, r.Error)
+		}
+	}
+	return ""
+}
+
 func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg string) {
 	r, ok := s.store.Get(id)
 	if !ok {
@@ -360,15 +462,24 @@ func (s *Syncer) notifyResult(repoName string, result *Result) {
 
 // recordHistory saves the sync result to the history store.
 // Skips recording for 'up_to_date' status as it's just a check, not an actual sync.
-func (s *Syncer) recordHistory(result *Result) {
+// Returns the history record ID if recording succeeded.
+func (s *Syncer) recordHistory(result *Result) int64 {
 	if s.historyStore == nil {
-		return
+		return 0
 	}
 	// Don't record up_to_date to history - it's just a status check
 	if result.Status == "up_to_date" {
-		return
+		return 0
 	}
-	_ = s.historyStore.Record(history.Record{
+
+	// Pre-set summary_status to "pending" if auto-summarization will be triggered
+	summaryStatus := ""
+	if s.summarizer != nil && s.cfg != nil && s.cfg.Sync.AutoSummary &&
+		result.Status == "synced" && result.CommitsPulled > 0 {
+		summaryStatus = "pending"
+	}
+
+	id, err := s.historyStore.Record(history.Record{
 		RepoID:         result.RepoID,
 		RepoName:       result.RepoName,
 		Status:         result.Status,
@@ -378,8 +489,16 @@ func (s *Syncer) recordHistory(result *Result) {
 		ConflictsFound: result.ConflictsFound,
 		AutoResolved:   result.AutoResolved,
 		ErrorMessage:   result.ErrorMessage,
+		SummaryStatus:  summaryStatus,
+		OldHEAD:        result.OldHEAD,
 		CreatedAt:      time.Now(),
 	})
+	if err != nil {
+		s.log(fmt.Sprintf("record history error: %v", err))
+		return 0
+	}
+	result.HistoryID = id
+	return id
 }
 
 // logResult writes the sync result to the log file.
@@ -390,6 +509,13 @@ func (s *Syncer) logResult(result *Result) {
 	switch result.Status {
 	case "synced":
 		s.logger.Info("%s: synced (%d commits pulled)", result.RepoName, result.CommitsPulled)
+		for _, ps := range result.PostSyncResults {
+			if ps.Success {
+				s.logger.Info("  post-sync [%s]: OK", ps.Name)
+			} else {
+				s.logger.Error("  post-sync [%s]: FAILED - %s", ps.Name, ps.Error)
+			}
+		}
 	case "up_to_date":
 		s.logger.Info("%s: already up to date", result.RepoName)
 	case "conflict":
@@ -399,8 +525,66 @@ func (s *Syncer) logResult(result *Result) {
 	}
 }
 
-// finalizeResult records history and logs the result.
+// finalizeResult records history, logs the result, and triggers summarization if needed.
 func (s *Syncer) finalizeResult(result *Result) {
-	s.recordHistory(result)
+	historyID := s.recordHistory(result)
 	s.logResult(result)
+
+	// Trigger async summary if: auto_summary enabled, synced, commits pulled > 0, summarizer available
+	if s.summarizer != nil && s.cfg != nil && s.cfg.Sync.AutoSummary &&
+		result.Status == "synced" && result.CommitsPulled > 0 && historyID > 0 {
+		go s.triggerSummarize(result, historyID)
+	}
+}
+
+// triggerSummarize fetches commit list and enqueues a summarization task.
+func (s *Syncer) triggerSummarize(result *Result, historyID int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	commits, err := s.gitOps.GetCommitLog(ctx, result.RepoPath, result.OldHEAD, result.UpstreamRef)
+	if err != nil || len(commits) == 0 {
+		return
+	}
+
+	// Map git.CommitInfo to summarizer.CommitInfo
+	var summarizerCommits []summarizer.CommitInfo
+	for _, c := range commits {
+		summarizerCommits = append(summarizerCommits, summarizer.CommitInfo{
+			Hash:    c.Hash,
+			Message: c.Message,
+		})
+	}
+
+	// Determine language from config (default zh)
+	lang := s.cfg.Sync.SummaryLanguage
+	if lang == "" {
+		lang = "zh"
+	}
+
+	s.summarizer.Enqueue(summarizer.Task{
+		HistoryID: historyID,
+		RepoName:  result.RepoName,
+		Commits:   summarizerCommits,
+		Language:  lang,
+	})
+}
+
+// log is a helper that logs to the configured logger or std log.
+func (s *Syncer) log(msg string) {
+	if s.logger != nil {
+		s.logger.Info(msg)
+	} else {
+		log.Print(msg)
+	}
+}
+
+
+// shell returns the system shell for executing commands.
+// Uses "cmd" on Windows, "sh" on all other platforms.
+func shell() (string, string) {
+	if runtime.GOOS == "windows" {
+		return "cmd", "/c"
+	}
+	return "sh", "-c"
 }

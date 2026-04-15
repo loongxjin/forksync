@@ -6,8 +6,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +28,9 @@ type Record struct {
 	ConflictsFound int       `json:"conflictsFound"`
 	AutoResolved   int       `json:"autoResolved"`
 	ErrorMessage   string    `json:"errorMessage"`
+	Summary        string    `json:"summary"`
+	SummaryStatus  string    `json:"summaryStatus"`
+	OldHEAD        string    `json:"oldHEAD"`
 	CreatedAt      time.Time `json:"createdAt"`
 }
 
@@ -74,28 +79,50 @@ CREATE INDEX IF NOT EXISTS idx_sync_history_repo_id ON sync_history(repo_id);
 CREATE INDEX IF NOT EXISTS idx_sync_history_created_at ON sync_history(created_at);
 `
 
-func (s *Store) migrate() error {
-	_, err := s.db.Exec(schema)
-	return err
+// Migration statements for adding summary columns (safe to run multiple times).
+var migrations = []string{
+	"ALTER TABLE sync_history ADD COLUMN summary TEXT DEFAULT ''",
+	"ALTER TABLE sync_history ADD COLUMN summary_status TEXT DEFAULT ''",
+	"ALTER TABLE sync_history ADD COLUMN old_head TEXT DEFAULT ''",
 }
 
-// Record inserts a new sync history entry.
-func (s *Store) Record(r Record) error {
+func (s *Store) migrate() error {
+	if _, err := s.db.Exec(schema); err != nil {
+		return err
+	}
+	// Run additive migrations — ignore "duplicate column" errors
+	for _, m := range migrations {
+		if _, err := s.db.Exec(m); err != nil {
+			if !strings.Contains(err.Error(), "duplicate column") {
+				log.Printf("[history] migration failed: %v", err)
+			}
+		}
+	}
+	return nil
+}
+
+// Record inserts a new sync history entry and returns the inserted row ID.
+func (s *Store) Record(r Record) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	conflictFiles, err := json.Marshal(r.ConflictFiles)
 	if err != nil {
-		return fmt.Errorf("marshal conflict files: %w", err)
+		return 0, fmt.Errorf("marshal conflict files: %w", err)
 	}
 
-	_, err = s.db.Exec(`
-		INSERT INTO sync_history (repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	result, err := s.db.Exec(`
+		INSERT INTO sync_history (repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, summary, summary_status, old_head, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.RepoID, r.RepoName, r.Status, r.CommitsPulled, string(conflictFiles),
-		r.AgentUsed, r.ConflictsFound, r.AutoResolved, r.ErrorMessage, r.CreatedAt,
+		r.AgentUsed, r.ConflictsFound, r.AutoResolved, r.ErrorMessage,
+		r.Summary, r.SummaryStatus, r.OldHEAD, r.CreatedAt,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	id, _ := result.LastInsertId()
+	return id, nil
 }
 
 // Recent returns the most recent N sync history records, ordered by created_at DESC.
@@ -104,7 +131,7 @@ func (s *Store) Recent(n int) ([]Record, error) {
 	defer s.mu.Unlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, created_at
+		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
 		FROM sync_history ORDER BY created_at DESC LIMIT ?`, n)
 	if err != nil {
 		return nil, err
@@ -120,7 +147,7 @@ func (s *Store) ByRepo(repoID string, n int) ([]Record, error) {
 	defer s.mu.Unlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, created_at
+		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
 		FROM sync_history WHERE repo_id = ? ORDER BY created_at DESC LIMIT ?`, repoID, n)
 	if err != nil {
 		return nil, err
@@ -128,6 +155,76 @@ func (s *Store) ByRepo(repoID string, n int) ([]Record, error) {
 	defer rows.Close()
 
 	return scanRecords(rows)
+}
+
+// UpdateSummary updates the summary and summary_status for a history record.
+func (s *Store) UpdateSummary(id int64, summary, status string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(
+		`UPDATE sync_history SET summary = ?, summary_status = ? WHERE id = ?`,
+		summary, status, id,
+	)
+	return err
+}
+
+// UpdateStatus updates the sync status for a history record.
+func (s *Store) UpdateStatus(id int64, status string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.Exec(
+		`UPDATE sync_history SET status = ? WHERE id = ?`,
+		status, id,
+	)
+	return err
+}
+
+// GetByID returns a single history record by ID.
+func (s *Store) GetByID(id int64) (*Record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	rows, err := s.db.Query(`
+		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
+		FROM sync_history WHERE id = ?`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records, err := scanRecords(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 {
+		return nil, fmt.Errorf("record not found: %d", id)
+	}
+	return &records[0], nil
+}
+
+// LatestByRepo returns the most recent history record for a specific repo.
+func (s *Store) LatestByRepo(repoID string) (*Record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	rows, err := s.db.Query(`
+		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
+		FROM sync_history WHERE repo_id = ? ORDER BY created_at DESC LIMIT 1`, repoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records, err := scanRecords(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 {
+		return nil, fmt.Errorf("no history for repo: %s", repoID)
+	}
+	return &records[0], nil
 }
 
 // Summary returns aggregated stats: total syncs, conflicts, errors, and last sync time.
@@ -205,7 +302,7 @@ func scanRecords(rows *sql.Rows) ([]Record, error) {
 
 		if err := rows.Scan(&r.ID, &r.RepoID, &r.RepoName, &r.Status, &r.CommitsPulled,
 			&conflictFilesJSON, &r.AgentUsed, &r.ConflictsFound, &r.AutoResolved,
-			&r.ErrorMessage, &createdAtStr); err != nil {
+			&r.ErrorMessage, &r.Summary, &r.SummaryStatus, &r.OldHEAD, &createdAtStr); err != nil {
 			return nil, err
 		}
 

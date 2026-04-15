@@ -59,7 +59,7 @@
   },
   "repos": {
     "title": "仓库",
-    "refresh": "🔄 刷新",
+    "refresh": "刷新",
     "scan": "📂 扫描",
     "addRepo": "+ 添加仓库",
     "loading": "加载中...",
@@ -119,7 +119,7 @@
   },
   "conflicts": {
     "title": "冲突",
-    "refresh": "🔄 刷新",
+    "refresh": "刷新",
     "noConflicts": "未检测到冲突。",
     "noConflictsHint": "所有仓库已同步且最新。",
     "back": "← 返回",
@@ -161,7 +161,11 @@
       "about": "关于",
       "aboutText": "ForkSync — 保持 Fork 仓库同步更新",
       "configPath": "配置：~/.forksync/config.yaml",
-      "dataPath": "数据：~/.forksync/repos.json"
+      "dataPath": "数据：~/.forksync/repos.json",
+      "autoSummary": "同步后自动生成 AI 总结",
+      "autoSummaryDesc": "同步成功后自动使用 AI 生成同步内容总结",
+      "summaryAgent": "总结 Agent",
+      "summaryAgentAuto": "自动选择"
     },
     "notification": {
       "enable": "启用通知",
@@ -247,7 +251,8 @@
     "syncConflicts": "{{count}} 个仓库存在冲突",
     "syncFailed": "{{count}} 个仓库同步失败",
     "loadConfigFailed": "加载配置失败",
-    "updateConfigFailed": "更新配置失败"
+    "updateConfigFailed": "更新配置失败",
+    "summaryRetryFailed": "总结重试失败，请稍后再试"
   },
   "notify": {
     "conflictsTitle": "{{count}} 个仓库存在冲突",
@@ -259,5 +264,20 @@
   },
   "mainProcess": {
     "selectRepoDir": "选择仓库目录"
+  },
+  "postSync": {
+    "title": "Post-Sync 命令",
+    "description": "同步成功后自动执行的命令",
+    "empty": "暂无 post-sync 命令",
+    "addCommand": "添加命令",
+    "commandPlaceholder": "输入命令，如 npm link",
+    "settings": "设置"
+  },
+  "summary": {
+    "generating": "AI 总结生成中...",
+    "failed": "总结生成失败",
+    "retry": "重试",
+    "expand": "展开",
+    "collapse": "收起"
   }
 }

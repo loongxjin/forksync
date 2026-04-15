@@ -29,6 +29,13 @@ import type {
 /** Default timeout for engine commands (10 minutes — agent resolve can be slow) */
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
 
+/** Post-sync command — mirrors Go PostSyncCommand */
+export interface PostSyncCommand {
+  id: string
+  name: string
+  cmd: string
+}
+
 export class EngineClient {
   private binaryPath: string
   private projectRoot: string
@@ -38,7 +45,8 @@ export class EngineClient {
     // Production: bundled binary in resources
     // Development: use `go run`
     if (app.isPackaged) {
-      this.binaryPath = join(process.resourcesPath, 'forksync')
+      const ext = process.platform === 'win32' ? '.exe' : ''
+      this.binaryPath = join(process.resourcesPath, `forksync${ext}`)
       this.projectRoot = ''
       this.engineDir = ''
     } else {
@@ -163,6 +171,31 @@ export class EngineClient {
   /** `forksync config set <key> <value> --json` */
   async configSet(key: string, value: string): Promise<ApiResponse<ConfigSetData>> {
     return this.exec<ConfigSetData>(['config', 'set', key, value])
+  }
+
+  /** `forksync post-sync list <name> --json` */
+  async postSyncList(repoName: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> {
+    return this.exec<{ commands: PostSyncCommand[] }>(['post-sync', 'list', repoName])
+  }
+
+  /** `forksync post-sync add <name> --name <name> --cmd <cmd> --json` */
+  async postSyncAdd(repoName: string, cmdName: string, cmd: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> {
+    return this.exec<{ commands: PostSyncCommand[] }>(['post-sync', 'add', repoName, '--name', cmdName, '--cmd', cmd])
+  }
+
+  /** `forksync post-sync remove <name> --id <cmd-id> --json` */
+  async postSyncRemove(repoName: string, cmdId: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> {
+    return this.exec<{ commands: PostSyncCommand[] }>(['post-sync', 'remove', repoName, '--id', cmdId])
+  }
+
+  /** `forksync summarize <repo-name> --json` */
+  async summarize(repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> {
+    return this.exec<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName])
+  }
+
+  /** `forksync summarize <repo-name> --retry --json` */
+  async summarizeRetry(repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> {
+    return this.exec<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName, '--retry'])
   }
 
   // -----------------------------------------------------------------------

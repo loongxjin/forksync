@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -15,7 +16,10 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/git"
+	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/repo"
+	"github.com/loongxjin/forksync/engine/internal/summarizer"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -70,7 +74,7 @@ func runResolve(cmd *cobra.Command, args []string) error {
 
 	// Handle --accept
 	if resolveAccept {
-		return runResolveAccept(cmd, r, store)
+		return runResolveAccept(cmd, r, store, cfg, cfgMgr)
 	}
 
 	// Handle --reject: rollback to pre-resolution state
@@ -330,7 +334,7 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error 
 }
 
 // runResolveAccept checks for remaining conflicts and completes the merge.
-func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store) error {
+func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, cfgMgr *config.Manager) error {
 	remaining := detectConflicts(cmd.Context(), r.Path)
 
 	if len(remaining) > 0 {
@@ -364,8 +368,6 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store) error 
 	}
 
 	// Stage all resolved files before committing.
-	// Agent edits files in the working tree but does not run `git add`,
-	// so we must stage them explicitly.
 	addCmd := exec.CommandContext(cmd.Context(), "git", "add", "-A")
 	addCmd.Dir = r.Path
 	if output, err := addCmd.CombinedOutput(); err != nil {
@@ -373,9 +375,6 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store) error 
 	}
 
 	// Complete the merge.
-	// Use --no-verify to skip pre-commit hooks (lint, typecheck, etc.)
-	// because the agent's conflict resolution commit should not be blocked
-	// by code quality checks — the user can run those separately later.
 	commitCmd := exec.CommandContext(cmd.Context(), "git", "commit", "--no-edit", "--no-verify")
 	commitCmd.Dir = r.Path
 	output, err := commitCmd.CombinedOutput()
@@ -391,6 +390,9 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store) error 
 	r.Status = types.RepoStatusSynced
 	r.ErrorMessage = ""
 	_ = store.Update(r)
+
+	// Update existing conflict history record to "synced" and trigger AI summary if enabled.
+	triggerResolveSummary(r, cfg, cfgMgr)
 
 	if isJSON() {
 		outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
@@ -438,4 +440,84 @@ func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
 		Summary:       r.Summary,
 		SessionID:     r.SessionID,
 	}
+}
+
+// triggerResolveSummary updates the conflict history record to "synced" and triggers
+// AI summary generation if auto_summary is enabled.
+func triggerResolveSummary(r types.Repo, cfg *config.Config, cfgMgr *config.Manager) {
+	histStore, err := history.NewStore(cfgMgr.ConfigDir())
+	if err != nil {
+		log.Printf("[resolve-accept] open history store: %v", err)
+		return
+	}
+	defer histStore.Close()
+
+	// Find the latest history record for this repo (the conflict one)
+	record, err := histStore.LatestByRepo(r.ID)
+	if err != nil {
+		log.Printf("[resolve-accept] find history record: %v", err)
+		return
+	}
+
+	// Update the existing conflict record to "synced"
+	_ = histStore.UpdateStatus(record.ID, "synced")
+
+	// Trigger AI summary if enabled
+	if cfg == nil || !cfg.Sync.AutoSummary {
+		return
+	}
+
+	// Determine agent
+	agentName := cfg.Sync.SummaryAgent
+	if agentName == "" {
+		registry := agent.NewRegistry("")
+		if prov, err := registry.GetPreferred(); err == nil {
+			agentName = prov.Name()
+		}
+	}
+	if agentName == "" || !summarizer.IsAgentAvailable(agentName) {
+		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		return
+	}
+
+	// Get commits
+	upstreamRef := resolveUpstreamRef(r)
+	if record.OldHEAD == "" {
+		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		return
+	}
+	gitOps := git.NewOperations()
+	gitCommits, err := gitOps.GetCommitLog(context.Background(), r.Path, record.OldHEAD, upstreamRef)
+	if err != nil || len(gitCommits) == 0 {
+		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		return
+	}
+	var commits []summarizer.CommitInfo
+	for _, c := range gitCommits {
+		commits = append(commits, summarizer.CommitInfo{
+			Hash:    c.Hash,
+			Message: c.Message,
+		})
+	}
+
+	// Determine language
+	lang := cfg.Sync.SummaryLanguage
+	if lang == "" {
+		lang = "zh"
+	}
+
+	// Update status to generating
+	_ = histStore.UpdateSummary(record.ID, "", "generating")
+
+	// Execute summarization synchronously
+	executor := summarizer.NewExecutor()
+	summary, err := executor.Summarize(context.Background(), commits, lang, agentName)
+	if err != nil {
+		log.Printf("[resolve-accept] summarization failed: %v", err)
+		_ = histStore.UpdateSummary(record.ID, "", "failed")
+		return
+	}
+
+	_ = histStore.UpdateSummary(record.ID, summary, "done")
+	log.Printf("[resolve-accept] summary generated for %s by %s", r.Name, agentName)
 }

@@ -51,6 +51,20 @@ func (o *Operations) proxyEnv() []string {
 	)
 }
 
+// runGit runs a git command in the repo directory and returns stdout.
+func (o *Operations) runGit(ctx context.Context, repoPath string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repoPath}, args...)...)
+	cmd.Env = o.proxyEnv()
+	return cmd.Output()
+}
+
+// runGitCombined runs a git command and returns combined stdout+stderr.
+func (o *Operations) runGitCombined(ctx context.Context, repoPath string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repoPath}, args...)...)
+	cmd.Env = o.proxyEnv()
+	return cmd.CombinedOutput()
+}
+
 // IsGitRepo checks if the given path is a valid git repository.
 func (o *Operations) IsGitRepo(_ context.Context, path string) bool {
 	_, err := git.PlainOpen(path)
@@ -132,18 +146,12 @@ func (o *Operations) fetchCLI(ctx context.Context, repo types.Repo) error {
 		}
 	}
 	if !remoteExists && repo.Upstream != "" {
-		cmd := exec.CommandContext(ctx, "git", "remote", "add", remoteName, repo.Upstream)
-		cmd.Dir = repo.Path
-		cmd.Env = o.proxyEnv()
-		if err := cmd.Run(); err != nil {
+		if _, err := o.runGit(ctx, repo.Path, "remote", "add", remoteName, repo.Upstream); err != nil {
 			return fmt.Errorf("git remote add %s: %w", remoteName, err)
 		}
 	}
 
-	cmd := exec.CommandContext(ctx, "git", "fetch", remoteName)
-	cmd.Dir = repo.Path
-	cmd.Env = o.proxyEnv()
-	output, err := cmd.CombinedOutput()
+	output, err := o.runGitCombined(ctx, repo.Path, "fetch", remoteName)
 	if err != nil {
 		return fmt.Errorf("git fetch %s: %s: %w", remoteName, string(output), err)
 	}
@@ -159,12 +167,7 @@ type StatusResult struct {
 
 // Status returns the ahead/behind count against the upstream branch.
 func (o *Operations) Status(ctx context.Context, repo types.Repo) (*StatusResult, error) {
-	// Try go-git first
-	result, err := o.statusGoGit(ctx, repo)
-	if err == nil {
-		return result, nil
-	}
-	// Fallback to CLI
+	// Use CLI directly for reliability and performance
 	return o.statusCLI(ctx, repo)
 }
 
@@ -263,9 +266,7 @@ func (o *Operations) countDivergence(r *git.Repository, local, remote plumbing.H
 
 func (o *Operations) statusCLI(ctx context.Context, repo types.Repo) (*StatusResult, error) {
 	// Get current branch
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
-	cmd.Dir = repo.Path
-	output, err := cmd.Output()
+	output, err := o.runGit(ctx, repo.Path, "rev-parse", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return nil, fmt.Errorf("get branch: %w", err)
 	}
@@ -295,9 +296,7 @@ func (o *Operations) statusCLI(ctx context.Context, repo types.Repo) (*StatusRes
 }
 
 func (o *Operations) revListCount(ctx context.Context, dir, exclude, include string) (int, error) {
-	cmd := exec.CommandContext(ctx, "git", "rev-list", "--count", fmt.Sprintf("%s..%s", exclude, include))
-	cmd.Dir = dir
-	output, err := cmd.Output()
+	output, err := o.runGit(ctx, dir, "rev-list", "--count", fmt.Sprintf("%s..%s", exclude, include))
 	if err != nil {
 		return 0, err
 	}
@@ -327,9 +326,7 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 	branch := repo.Branch
 	if branch == "" {
 		// Get current branch
-		cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
-		cmd.Dir = repo.Path
-		output, err := cmd.Output()
+		output, err := o.runGit(ctx, repo.Path, "rev-parse", "--abbrev-ref", "HEAD")
 		if err != nil {
 			return nil, fmt.Errorf("get branch: %w", err)
 		}
@@ -338,9 +335,7 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 
 	remoteBranchName := repo.GetRemoteBranchForLocal(branch)
 	upstreamRef := fmt.Sprintf("%s/%s", remoteName, remoteBranchName)
-	cmd := exec.CommandContext(ctx, "git", "merge", upstreamRef)
-	cmd.Dir = repo.Path
-	output, err := cmd.CombinedOutput()
+	output, err := o.runGitCombined(ctx, repo.Path, "merge", upstreamRef)
 	outputStr := string(output)
 
 	if err != nil {
@@ -355,9 +350,7 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 }
 
 func (o *Operations) detectConflicts(ctx context.Context, repoPath string) []string {
-	cmd := exec.CommandContext(ctx, "git", "diff", "--name-only", "--diff-filter=U")
-	cmd.Dir = repoPath
-	output, err := cmd.Output()
+	output, err := o.runGit(ctx, repoPath, "diff", "--name-only", "--diff-filter=U")
 	if err != nil {
 		return nil
 	}
@@ -374,9 +367,7 @@ func (o *Operations) detectConflicts(ctx context.Context, repoPath string) []str
 
 // GetFileContent reads a file's content at a specific reference.
 func (o *Operations) GetFileContent(ctx context.Context, repoPath, ref, filePath string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "show", fmt.Sprintf("%s:%s", ref, filePath))
-	cmd.Dir = repoPath
-	output, err := cmd.Output()
+	output, err := o.runGit(ctx, repoPath, "show", fmt.Sprintf("%s:%s", ref, filePath))
 	if err != nil {
 		return "", fmt.Errorf("get file content: %w", err)
 	}
@@ -409,17 +400,14 @@ func (o *Operations) IsMergingState(ctx context.Context, repoPath string) (bool,
 
 // AbortMerge aborts an in-progress merge.
 func (o *Operations) AbortMerge(ctx context.Context, repoPath string) error {
-	cmd := exec.CommandContext(ctx, "git", "merge", "--abort")
-	cmd.Dir = repoPath
-	return cmd.Run()
+	_, err := o.runGit(ctx, repoPath, "merge", "--abort")
+	return err
 }
 
 // CheckStaged runs `git diff --check` on staged files to detect whitespace
 // and other issues. Returns nil if clean, or an error with details.
 func (o *Operations) CheckStaged(ctx context.Context, repoPath string) error {
-	cmd := exec.CommandContext(ctx, "git", "diff", "--check", "--cached")
-	cmd.Dir = repoPath
-	output, err := cmd.CombinedOutput()
+	output, err := o.runGitCombined(ctx, repoPath, "diff", "--check", "--cached")
 	if err != nil {
 		return fmt.Errorf("whitespace/style issues detected:\n%s", string(output))
 	}
@@ -458,9 +446,7 @@ func (o *Operations) GetRemotes(ctx context.Context, repoPath string) ([]RemoteI
 }
 
 func (o *Operations) getRemotesCLI(ctx context.Context, repoPath string) ([]RemoteInfo, error) {
-	cmd := exec.CommandContext(ctx, "git", "remote", "-v")
-	cmd.Dir = repoPath
-	output, err := cmd.Output()
+	output, err := o.runGit(ctx, repoPath, "remote", "-v")
 	if err != nil {
 		return nil, err
 	}
@@ -483,9 +469,7 @@ func (o *Operations) getRemotesCLI(ctx context.Context, repoPath string) ([]Remo
 
 // GetLocalBranches returns a list of local branch names
 func (o *Operations) GetLocalBranches(ctx context.Context, repoPath string) ([]string, error) {
-	cmd := exec.CommandContext(ctx, "git", "branch", "--format=%(refname:short)")
-	cmd.Dir = repoPath
-	output, err := cmd.Output()
+	output, err := o.runGit(ctx, repoPath, "branch", "--format=%(refname:short)")
 	if err != nil {
 		return nil, fmt.Errorf("get local branches: %w", err)
 	}
@@ -510,12 +494,10 @@ type BranchInfo struct {
 func (o *Operations) GetRemoteBranches(ctx context.Context, repoPath string, remoteName string) ([]string, error) {
 	// Use for-each-ref to get remote branches with their latest commit time
 	// Format: %(refname:short)|%(committerdate:iso8601)
-	cmd := exec.CommandContext(ctx, "git", "for-each-ref",
+	output, err := o.runGit(ctx, repoPath, "for-each-ref",
 		"--format=%(refname:short)|%(committerdate:iso8601)",
 		"--sort=-committerdate",
 		fmt.Sprintf("refs/remotes/%s/", remoteName))
-	cmd.Dir = repoPath
-	output, err := cmd.Output()
 	if err != nil {
 		// Fallback to ls-remote if for-each-ref fails (e.g., remote not fetched)
 		return o.getRemoteBranchesViaLsRemote(ctx, repoPath, remoteName)
@@ -541,9 +523,7 @@ func (o *Operations) GetRemoteBranches(ctx context.Context, repoPath string, rem
 
 // getRemoteBranchesViaLsRemote fetches remote branches via ls-remote as a fallback
 func (o *Operations) getRemoteBranchesViaLsRemote(ctx context.Context, repoPath string, remoteName string) ([]string, error) {
-	cmd := exec.CommandContext(ctx, "git", "ls-remote", "--heads", remoteName)
-	cmd.Dir = repoPath
-	output, err := cmd.Output()
+	output, err := o.runGit(ctx, repoPath, "ls-remote", "--heads", remoteName)
 	if err != nil {
 		return nil, fmt.Errorf("get remote branches: %w", err)
 	}
@@ -558,4 +538,44 @@ func (o *Operations) getRemoteBranchesViaLsRemote(ctx context.Context, repoPath 
 		}
 	}
 	return branches, nil
+}
+
+// CommitInfo represents a single git commit.
+type CommitInfo struct {
+	Hash    string
+	Message string
+}
+
+// GetCommitLog returns commits between oldHEAD and upstreamRef (oldHEAD..upstreamRef).
+func (o *Operations) GetCommitLog(ctx context.Context, repoPath, oldHEAD, upstreamRef string) ([]CommitInfo, error) {
+	if oldHEAD == "" || upstreamRef == "" {
+		return nil, nil
+	}
+	output, err := o.runGit(ctx, repoPath, "log",
+		fmt.Sprintf("%s..%s", oldHEAD, upstreamRef),
+		"--pretty=format:%h%x09%s")
+	if err != nil {
+		return nil, err
+	}
+
+	var commits []CommitInfo
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) == 2 {
+			commits = append(commits, CommitInfo{
+				Hash:    parts[0],
+				Message: parts[1],
+			})
+		}
+	}
+	return commits, nil
+}
+
+// GetCurrentBranch returns the current branch name of the repo.
+func (o *Operations) GetCurrentBranch(ctx context.Context, repoPath string) (string, error) {
+	output, err := o.runGit(ctx, repoPath, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
 }

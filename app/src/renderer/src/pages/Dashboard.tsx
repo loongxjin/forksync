@@ -14,11 +14,12 @@ import type { TFunction } from 'i18next'
 
 export function Dashboard(): JSX.Element {
   const { t } = useTranslation()
-  const { repos, loading, initialized, error, refresh, syncAll, startupSyncDone, markStartupSyncDone } = useRepos()
+  const { repos, loading, initialized, error, refresh, syncAll, startupSyncDone, markStartupSyncDone, showToast } = useRepos()
   const { agents, preferred, sessions, initialized: agentsInitialized, refreshAgents, refreshSessions } = useAgents()
   const { engineConfig } = useSettings()
   const [history, setHistory] = useState<SyncHistoryRecord[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true)
@@ -64,6 +65,29 @@ export function Dashboard(): JSX.Element {
   useEffect(() => {
     loadHistory()
   }, [loadHistory, loading])
+
+  // Poll for generating summaries.
+  // Re-evaluates whenever history changes: starts polling when generating items exist,
+  // stops when all summaries are complete. The pollTimerRef guard prevents duplicate intervals.
+  useEffect(() => {
+    const hasGenerating = history.some((r) => r.summaryStatus === 'generating' || r.summaryStatus === 'pending')
+    if (hasGenerating) {
+      if (!pollTimerRef.current) {
+        pollTimerRef.current = setInterval(loadHistory, 5000)
+      }
+    } else {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+    }
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+    }
+  }, [history, loadHistory])
 
   // Count repos by status
   const statusCounts = repos.reduce<Record<RepoStatus, number>>(
@@ -165,7 +189,7 @@ export function Dashboard(): JSX.Element {
         ) : (
           <div className="space-y-1">
             {history.map((record) => (
-              <HistoryRow key={record.id} record={record} />
+              <HistoryRow key={record.id} record={record} onRetry={loadHistory} showToast={showToast} />
             ))}
           </div>
         )}
@@ -194,38 +218,109 @@ export function Dashboard(): JSX.Element {
   )
 }
 
-function HistoryRow({ record }: { record: SyncHistoryRecord }): JSX.Element {
+function HistoryRow({ record, onRetry, showToast }: { record: SyncHistoryRecord; onRetry: () => void; showToast: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void }): JSX.Element {
   const { t } = useTranslation()
   const config = getHistoryStatusConfig(record.status)
   const timeAgo = formatTimeAgo(record.createdAt, t)
+  const [expanded, setExpanded] = useState(false)
+
+  const handleRetry = async (): Promise<void> => {
+    try {
+      await engineApi.summarizeRetry(record.repoName)
+      onRetry()
+    } catch {
+      showToast(t('toast.summaryRetryFailed'), 'error')
+    }
+  }
+
+  // shouldShowFull returns true if the summary has 3 or fewer lines.
+  const shouldShowFull = (text: string): boolean => {
+    return text.split('\n').length <= 3
+  }
+
+  // Determine summary display
+  const showSummary = record.summaryStatus === 'generating' || record.summaryStatus === 'pending' ||
+    (record.summaryStatus === 'done' && record.summary) ||
+    record.summaryStatus === 'failed'
 
   return (
-    <div className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm">
-      <div className="flex items-center gap-2 min-w-0">
-        <span>{config.icon}</span>
-        <span className="font-medium truncate">{record.repoName}</span>
-        {record.commitsPulled > 0 && (
-          <span className="text-xs text-muted-foreground">
-            {record.commitsPulled} commit{record.commitsPulled !== 1 ? 's' : ''}
-          </span>
-        )}
-        {record.agentUsed && (
-          <Badge variant="info" className="text-[10px] px-1 py-0">
-            🤖 {record.agentUsed}
-          </Badge>
-        )}
-        {record.conflictsFound > 0 && (
-          <span className="text-xs text-orange-500">
-            {record.conflictsFound} conflict{record.conflictsFound !== 1 ? 's' : ''}
-          </span>
-        )}
-        {record.errorMessage && (
-          <span className="truncate text-xs text-red-500" title={record.errorMessage}>
-            {record.errorMessage}
-          </span>
-        )}
+    <div className="rounded-md px-2 py-1.5 text-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <span>{config.icon}</span>
+          <span className="font-medium truncate">{record.repoName}</span>
+          {record.commitsPulled > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {record.commitsPulled} commit{record.commitsPulled !== 1 ? 's' : ''}
+            </span>
+          )}
+          {record.agentUsed && (
+            <Badge variant="info" className="text-[10px] px-1 py-0">
+              🤖 {record.agentUsed}
+            </Badge>
+          )}
+          {record.conflictsFound > 0 && (
+            <span className="text-xs text-orange-500">
+              {record.conflictsFound} conflict{record.conflictsFound !== 1 ? 's' : ''}
+            </span>
+          )}
+          {record.errorMessage && (
+            <span className="truncate text-xs text-red-500" title={record.errorMessage}>
+              {record.errorMessage}
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">{timeAgo}</span>
       </div>
-      <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">{timeAgo}</span>
+
+      {/* AI Summary section */}
+      {showSummary && (
+        <div className="mt-1 ml-6">
+          {record.summaryStatus === 'generating' || record.summaryStatus === 'pending' ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="inline-block h-3 w-3 rounded-full bg-primary/50 animate-pulse" />
+              {t('summary.generating')}
+            </div>
+          ) : record.summaryStatus === 'done' && record.summary ? (
+            <div className="text-xs text-muted-foreground leading-relaxed">
+              <span className="mr-1">📝</span>
+              {expanded || shouldShowFull(record.summary) ? (
+                <>
+                  {record.summary}
+                  {!shouldShowFull(record.summary) && (
+                    <button
+                      onClick={() => setExpanded(false)}
+                      className="ml-1 text-primary hover:underline"
+                    >
+                      {t('summary.collapse')}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  {record.summary.split('\n').slice(0, 3).join('\n')}...
+                  <button
+                    onClick={() => setExpanded(true)}
+                    className="ml-1 text-primary hover:underline"
+                  >
+                    {t('summary.expand')}
+                  </button>
+                </>
+              )}
+            </div>
+          ) : record.summaryStatus === 'failed' ? (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-red-500">❌ {t('summary.failed')}</span>
+              <button
+                onClick={handleRetry}
+                className="text-primary hover:underline"
+              >
+                {t('summary.retry')}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   )
 }

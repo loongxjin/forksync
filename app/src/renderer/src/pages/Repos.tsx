@@ -4,6 +4,7 @@ import { useRepos } from '@/contexts/RepoContext'
 import { RepoRow } from '@/components/RepoRow'
 import { AddRepoDialog } from '@/components/AddRepoDialog'
 import { ScanDialog } from '@/components/ScanDialog'
+import { RepoSettingsDialog } from '@/components/RepoSettingsDialog'
 import { Button } from '@/components/ui/button'
 
 export function Repos(): JSX.Element {
@@ -12,6 +13,7 @@ export function Repos(): JSX.Element {
     useRepos()
   const [showAdd, setShowAdd] = useState(false)
   const [showScan, setShowScan] = useState(false)
+  const [settingsRepo, setSettingsRepo] = useState<string | null>(null)
   const [scanInitialDir, setScanInitialDir] = useState('')
   const [dragOver, setDragOver] = useState(false)
 
@@ -98,6 +100,9 @@ export function Repos(): JSX.Element {
         <h2 className="text-xl font-semibold">{t('repos.title')}</h2>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
+            <span className={loading ? 'inline-block animate-spin' : ''}>
+              {loading ? '⟳' : '🔄'}
+            </span>{' '}
             {t('repos.refresh')}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowScan(true)}>
@@ -136,6 +141,7 @@ export function Repos(): JSX.Element {
             onSync={syncRepo}
             onRemove={handleRemove}
             onResolve={handleResolve}
+            onSettings={setSettingsRepo}
           />
         ))}
       </div>
@@ -154,6 +160,12 @@ export function Repos(): JSX.Element {
         scannedRepos={scannedRepos}
         loading={loading}
         initialDir={scanInitialDir}
+      />
+
+      <RepoSettingsDialog
+        repoName={settingsRepo ?? ''}
+        open={settingsRepo !== null}
+        onClose={() => setSettingsRepo(null)}
       />
     </div>
   )

@@ -44,6 +44,22 @@ export interface BranchMapping {
   remoteBranch: string
 }
 
+/** Post-sync command — mirrors Go PostSyncCommand */
+export interface PostSyncCommand {
+  id: string
+  name: string
+  cmd: string
+}
+
+/** Post-sync command execution result */
+export interface PostSyncResult {
+  name: string
+  cmd: string
+  success: boolean
+  output?: string
+  error?: string
+}
+
 /** Go Repo — managed repository */
 export interface Repo {
   id: string
@@ -56,6 +72,7 @@ export interface Repo {
   autoSync: boolean
   syncInterval: string
   conflictStrategy: string
+  postSyncCommands?: PostSyncCommand[]
   createdAt: string
   lastSync: string | null
   status: RepoStatus
@@ -87,6 +104,7 @@ export interface SyncResult {
   conflictsFound?: number
   autoResolved?: number
   pendingConfirm?: string[]
+  postSyncResults?: PostSyncResult[]
 }
 
 /** Go ConflictFile — simplified conflict info (agent reads file contents) */
@@ -196,6 +214,11 @@ export interface HistoryData {
   records: SyncHistoryRecord[]
 }
 
+/** Post-sync commands response data */
+export interface PostSyncCommandsData {
+  commands: PostSyncCommand[]
+}
+
 /** Sync history record from SQLite */
 export interface SyncHistoryRecord {
   id: number
@@ -208,6 +231,8 @@ export interface SyncHistoryRecord {
   conflictsFound: number
   autoResolved: number
   errorMessage: string
+  summary: string
+  summaryStatus: string
   createdAt: string
 }
 
@@ -249,6 +274,9 @@ export interface EngineConfig {
     DefaultInterval: string
     SyncOnStartup: boolean
     AutoLaunch: boolean
+    AutoSummary: boolean
+    SummaryAgent: string
+    SummaryLanguage: string
   }
   Agent: {
     Preferred: string

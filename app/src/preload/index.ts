@@ -21,6 +21,7 @@ import type {
   ConfigSetData
 } from '../renderer/src/types/engine'
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '../renderer/src/types/ide'
+import type { PostSyncCommand } from './engine'
 
 const api = {
   status: (): Promise<ApiResponse<StatusData>> => ipcRenderer.invoke('engine:status'),
@@ -53,6 +54,16 @@ const api = {
     ipcRenderer.invoke('engine:configGet'),
   configSet: (key: string, value: string): Promise<ApiResponse<ConfigSetData>> =>
     ipcRenderer.invoke('engine:configSet', key, value),
+  postSyncList: (repoName: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> =>
+    ipcRenderer.invoke('engine:postSyncList', repoName),
+  postSyncAdd: (repoName: string, cmdName: string, cmd: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> =>
+    ipcRenderer.invoke('engine:postSyncAdd', repoName, cmdName, cmd),
+  postSyncRemove: (repoName: string, cmdId: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> =>
+    ipcRenderer.invoke('engine:postSyncRemove', repoName, cmdId),
+  summarize: (repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> =>
+    ipcRenderer.invoke('engine:summarize', repoName),
+  summarizeRetry: (repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> =>
+    ipcRenderer.invoke('engine:summarizeRetry', repoName),
   setAutoLaunch: (enabled: boolean): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('app:setAutoLaunch', enabled),
   openDirectory: (): Promise<{ canceled: boolean; filePaths?: string[]; error?: string }> =>

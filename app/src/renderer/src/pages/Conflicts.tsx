@@ -28,6 +28,9 @@ export function Conflicts(): JSX.Element {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">{t('conflicts.title')}</h2>
         <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
+          <span className={loading ? 'inline-block animate-spin' : ''}>
+            {loading ? '⟳' : '🔄'}
+          </span>{' '}
           {t('conflicts.refresh')}
         </Button>
       </div>
