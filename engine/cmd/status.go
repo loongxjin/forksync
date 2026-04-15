@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/config"
@@ -51,13 +52,17 @@ func runStatus(cmd *cobra.Command, args []string) error {
 					// No merge in progress — conflicts were resolved externally
 					repos[i].Status = types.RepoStatusSynced
 					repos[i].ErrorMessage = ""
-					_ = store.Update(repos[i])
+					if updateErr := store.Update(repos[i]); updateErr != nil {
+						log.Printf("status: failed to update repo %s: %v", r.Name, updateErr)
+					}
 				} else if err == nil && isMerging && len(unmergedFiles) == 0 {
 					// MERGE_HEAD exists but no unmerged files — user staged all
 					// resolutions but hasn't committed yet. Still in conflict state
 					// but update the status to reflect this transitional state.
 					repos[i].Status = types.RepoStatusResolved
-					_ = store.Update(repos[i])
+					if updateErr := store.Update(repos[i]); updateErr != nil {
+						log.Printf("status: failed to update repo %s: %v", r.Name, updateErr)
+					}
 				} else if err == nil && isMerging && len(unmergedFiles) > 0 && r.Status == types.RepoStatusResolving {
 					// MERGE_HEAD exists and there are still unmerged files, but
 					// the repo is in "resolving" state. This means the agent has
@@ -65,10 +70,16 @@ func runStatus(cmd *cobra.Command, args []string) error {
 					// Roll back to "conflict" so the user can retry.
 					repos[i].Status = types.RepoStatusConflict
 					repos[i].ErrorMessage = "agent exited unexpectedly, conflict resolution incomplete"
-					_ = store.Update(repos[i])
+					if updateErr := store.Update(repos[i]); updateErr != nil {
+						log.Printf("status: failed to update repo %s: %v", r.Name, updateErr)
+					}
 				}
 			}
 
+			// Fetch latest refs before calculating ahead/behind
+			if fetchErr := gitOps.Fetch(cmd.Context(), r); fetchErr != nil {
+				log.Printf("status: fetch failed for %s: %v", r.Name, fetchErr)
+			}
 			statusResult, err := gitOps.Status(cmd.Context(), r)
 			if err == nil && statusResult != nil {
 				repos[i].AheadBy = statusResult.AheadBy
@@ -76,6 +87,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 				if repos[i].Status == types.RepoStatusUnconfigured && r.Upstream != "" {
 					repos[i].Status = types.RepoStatusSynced
 				}
+			} else if err != nil {
+				log.Printf("status: status check failed for %s: %v", r.Name, err)
 			}
 		}
 	}
