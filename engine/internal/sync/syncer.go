@@ -524,10 +524,12 @@ func (s *Syncer) finalizeResult(result *Result) {
 	historyID := s.recordHistory(result)
 	s.logResult(result)
 
-	// Trigger async summary if: auto_summary enabled, synced, commits pulled > 0, summarizer available
+	// Trigger summary if: auto_summary enabled, synced, commits pulled > 0, summarizer available
 	if s.summarizer != nil && s.cfg != nil && s.cfg.Sync.AutoSummary &&
 		result.Status == "synced" && result.CommitsPulled > 0 && historyID > 0 {
-		go s.triggerSummarize(result, historyID)
+		// Run synchronously so that Enqueue completes before SyncRepo returns.
+		// This ensures StopAndWait can properly wait for the summarizer task.
+		s.triggerSummarize(result, historyID)
 	}
 }
 
@@ -537,7 +539,18 @@ func (s *Syncer) triggerSummarize(result *Result, historyID int64) {
 	defer cancel()
 
 	commits, err := s.gitOps.GetCommitLog(ctx, result.RepoPath, result.OldHEAD, result.UpstreamRef)
-	if err != nil || len(commits) == 0 {
+	if err != nil {
+		logger.Error("triggerSummarize: failed to get commit log", "repo", result.RepoName, "error", err)
+		if s.historyStore != nil {
+			_ = s.historyStore.UpdateSummary(historyID, "", "failed")
+		}
+		return
+	}
+	if len(commits) == 0 {
+		logger.Info("triggerSummarize: no commits to summarize", "repo", result.RepoName, "historyID", historyID)
+		if s.historyStore != nil {
+			_ = s.historyStore.UpdateSummary(historyID, "", "done")
+		}
 		return
 	}
 
