@@ -342,14 +342,28 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 		}}
 	}
 
-	var results []*Result
+	// Filter repos with upstream
+	var targetRepos []types.Repo
 	for _, r := range repos {
-		if r.Upstream == "" {
-			continue // skip repos without upstream
+		if r.Upstream != "" {
+			targetRepos = append(targetRepos, r)
 		}
-		result := s.SyncRepo(ctx, r)
-		results = append(results, result)
 	}
+
+	results := make([]*Result, len(targetRepos))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8) // limit concurrency to avoid overwhelming network/disk
+
+	for i, r := range targetRepos {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(idx int, repo types.Repo) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			results[idx] = s.SyncRepo(ctx, repo)
+		}(i, r)
+	}
+	wg.Wait()
 
 	return results
 }
