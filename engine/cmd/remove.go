@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/spf13/cobra"
 )
@@ -37,6 +38,12 @@ func runRemove(cmd *cobra.Command, args []string) error {
 
 	if err := store.Remove(r.ID); err != nil {
 		return fmt.Errorf("remove repo: %w", err)
+	}
+
+	// Clean up associated sync history records
+	if hStore, err := history.NewStore(cfgMgr.ConfigDir()); err == nil {
+		hStore.ClearByRepo(r.ID)
+		hStore.Close()
 	}
 
 	if isJSON() {
