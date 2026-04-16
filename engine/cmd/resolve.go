@@ -233,6 +233,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 
 	result.Diff = diff
 	result.ResolvedFiles = conflictPaths
+	result.AgentName = provider.Name()
 
 	// Update status — agent resolved successfully
 	resolved.Store(true)
@@ -428,6 +429,7 @@ func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
 		Diff:          r.Diff,
 		Summary:       r.Summary,
 		SessionID:     r.SessionID,
+		AgentName:     r.AgentName,
 	}
 }
 

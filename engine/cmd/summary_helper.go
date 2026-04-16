@@ -34,7 +34,7 @@ func generateSummary(
 		}
 	}
 	if agentName == "" {
-		return "", fmt.Errorf("no agent available. Install Claude Code or OpenCode, or configure sync.summary_agent")
+		return "", fmt.Errorf("no agent available. Install Claude Code, OpenCode, Droid, or Codex, or configure sync.summary_agent")
 	}
 
 	if !summarizer.IsAgentAvailable(agentName) {

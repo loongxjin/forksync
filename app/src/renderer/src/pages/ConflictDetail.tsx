@@ -105,7 +105,7 @@ export function ConflictDetail(): JSX.Element {
             ? repo.status
             : 'conflict'
         }
-        agentName={resolveResult?.agentResult?.sessionId ? preferred : undefined}
+        agentName={resolveResult?.agentResult?.agentName || undefined}
         summary={resolveResult?.agentResult?.summary}
         resolvedFiles={resolveResult?.agentResult?.resolvedFiles}
         onResolve={handleResolve}

@@ -142,6 +142,7 @@ export interface AgentResolveResult {
   diff: string
   summary: string
   sessionId: string
+  agentName: string
 }
 
 /** Go AgentResolveRequest — resolve command options */

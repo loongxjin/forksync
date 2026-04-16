@@ -27,7 +27,7 @@ func NewExecutorWithTimeout(timeout time.Duration) *Executor {
 }
 
 // Summarize calls the specified agent CLI to generate a summary of the given commits.
-// agentName is the binary name (e.g. "claude", "opencode"). If empty, returns an error.
+// agentName is the binary name (e.g. "claude", "opencode", "droid", "codex"). If empty, returns an error.
 func (e *Executor) Summarize(ctx context.Context, commits []CommitInfo, lang string, agentName string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
@@ -39,6 +39,10 @@ func (e *Executor) Summarize(ctx context.Context, commits []CommitInfo, lang str
 		return e.runClaude(ctx, prompt)
 	case "opencode":
 		return e.runOpenCode(ctx, prompt)
+	case "droid":
+		return e.runDroid(ctx, prompt)
+	case "codex":
+		return e.runCodex(ctx, prompt)
 	default:
 		return "", fmt.Errorf("unsupported summary agent: %s", agentName)
 	}
@@ -66,7 +70,6 @@ func (e *Executor) runClaude(ctx context.Context, prompt string) (string, error)
 func (e *Executor) runOpenCode(ctx context.Context, prompt string) (string, error) {
 	args := []string{
 		"run",
-		"--non-interactive",
 		prompt,
 	}
 
@@ -74,6 +77,42 @@ func (e *Executor) runOpenCode(ctx context.Context, prompt string) (string, erro
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("opencode CLI: %s: %w", strings.TrimSpace(string(output)), err)
+	}
+
+	result := strings.TrimSpace(string(output))
+	return StripMarkdownBlocks(result), nil
+}
+
+// runDroid invokes Droid CLI in non-interactive exec mode.
+func (e *Executor) runDroid(ctx context.Context, prompt string) (string, error) {
+	args := []string{
+		"exec",
+		"--auto", "high",
+		prompt,
+	}
+
+	cmd := exec.CommandContext(ctx, "droid", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("droid CLI: %s: %w", strings.TrimSpace(string(output)), err)
+	}
+
+	result := strings.TrimSpace(string(output))
+	return StripMarkdownBlocks(result), nil
+}
+
+// runCodex invokes Codex CLI in non-interactive exec mode.
+func (e *Executor) runCodex(ctx context.Context, prompt string) (string, error) {
+	args := []string{
+		"exec",
+		"--dangerously-bypass-approvals-and-sandbox",
+		prompt,
+	}
+
+	cmd := exec.CommandContext(ctx, "codex", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("codex CLI: %s: %w", strings.TrimSpace(string(output)), err)
 	}
 
 	result := strings.TrimSpace(string(output))

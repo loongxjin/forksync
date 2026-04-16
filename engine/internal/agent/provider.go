@@ -74,6 +74,9 @@ type AgentResult struct {
 
 	// ResolvedFiles lists the file paths that the agent modified.
 	ResolvedFiles []string
+
+	// AgentName is the name of the agent provider that produced this result.
+	AgentName string
 }
 
 // BuildConflictPrompt constructs the prompt sent to the agent for conflict resolution.

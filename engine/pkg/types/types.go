@@ -174,6 +174,7 @@ type AgentResolveResult struct {
 	Diff          string   `json:"diff"`
 	Summary       string   `json:"summary"`
 	SessionID     string   `json:"sessionId"`
+	AgentName     string   `json:"agentName"`
 }
 
 // AgentResolveRequest Agent 解决请求
