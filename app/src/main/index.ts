@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
 import { registerIDEHandlers } from './ide'
+import { injectShellPath } from './shell-path'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -37,6 +38,10 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Inject user's shell PATH so the packaged app can find CLI tools
+  // (e.g. claude, opencode) that live outside /usr/bin:/bin:/usr/sbin:/sbin.
+  injectShellPath()
+
   electronApp.setAppUserModelId('com.forksync.app')
 
   // Set macOS dock icon for dev mode
