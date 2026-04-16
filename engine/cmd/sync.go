@@ -1,16 +1,12 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
-	"time"
 
-	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
-	"github.com/loongxjin/forksync/engine/internal/summarizer"
 	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
@@ -44,31 +40,11 @@ func runSync(cmd *cobra.Command, args []string) error {
 		syncer.SetNotifier(notify.NewNotifier(true))
 	}
 
-	var summarizerInst *summarizer.Summarizer
-
 	// Set up history store
 	histStore, err := history.NewStore(cfgMgr.ConfigDir())
 	if err == nil {
 		syncer.SetHistoryStore(histStore)
 		defer histStore.Close()
-
-		// Set up summarizer if auto_summary is enabled
-		if cfg != nil && cfg.Sync.AutoSummary {
-			agentRegistry := agent.NewRegistry(cfg.Agent.Preferred)
-			summarizerInst = summarizer.NewSummarizer(histStore, agentRegistry, cfg)
-				summarizerInst.SetLogger(logger.StdLogger())
-				summarizerInst.Start()
-				syncer.SetSummarizer(summarizerInst)
-		}
-
-		defer func() {
-			if summarizerInst != nil {
-				// Wait for pending summarization tasks to complete before exiting
-				waitCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-				summarizerInst.StopAndWait(waitCtx)
-				cancel()
-			}
-		}()
 	}
 
 	defer logger.Close()

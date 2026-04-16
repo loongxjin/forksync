@@ -14,6 +14,7 @@ import type { Repo, ScannedRepo, SyncResult, BranchMapping } from '@/types/engin
 import { engineApi } from '@/lib/api'
 import type { ToastState } from '@/components/ui/toast'
 import i18n from '@/i18n'
+import { useSettings } from '@/contexts/SettingsContext'
 
 // ---------------------------------------------------------------------------
 // State & Actions
@@ -127,6 +128,7 @@ const TOAST_DURATION = 2000 // 2 seconds
 export function RepoProvider({ children }: { children: ReactNode }): JSX.Element {
   const [state, dispatch] = useReducer(repoReducer, initialState)
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { engineConfig } = useSettings()
 
   // Guard against concurrent refresh calls
   const refreshingRef = useRef(false)
@@ -179,10 +181,22 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         dispatch({ type: 'SET_ERROR', error: res.error })
       }
       await refresh()
+
+      // Fire-and-forget AI summarization for synced repos with commits
+      if (engineConfig?.Sync?.AutoSummary && res.success) {
+        const results = res.data.results ?? []
+        for (const r of results) {
+          if (r.status === 'synced' && (r.commitsPulled ?? 0) > 0) {
+            engineApi.summarize(r.repoName).catch(() => {
+              // ignore background summary errors
+            })
+          }
+        }
+      }
     } catch (err) {
       dispatch({ type: 'SET_ERROR', error: (err as Error).message })
     }
-  }, [refresh])
+  }, [refresh, engineConfig])
 
   // Toast functions must be defined before syncRepo to avoid TDZ error
   const hideToast = useCallback(() => {
@@ -243,13 +257,23 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
           dispatch({ type: 'SET_ERROR', error: res.error })
         }
         await refresh()
+
+        // Fire-and-forget AI summarization if auto_summary is enabled
+        if (engineConfig?.Sync?.AutoSummary && res.success) {
+          const r = res.data.results?.find((x) => x.repoName === name)
+          if (r && r.status === 'synced' && (r.commitsPulled ?? 0) > 0) {
+            engineApi.summarize(name).catch(() => {
+              // ignore background summary errors
+            })
+          }
+        }
       } catch (err) {
         dispatch({ type: 'SET_ERROR', error: (err as Error).message })
       } finally {
         syncingReposRef.current.delete(name)
       }
     },
-    [refresh, showToast]
+    [refresh, showToast, engineConfig]
   )
 
   const scan = useCallback(async (dir: string) => {

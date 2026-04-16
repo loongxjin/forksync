@@ -476,9 +476,9 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 		return 0
 	}
 
-	// Pre-set summary_status to "pending" if auto-summarization will be triggered
+	// Pre-set summary_status to "pending" if auto-summarization is enabled
 	summaryStatus := ""
-	if s.summarizer != nil && s.cfg != nil && s.cfg.Sync.AutoSummary &&
+	if s.cfg != nil && s.cfg.Sync.AutoSummary &&
 		result.Status == "synced" && result.CommitsPulled > 0 {
 		summaryStatus = "pending"
 	}
@@ -526,62 +526,10 @@ func (s *Syncer) logResult(result *Result) {
 	}
 }
 
-// finalizeResult records history, logs the result, and triggers summarization if needed.
+// finalizeResult records history and logs the result.
 func (s *Syncer) finalizeResult(result *Result) {
-	historyID := s.recordHistory(result)
+	s.recordHistory(result)
 	s.logResult(result)
-
-	// Trigger summary if: auto_summary enabled, synced, commits pulled > 0, summarizer available
-	if s.summarizer != nil && s.cfg != nil && s.cfg.Sync.AutoSummary &&
-		result.Status == "synced" && result.CommitsPulled > 0 && historyID > 0 {
-		// Run synchronously so that Enqueue completes before SyncRepo returns.
-		// This ensures StopAndWait can properly wait for the summarizer task.
-		s.triggerSummarize(result, historyID)
-	}
-}
-
-// triggerSummarize fetches commit list and enqueues a summarization task.
-func (s *Syncer) triggerSummarize(result *Result, historyID int64) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	commits, err := s.gitOps.GetCommitLog(ctx, result.RepoPath, result.OldHEAD, result.UpstreamRef)
-	if err != nil {
-		logger.Error("triggerSummarize: failed to get commit log", "repo", result.RepoName, "error", err)
-		if s.historyStore != nil {
-			_ = s.historyStore.UpdateSummary(historyID, "", "failed")
-		}
-		return
-	}
-	if len(commits) == 0 {
-		logger.Info("triggerSummarize: no commits to summarize", "repo", result.RepoName, "historyID", historyID)
-		if s.historyStore != nil {
-			_ = s.historyStore.UpdateSummary(historyID, "", "done")
-		}
-		return
-	}
-
-	// Map git.CommitInfo to summarizer.CommitInfo
-	var summarizerCommits []summarizer.CommitInfo
-	for _, c := range commits {
-		summarizerCommits = append(summarizerCommits, summarizer.CommitInfo{
-			Hash:    c.Hash,
-			Message: c.Message,
-		})
-	}
-
-	// Determine language from config (default zh)
-	lang := s.cfg.Sync.SummaryLanguage
-	if lang == "" {
-		lang = "zh"
-	}
-
-	s.summarizer.Enqueue(summarizer.Task{
-		HistoryID: historyID,
-		RepoName:  result.RepoName,
-		Commits:   summarizerCommits,
-		Language:  lang,
-	})
 }
 
 
