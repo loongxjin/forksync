@@ -14,3 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - YAML configuration support
 - macOS notifications
 - Directory scanning for fork repos
+
+## [v0.1.0]
+### Added
+- First release of forksync
+- ...
