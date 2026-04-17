@@ -4,8 +4,11 @@ directories:
   output: dist
   buildResources: resources
 extraResources:
-  - from: ../build/forksync
-    to: forksync
+  - from: ../build
+    to: .
+    filter:
+      - forksync
+      - forksync.exe
 mac:
   category: public.app-category.developer-tools
   target: dmg

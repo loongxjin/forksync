@@ -65,9 +65,11 @@ jobs:
           npm version "$TAG_VERSION" --no-git-tag-version --allow-same-version
 
       - name: Build Go engine
+        env:
+          CGO_ENABLED: 0
         run: |
           cd engine
-          CGO_ENABLED=0 go build -ldflags "-s -w -X github.com/loongxjin/forksync/engine/pkg/version.Version=${{ github.ref_name }}" -o ../build/forksync .
+          go build -ldflags "-s -w -X github.com/loongxjin/forksync/engine/pkg/version.Version=${{ github.ref_name }}" -o ../build/forksync .
 
       - name: Install Electron dependencies
         run: cd app && npm ci
