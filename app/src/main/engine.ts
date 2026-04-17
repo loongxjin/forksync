@@ -236,7 +236,7 @@ export class EngineClient {
 
       // Timeout handler
       const timer = setTimeout(() => {
-        child.kill('SIGTERM')
+        child.kill()
         reject(new EngineTimeoutError(`Engine command timed out after ${timeout}ms`))
       }, timeout)
 

@@ -7,8 +7,9 @@
 
 import { ipcMain, dialog, app } from 'electron'
 import { t } from './i18n'
-import { existsSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
 import { join } from 'path'
+import { homedir } from 'os'
 import { EngineClient } from './engine'
 import { notifySyncResults, updateNotificationConfig } from './notify'
 
@@ -126,6 +127,31 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('app:setAutoLaunch', async (_event, enabled: boolean) => {
     try {
+      if (process.platform === 'linux') {
+        const autoStartDir = join(homedir(), '.config', 'autostart')
+        const desktopFile = join(autoStartDir, 'forksync.desktop')
+
+        if (enabled) {
+          if (!existsSync(autoStartDir)) {
+            mkdirSync(autoStartDir, { recursive: true })
+          }
+          const content = `[Desktop Entry]
+Type=Application
+Name=ForkSync
+Exec=${process.execPath}
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+`
+          writeFileSync(desktopFile, content, 'utf-8')
+        } else {
+          if (existsSync(desktopFile)) {
+            unlinkSync(desktopFile)
+          }
+        }
+        return { success: true }
+      }
+
       app.setLoginItemSettings({
         openAtLogin: enabled,
         path: process.execPath

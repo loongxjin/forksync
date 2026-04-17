@@ -78,8 +78,12 @@ function savePersistedConfig(config: PersistedConfig): void {
 }
 
 // ---------------------------------------------------------------------------
-// IDE detection
+// Cross-platform helpers
 // ---------------------------------------------------------------------------
+
+function getWhichCommand(): string {
+  return process.platform === 'win32' ? 'where' : 'which'
+}
 
 function execAsync(cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -92,19 +96,75 @@ function execAsync(cmd: string, args: string[]): Promise<string> {
   })
 }
 
+// ---------------------------------------------------------------------------
+// IDE detection
+// ---------------------------------------------------------------------------
+
 async function detectSingleIDE(ide: Omit<IDEInfo, 'installed' | 'openMethod'>): Promise<IDEInfo> {
-  // 1. Try CLI via `which`
+  // 1. Try CLI via which/where
   try {
-    await execAsync('/usr/bin/which', [ide.cliCommand])
+    await execAsync(getWhichCommand(), [ide.cliCommand])
     return { ...ide, installed: true, openMethod: 'cli' }
   } catch {
     // CLI not in PATH, try app detection
   }
 
-  // 2. Try macOS /Applications
-  const appPath = `/Applications/${ide.appName}.app`
-  if (existsSync(appPath)) {
-    return { ...ide, installed: true, openMethod: 'app' }
+  // 2. Platform-specific app detection
+  if (process.platform === 'darwin') {
+    const appPath = `/Applications/${ide.appName}.app`
+    if (existsSync(appPath)) {
+      return { ...ide, installed: true, openMethod: 'app' }
+    }
+  } else if (process.platform === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA
+    const programFiles = process.env.PROGRAMFILES
+    const programFilesX86 = process.env['PROGRAMFILES(X86)']
+
+    const windowsPaths: Record<string, string[]> = {
+      vscode: [
+        localAppData ? join(localAppData, 'Programs', 'Microsoft VS Code', 'bin', 'code.cmd') : '',
+        programFiles ? join(programFiles, 'Microsoft VS Code', 'bin', 'code.cmd') : '',
+        programFilesX86 ? join(programFilesX86, 'Microsoft VS Code', 'bin', 'code.cmd') : ''
+      ],
+      cursor: [
+        localAppData ? join(localAppData, 'Programs', 'cursor', 'Cursor.exe') : '',
+        localAppData ? join(localAppData, 'Programs', 'Cursor', 'Cursor.exe') : '',
+        programFiles ? join(programFiles, 'Cursor', 'Cursor.exe') : '',
+        programFilesX86 ? join(programFilesX86, 'Cursor', 'Cursor.exe') : ''
+      ],
+      trae: [
+        localAppData ? join(localAppData, 'Programs', 'Trae', 'Trae.exe') : '',
+        programFiles ? join(programFiles, 'Trae', 'Trae.exe') : '',
+        programFilesX86 ? join(programFilesX86, 'Trae', 'Trae.exe') : ''
+      ]
+    }
+
+    const paths = windowsPaths[ide.id] || []
+    for (const p of paths) {
+      if (p && existsSync(p)) {
+        return { ...ide, installed: true, openMethod: 'cli', cliCommand: p }
+      }
+    }
+  } else if (process.platform === 'linux') {
+    // Check snap/flatpak as fallbacks
+    const snapPath = `/snap/bin/${ide.cliCommand}`
+    if (existsSync(snapPath)) {
+      return { ...ide, installed: true, openMethod: 'cli', cliCommand: snapPath }
+    }
+
+    const flatpakIds: Record<string, string> = {
+      vscode: 'com.visualstudio.code'
+      // cursor and trae flatpak ids are not commonly available yet
+    }
+    const flatpakId = flatpakIds[ide.id]
+    if (flatpakId && existsSync('/usr/bin/flatpak')) {
+      try {
+        await execAsync('flatpak', ['info', flatpakId])
+        return { ...ide, installed: true, openMethod: 'cli', cliCommand: `flatpak run ${flatpakId}` }
+      } catch {
+        // not installed via flatpak
+      }
+    }
   }
 
   return { ...ide, installed: false, openMethod: 'cli' }
@@ -112,7 +172,7 @@ async function detectSingleIDE(ide: Omit<IDEInfo, 'installed' | 'openMethod'>): 
 
 async function detectCustomIDE(custom: CustomIDE): Promise<IDEInfo> {
   try {
-    await execAsync('/usr/bin/which', [custom.cliCommand])
+    await execAsync(getWhichCommand(), [custom.cliCommand])
     return {
       id: custom.id,
       name: custom.name,
@@ -175,10 +235,25 @@ async function openInIDE(repoPath: string, ideId: string): Promise<IDEOpenResult
         }
       })
       child.unref()
-    } else {
+    } else if (process.platform === 'darwin') {
       const child = execFile('open', ['-a', ide.appName, repoPath], (err) => {
         if (err) {
           console.error(`Failed to open ${repoPath} with ${ide.name}:`, err)
+        }
+      })
+      child.unref()
+    } else if (process.platform === 'win32') {
+      const child = execFile('cmd', ['/c', 'start', '', ide.appName || ide.name, repoPath], (err) => {
+        if (err) {
+          console.error(`Failed to open ${repoPath} with ${ide.name}:`, err)
+        }
+      })
+      child.unref()
+    } else {
+      // Linux fallback: try xdg-open with the repo path
+      const child = execFile('xdg-open', [repoPath], (err) => {
+        if (err) {
+          console.error(`Failed to open ${repoPath}:`, err)
         }
       })
       child.unref()
