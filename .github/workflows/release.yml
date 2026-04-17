@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
-          npm version "$TAG_VERSION" --no-git-tag-version
+          npm version "$TAG_VERSION" --no-git-tag-version --allow-same-version
 
       - name: Build Go engine
         run: |
