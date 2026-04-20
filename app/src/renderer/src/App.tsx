@@ -6,16 +6,12 @@ import { RepoProvider } from './contexts/RepoContext'
 import { AgentProvider } from './contexts/AgentContext'
 import { SettingsProvider } from './contexts/SettingsContext'
 import { HistoryProvider } from './contexts/HistoryContext'
+import { SettingsDrawerProvider } from './contexts/SettingsDrawerContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
-import { Dashboard } from './pages/Dashboard'
-import { Repos } from './pages/Repos'
-import { Conflicts } from './pages/Conflicts'
-import { ConflictDetail } from './pages/ConflictDetail'
-import { Settings } from './pages/Settings'
+import { HomePage } from './pages/HomePage'
 
 function App(): JSX.Element {
-  // Initialize theme from localStorage (default: dark)
   useEffect(() => {
     const saved = localStorage.getItem('forksync-theme')
     if (saved === 'light') {
@@ -31,17 +27,15 @@ function App(): JSX.Element {
         <RepoProvider>
           <AgentProvider>
             <HistoryProvider>
-              <HashRouter>
-                <Routes>
-                  <Route element={<Layout />}>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/repos" element={<Repos />} />
-                    <Route path="/conflicts" element={<Conflicts />} />
-                    <Route path="/conflicts/:repoId" element={<ConflictDetail />} />
-                    <Route path="/settings" element={<Settings />} />
-                  </Route>
-                </Routes>
-              </HashRouter>
+              <SettingsDrawerProvider>
+                <HashRouter>
+                  <Routes>
+                    <Route element={<Layout />}>
+                      <Route path="/" element={<HomePage />} />
+                    </Route>
+                  </Routes>
+                </HashRouter>
+              </SettingsDrawerProvider>
             </HistoryProvider>
           </AgentProvider>
         </RepoProvider>

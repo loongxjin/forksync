@@ -18,7 +18,8 @@
     "dashboard": "仪表盘",
     "repos": "仓库",
     "conflicts": "冲突",
-    "settings": "设置"
+    "settings": "设置",
+    "language": "切换语言"
   },
   "theme": {
     "dark": "深色",
@@ -272,6 +273,13 @@
     "addCommand": "添加命令",
     "commandPlaceholder": "输入命令，如 npm link",
     "settings": "设置"
+  },
+  "home": {
+    "viewMore": "查看更多 (还有 {{count}} 条)",
+    "editCommands": "编辑命令",
+    "addCommand": "添加命令 +",
+    "aiSuggestion": "AI 建议",
+    "postSyncCommands": "Post-Sync 命令"
   },
   "summary": {
     "generating": "AI 总结生成中...",

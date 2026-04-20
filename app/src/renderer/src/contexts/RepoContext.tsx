@@ -12,6 +12,7 @@ import {
 } from 'react'
 import type { Repo, ScannedRepo, SyncResult, BranchMapping } from '@/types/engine'
 import { engineApi } from '@/lib/api'
+import { isConflictStatus } from '@/lib/utils'
 import type { ToastState } from '@/components/ui/toast'
 import i18n from '@/i18n'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -161,7 +162,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
 
         // Toast feedback for batch sync
         const conflicts = results.filter(
-          (r) => r.status === 'conflict' || r.status === 'resolving'
+          (r) => isConflictStatus(r.status)
         )
         const errors = results.filter((r) => r.status === 'error')
         if (conflicts.length > 0) {
@@ -234,7 +235,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
 
       // Don't allow sync if repo is in conflict/resolving/resolved state
       const repo = state.repos.find((r) => r.name === name)
-      if (repo && (repo.status === 'conflict' || repo.status === 'resolving' || repo.status === 'resolved')) {
+      if (repo && isConflictStatus(repo.status)) {
         showToast(i18n.t('toast.conflictsWarning', { name }), 'warning')
         return
       }

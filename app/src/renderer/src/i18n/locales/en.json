@@ -18,7 +18,8 @@
     "dashboard": "Dashboard",
     "repos": "Repos",
     "conflicts": "Conflicts",
-    "settings": "Settings"
+    "settings": "Settings",
+    "language": "Switch Language"
   },
   "theme": {
     "dark": "Dark",
@@ -272,6 +273,13 @@
     "addCommand": "Add Command",
     "commandPlaceholder": "e.g., npm link",
     "settings": "Settings"
+  },
+  "home": {
+    "viewMore": "View more ({{count}} more)",
+    "editCommands": "Edit Commands",
+    "addCommand": "Add Command +",
+    "aiSuggestion": "AI Suggestion",
+    "postSyncCommands": "Post-Sync Commands"
   },
   "summary": {
     "generating": "Generating AI summary...",

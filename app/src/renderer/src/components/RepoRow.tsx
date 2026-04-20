@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge'
 import type { Repo, RepoStatus } from '@/types/engine'
 import { getStatusConfig } from '@/components/StatusCard'
 import { IDEOpenButton } from '@/components/IDEOpenButton'
+import { isConflictStatus } from '@/lib/utils'
 
 interface RepoStatusBadgeProps {
   status: RepoStatus
@@ -33,79 +34,94 @@ export function RepoStatusBadge({ status, className }: RepoStatusBadgeProps): JS
 
 interface RepoRowProps {
   repo: Repo
+  isExpanded: boolean
+  onToggle: () => void
   onSync: (name: string) => void
   onRemove: (name: string) => void
-  onResolve: (name: string) => void
   onSettings: (name: string) => void
 }
 
-export function RepoRow({ repo, onSync, onRemove, onResolve, onSettings }: RepoRowProps): JSX.Element {
+export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettings }: RepoRowProps): JSX.Element {
   const { t } = useTranslation()
+  const isConflict = isConflictStatus(repo.status)
 
   return (
-    <div className="group flex items-start justify-between rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/30">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{repo.name}</span>
-          <RepoStatusBadge status={repo.status} />
-          {repo.branch && (
-            <span className="text-xs text-muted-foreground">📋 {repo.branch}</span>
-          )}
-          {(repo.aheadBy > 0 || repo.behindBy > 0) && (
-            <span className="text-xs text-muted-foreground">
-              ↑{repo.aheadBy} ↓{repo.behindBy}
-            </span>
-          )}
+    <div
+      className="group cursor-pointer rounded-lg border border-border bg-card transition-colors hover:bg-accent/30"
+      onClick={(e) => {
+        // Don't toggle if clicking action buttons
+        const target = e.target as HTMLElement
+        if (target.closest('[data-action]')) return
+        onToggle()
+      }}
+    >
+      <div className="p-4">
+        {/* Row 1: name, branch, status, ahead/behind */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="text-sm text-muted-foreground">{isExpanded ? '▾' : '▸'}</span>
+            <span className="font-semibold text-foreground truncate">{repo.name}</span>
+            {repo.branch && (
+              <span className="text-xs text-muted-foreground whitespace-nowrap">{repo.branch}</span>
+            )}
+            <RepoStatusBadge status={repo.status} />
+            {(repo.aheadBy > 0 || repo.behindBy > 0) && (
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {repo.aheadBy > 0 && `↗${repo.aheadBy}`}
+                {repo.behindBy > 0 && ` ↙${repo.behindBy}`}
+              </span>
+            )}
+          </div>
         </div>
-        {repo.origin && (
-          <p className="mt-1 truncate text-xs text-muted-foreground">
-            {t('repos.origin')} {repo.origin}
-          </p>
-        )}
-        {repo.upstream && (
-          <p className="truncate text-xs text-muted-foreground">
-            {t('repos.upstream')} {repo.upstream}
-          </p>
-        )}
-        {repo.errorMessage && (
-          <p className="mt-1 text-xs text-red-500">{repo.errorMessage}</p>
-        )}
-      </div>
 
-      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-        <button
-            onClick={() => onSettings(repo.name)}
-            className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            title={t('postSync.settings')}
-          >
-            ⚙️
-          </button>
-          <IDEOpenButton repoPath={repo.path} />
-        {repo.status !== 'conflict' && repo.status !== 'resolving' && repo.status !== 'resolved' && (
-          <button
-            onClick={() => onSync(repo.name)}
-            className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            title={t('repos.syncNow')}
-          >
-            {t('repos.sync')}
-          </button>
-        )}
-        {(repo.status === 'conflict' || repo.status === 'resolved') && (
-          <button
-            onClick={() => onResolve(repo.name)}
-            className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            title={t('repos.resolveConflicts')}
-          >
-            {t('repos.resolve')}
-          </button>
-        )}
-        <button
-          onClick={() => onRemove(repo.name)}
-          className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-500"
-          title={t('repos.remove')}
-        >
-          ✕
-        </button>
+        {/* Row 2: origin URL + action buttons */}
+        <div className="flex items-center justify-between mt-1">
+          <div className="min-w-0 flex-1">
+            {repo.origin && (
+              <p className="truncate text-xs text-muted-foreground">
+                {t('repos.origin')} {repo.origin}
+              </p>
+            )}
+            {repo.upstream && (
+              <p className="truncate text-xs text-muted-foreground">
+                {t('repos.upstream')} {repo.upstream}
+              </p>
+            )}
+            {repo.errorMessage && (
+              <p className="mt-1 text-xs text-red-500">{repo.errorMessage}</p>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 ml-2 shrink-0">
+            <button
+              data-action
+              onClick={() => onSettings(repo.name)}
+              className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              title={t('postSync.settings')}
+            >
+              ⚙️
+            </button>
+            <IDEOpenButton repoPath={repo.path} />
+            {!isConflict && (
+              <button
+                data-action
+                onClick={() => onSync(repo.name)}
+                className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                title={t('repos.syncNow')}
+              >
+                ⟳
+              </button>
+            )}
+            <button
+              data-action
+              onClick={() => onRemove(repo.name)}
+              className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-500"
+              title={t('repos.remove')}
+            >
+              🗑
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

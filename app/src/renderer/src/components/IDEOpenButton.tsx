@@ -3,9 +3,9 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useSettings } from '@/contexts/SettingsContext'
+import { useSettingsDrawer } from '@/contexts/SettingsDrawerContext'
 import type { IDEInfo } from '@/types/ide'
 
 interface IDEOpenButtonProps {
@@ -15,7 +15,7 @@ interface IDEOpenButtonProps {
 export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
   const { t } = useTranslation()
   const { getInstalledIDEs, getDefaultIDE, setDefaultIDE, openInIDE, ideLoading } = useSettings()
-  const navigate = useNavigate()
+  const { openDrawer } = useSettingsDrawer()
   const [open, setOpen] = useState(false)
   const [opening, setOpening] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -57,15 +57,16 @@ export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
 
   const handleSettingsClick = useCallback(() => {
     setOpen(false)
-    navigate('/settings')
-  }, [navigate])
+    openDrawer()
+  }, [openDrawer])
 
   if (ideLoading) return <></>
 
   if (installedIDEs.length === 0) return <></>
 
+  // data-action: marker to prevent RepoRow expand toggle when clicking IDE buttons
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative" ref={dropdownRef} data-action>
       <div className="flex">
         <button
           onClick={handleMainClick}

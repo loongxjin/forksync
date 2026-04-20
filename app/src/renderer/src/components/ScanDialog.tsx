@@ -115,7 +115,7 @@ export function ScanDialog({
   const handleAddSelected = async (): Promise<void> => {
     setAdding(true)
     try {
-      for (const path of selected) {
+      for (const path of Array.from(selected)) {
         const repo = scannedRepos.find((r) => r.path === path)
         const config = repoBranchConfigs[path]
         const branchMapping = config?.enabled && config?.mapping?.localBranch && config?.mapping?.remoteBranch
