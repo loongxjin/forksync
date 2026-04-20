@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { IDEConfig } from '@/components/IDEConfig'
 import { useTranslation } from 'react-i18next'
+import { Moon, Sun, Monitor } from 'lucide-react'
 
 /** A simple toggle switch component */
 function Toggle({
@@ -116,7 +117,12 @@ export function GeneralSettings(): JSX.Element {
                   : 'border-border bg-card text-foreground hover:bg-accent/50'
               }`}
             >
-              {themeVal === 'dark' ? '🌙 ' + t('theme.dark') : themeVal === 'light' ? '☀️ ' + t('theme.light') : '💻 ' + t('theme.system')}
+              <span className="flex items-center gap-1.5">
+                {themeVal === 'dark' && <Moon size={14} />}
+                {themeVal === 'light' && <Sun size={14} />}
+                {themeVal === 'system' && <Monitor size={14} />}
+                {themeVal === 'dark' ? t('theme.dark') : themeVal === 'light' ? t('theme.light') : t('theme.system')}
+              </span>
             </button>
           ))}
         </div>

@@ -104,7 +104,7 @@ export function SheetContent({
       {/* Backdrop */}
       <div
         className={cn(
-          'absolute inset-0 bg-black/40 transition-opacity duration-300',
+          'absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300',
           open ? 'opacity-100' : 'opacity-0'
         )}
         onClick={() => onOpenChange(false)}
@@ -114,7 +114,7 @@ export function SheetContent({
         ref={contentRef}
         data-state={open ? 'open' : 'closed'}
         className={cn(
-          'fixed z-50 bg-background shadow-lg',
+          'fixed z-50 bg-card shadow-2xl border-border/50',
           'transition-transform duration-300 ease-in-out',
           sideClasses[side],
           open ? 'translate-x-0 translate-y-0' : closedTranslate[side],
@@ -134,7 +134,7 @@ export function SheetHeader({
   children: React.ReactNode
   className?: string
 }): JSX.Element {
-  return <div className={cn('px-6 py-4 border-b border-border', className)}>{children}</div>
+  return <div className={cn('px-6 py-5 border-b border-border', className)}>{children}</div>
 }
 
 export function SheetTitle({

@@ -8,6 +8,7 @@ import { useSettingsDrawer } from '@/contexts/SettingsDrawerContext'
 import { useTranslation } from 'react-i18next'
 import i18n from 'i18next'
 import { SettingsDrawer } from './SettingsDrawer'
+import { Settings, Moon, Sun, Monitor, Languages } from 'lucide-react'
 
 function TitleBar(): JSX.Element {
   const { theme, setTheme } = useSettings()
@@ -19,7 +20,7 @@ function TitleBar(): JSX.Element {
     setTheme(next)
   }
 
-  const themeIcon = theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : '💻'
+  const ThemeIcon = theme === 'dark' ? Moon : theme === 'light' ? Sun : Monitor
 
   const currentLang = i18n.language?.startsWith('zh') ? 'zh' : 'en'
   const toggleLanguage = (): void => {
@@ -50,27 +51,27 @@ function TitleBar(): JSX.Element {
         <h1 className="ml-2 text-sm font-semibold text-foreground tracking-tight">ForkSync</h1>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5">
         <button
           onClick={openDrawer}
-          className="rounded px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+          className="press-scale rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           title={t('nav.settings')}
         >
-          ⚙️
+          <Settings size={16} />
         </button>
         <button
           onClick={cycleTheme}
-          className="rounded px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+          className="press-scale rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           title={theme === 'dark' ? t('theme.dark') : theme === 'light' ? t('theme.light') : t('theme.system')}
         >
-          {themeIcon}
+          <ThemeIcon size={16} />
         </button>
         <button
           onClick={toggleLanguage}
-          className="rounded px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+          className="press-scale rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           title={t('nav.language')}
         >
-          🌐
+          <Languages size={16} />
         </button>
       </div>
     </div>

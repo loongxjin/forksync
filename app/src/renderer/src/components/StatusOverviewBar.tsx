@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { RepoStatus } from '@/types/engine'
+import { CheckCircle2, Loader2, AlertTriangle, XCircle } from 'lucide-react'
 
 export type FilterStatus = RepoStatus | null
 
@@ -12,40 +13,40 @@ interface StatusOverviewBarProps {
 
 interface StatusItem {
   key: RepoStatus
-  icon: string
   labelKey: string
   colorClass: string
   activeClass: string
+  icon: React.ReactNode
 }
 
 const STATUS_ITEMS: StatusItem[] = [
   {
     key: 'synced',
-    icon: '🟢',
     labelKey: 'status.synced',
-    colorClass: 'text-green-600 dark:text-green-400',
-    activeClass: 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800'
+    colorClass: 'text-success',
+    activeClass: 'bg-success-muted text-success border-success/20',
+    icon: <CheckCircle2 size={14} />
   },
   {
     key: 'syncing',
-    icon: '🔄',
     labelKey: 'status.syncing',
-    colorClass: 'text-yellow-600 dark:text-yellow-400',
-    activeClass: 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800'
+    colorClass: 'text-warning',
+    activeClass: 'bg-warning-muted text-warning border-warning/20',
+    icon: <Loader2 size={14} className="animate-spin" />
   },
   {
     key: 'conflict',
-    icon: '⚡',
     labelKey: 'status.conflict',
-    colorClass: 'text-red-600 dark:text-red-400',
-    activeClass: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800'
+    colorClass: 'text-error',
+    activeClass: 'bg-error-muted text-error border-error/20',
+    icon: <AlertTriangle size={14} />
   },
   {
     key: 'error',
-    icon: '❌',
     labelKey: 'status.error',
-    colorClass: 'text-red-600 dark:text-red-400',
-    activeClass: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800'
+    colorClass: 'text-error',
+    activeClass: 'bg-error-muted text-error border-error/20',
+    icon: <XCircle size={14} />
   }
 ]
 
@@ -68,7 +69,7 @@ export function StatusOverviewBar({ counts, activeFilter, onFilterChange }: Stat
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3">
+    <div className="flex flex-wrap items-center gap-1.5">
       {STATUS_ITEMS.map((item) => {
         const count = getCount(item.key)
         const isActive = activeFilter === item.key
@@ -80,16 +81,16 @@ export function StatusOverviewBar({ counts, activeFilter, onFilterChange }: Stat
             onClick={() => handleClick(item.key)}
             disabled={isZero}
             className={cn(
-              'flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-all',
+              'press-scale flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-all duration-150',
               isActive
-                ? `${item.activeClass} border-b-2`
-                : 'border-transparent hover:bg-accent/30',
-              isZero && !isActive && 'opacity-40 cursor-not-allowed'
+                ? item.activeClass
+                : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground',
+              isZero && !isActive && 'opacity-30 cursor-not-allowed'
             )}
           >
-            <span>{item.icon}</span>
-            <span className={cn('font-semibold', !isZero && item.colorClass)}>{count}</span>
-            <span className="text-muted-foreground">{t(item.labelKey)}</span>
+            <span className={cn(isActive ? '' : 'opacity-60')}>{item.icon}</span>
+            <span className={cn('font-semibold tabular-nums', !isZero && !isActive && item.colorClass)}>{count}</span>
+            <span className="text-xs">{t(item.labelKey)}</span>
           </button>
         )
       })}

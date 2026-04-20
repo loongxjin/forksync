@@ -1,8 +1,9 @@
 import { type RepoStatus } from '@/types/engine'
 import { useTranslation } from 'react-i18next'
+import { CheckCircle2, Loader2, AlertTriangle, Zap, XCircle, Circle } from 'lucide-react'
 
 interface StatusCardProps {
-  icon: string
+  icon: React.ReactNode
   label: string
   count: number
   color: string
@@ -10,8 +11,8 @@ interface StatusCardProps {
 
 export function StatusCard({ icon, label, count, color }: StatusCardProps): JSX.Element {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4">
-      <span className="text-2xl">{icon}</span>
+    <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4 shadow-card">
+      <div className="flex h-10 w-10 items-center justify-center">{icon}</div>
       <div>
         <p className="text-2xl font-bold" style={{ color }}>
           {count}
@@ -23,25 +24,72 @@ export function StatusCard({ icon, label, count, color }: StatusCardProps): JSX.
 }
 
 // ---------------------------------------------------------------------------
+// Status icons (Lucide-based)
+// ---------------------------------------------------------------------------
+
+export function StatusIcon({ status, size = 16 }: { status: RepoStatus; size?: number }): JSX.Element {
+  switch (status) {
+    case 'synced':
+    case 'up_to_date':
+      return <CheckCircle2 size={size} className="text-success" />
+    case 'syncing':
+      return <Loader2 size={size} className="animate-spin text-warning" />
+    case 'conflict':
+      return <AlertTriangle size={size} className="text-error" />
+    case 'resolving':
+      return <Zap size={size} className="text-warning" />
+    case 'resolved':
+      return <CheckCircle2 size={size} className="text-success" />
+    case 'error':
+      return <XCircle size={size} className="text-error" />
+    case 'unconfigured':
+      return <Circle size={size} className="text-muted-foreground" />
+    default:
+      return <Circle size={size} className="text-muted-foreground" />
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Status color utilities
+// ---------------------------------------------------------------------------
+
+export function getStatusColor(status: RepoStatus): string {
+  switch (status) {
+    case 'synced':
+    case 'up_to_date':
+    case 'resolved':
+      return 'hsl(var(--success))'
+    case 'syncing':
+    case 'resolving':
+      return 'hsl(var(--warning))'
+    case 'conflict':
+    case 'error':
+      return 'hsl(var(--error))'
+    default:
+      return 'hsl(var(--muted-foreground))'
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Status helpers
 // ---------------------------------------------------------------------------
 
 const STATUS_CONFIG: Record<
   RepoStatus,
-  { icon: string; labelKey: string; color: string }
+  { labelKey: string; color: string }
 > = {
-  synced: { icon: '🟢', labelKey: 'status.synced', color: '#22c55e' },
-  syncing: { icon: '🟡', labelKey: 'status.syncing', color: '#eab308' },
-  conflict: { icon: '🔴', labelKey: 'status.conflict', color: '#ef4444' },
-  resolving: { icon: '🟠', labelKey: 'status.resolving', color: '#f97316' },
-  resolved: { icon: '✅', labelKey: 'status.resolved', color: '#22c55e' },
-  error: { icon: '❌', labelKey: 'status.error', color: '#ef4444' },
-  unconfigured: { icon: '⚪', labelKey: 'status.unconfigured', color: '#6b7280' },
-  up_to_date: { icon: '⚪', labelKey: 'status.upToDate', color: '#6b7280' }
+  synced: { labelKey: 'status.synced', color: 'hsl(var(--success))' },
+  syncing: { labelKey: 'status.syncing', color: 'hsl(var(--warning))' },
+  conflict: { labelKey: 'status.conflict', color: 'hsl(var(--error))' },
+  resolving: { labelKey: 'status.resolving', color: 'hsl(var(--warning))' },
+  resolved: { labelKey: 'status.resolved', color: 'hsl(var(--success))' },
+  error: { labelKey: 'status.error', color: 'hsl(var(--error))' },
+  unconfigured: { labelKey: 'status.unconfigured', color: 'hsl(var(--muted-foreground))' },
+  up_to_date: { labelKey: 'status.upToDate', color: 'hsl(var(--muted-foreground))' }
 }
 
 export function getStatusConfig(status: RepoStatus) {
   const { t } = useTranslation()
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.unconfigured
-  return { icon: config.icon, label: t(config.labelKey), color: config.color }
+  return { label: t(config.labelKey), color: config.color }
 }

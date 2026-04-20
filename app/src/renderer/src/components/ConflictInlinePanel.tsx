@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DiffViewer } from '@/components/DiffViewer'
 import type { Repo, ResolveData } from '@/types/engine'
+import { Bot, FileText, AlertTriangle, Check, X, Loader2 } from 'lucide-react'
 
 interface ConflictInlinePanelProps {
   repo: Repo
@@ -46,17 +47,19 @@ export function ConflictInlinePanel({
         {/* Agent info */}
         {agentResult?.agentName && (
           <p className="text-xs text-muted-foreground mb-2">
-            🤖 {t('resolvePanel.agent')} <span className="text-foreground font-medium">{agentResult.agentName}</span>
+            <Bot size={12} className="inline mr-1" />
+            {t('resolvePanel.agent')} <span className="text-foreground font-medium">{agentResult.agentName}</span>
           </p>
         )}
 
         {/* AI Summary */}
         {agentResult?.summary && (
-          <div className="rounded-md bg-accent/30 p-3 mb-3">
+          <div className="rounded-lg bg-primary/5 border border-primary/10 p-3 mb-3">
             <p className="text-xs font-medium text-muted-foreground mb-1">
-              📝 {t('home.aiSuggestion')}
+              <FileText size={12} className="inline mr-1" />
+              {t('home.aiSuggestion')}
             </p>
-            <p className="text-sm">{agentResult.summary}</p>
+            <p className="text-sm leading-relaxed">{agentResult.summary}</p>
           </div>
         )}
 
@@ -66,17 +69,17 @@ export function ConflictInlinePanel({
             <p className="text-xs font-medium text-muted-foreground mb-1">
               {t('conflicts.conflictFiles')}
             </p>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {conflicts.map((f) => (
                 <button
                   key={f.path}
                   onClick={() => setSelectedFile(selectedFile === f.path ? null : f.path)}
-                  className={`flex items-center gap-2 text-sm w-full text-left px-2 py-1 rounded transition-colors ${
-                    selectedFile === f.path ? 'bg-accent/50' : 'hover:bg-accent/30'
+                  className={`flex items-center gap-2 text-sm w-full text-left px-2 py-1.5 rounded-md transition-colors duration-150 ${
+                    selectedFile === f.path ? 'bg-accent text-foreground' : 'hover:bg-accent/50 text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  <span className="text-red-400">⚠</span>
-                  <span className="truncate">{f.path}</span>
+                  <AlertTriangle size={12} className="text-error shrink-0" />
+                  <span className="truncate font-mono text-xs">{f.path}</span>
                 </button>
               ))}
             </div>
@@ -103,16 +106,18 @@ export function ConflictInlinePanel({
           {status === 'resolved' && (
             <>
               <Button onClick={onAccept} disabled={loading} size="sm" variant="default">
-                ✅ {t('resolvePanel.accept')}
+                <Check size={14} className="mr-1" />
+                {t('resolvePanel.accept')}
               </Button>
               <Button onClick={onReject} disabled={loading} size="sm" variant="destructive">
-                ❌ {t('resolvePanel.rejectRollback')}
+                <X size={14} className="mr-1" />
+                {t('resolvePanel.rejectRollback')}
               </Button>
             </>
           )}
           {status === 'resolving' && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="animate-pulse">🟠</span>
+              <Loader2 size={14} className="animate-spin text-warning" />
               {t('resolvePanel.resolvingStatus', { repoName: repo.name })}
             </div>
           )}

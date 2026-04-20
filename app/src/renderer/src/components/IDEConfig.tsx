@@ -3,6 +3,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { CheckCircle2, XCircle, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSettings } from '@/contexts/SettingsContext'
 import { Label } from '@/components/ui/label'
@@ -83,7 +84,7 @@ export function IDEConfig(): JSX.Element {
             .filter((ide) => !ide.isCustom)
             .map((ide) => (
               <div key={ide.id} className="flex items-center gap-2 text-xs">
-                <span>{ide.installed ? '✅' : '❌'}</span>
+                <span>{ide.installed ? <CheckCircle2 size={12} className="text-success" /> : <XCircle size={12} className="text-muted-foreground/50" />}</span>
                 <span className="text-foreground">{ide.name}</span>
                 {ide.installed && (
                   <span className="text-muted-foreground">(CLI: {ide.cliCommand})</span>
@@ -105,14 +106,14 @@ export function IDEConfig(): JSX.Element {
               const detected = ideConfig.detectedIDEs.find((i) => i.id === custom.id)
               return (
                 <div key={custom.id} className="flex items-center gap-2 text-xs">
-                  <span>{detected?.installed ? '✅' : '❌'}</span>
+                  <span>{detected?.installed ? <CheckCircle2 size={12} className="text-success" /> : <XCircle size={12} className="text-muted-foreground/50" />}</span>
                   <span className="text-foreground">{custom.name}</span>
                   <span className="text-muted-foreground">(CLI: {custom.cliCommand})</span>
                   <button
                     onClick={() => handleRemoveCustom(custom.id)}
                     className="text-red-400 hover:text-red-500"
                   >
-                    ✕
+                    <X size={12} className="text-red-400 hover:text-red-500" />
                   </button>
                 </div>
               )

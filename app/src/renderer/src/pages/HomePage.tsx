@@ -18,6 +18,7 @@ import { RepoSettingsDialog } from '@/components/RepoSettingsDialog'
 import { engineApi } from '@/lib/api'
 import type { Repo, RepoStatus, ResolveData, SyncHistoryRecord } from '@/types/engine'
 import { isConflictStatus } from '@/lib/utils'
+import { RotateCw, RefreshCw, FolderOpen, ChevronDown, ChevronRight, CheckCircle2, Zap, XCircle, Search, Plus } from 'lucide-react'
 
 export function HomePage(): JSX.Element {
   const { t } = useTranslation()
@@ -241,7 +242,7 @@ export function HomePage(): JSX.Element {
     <div className="space-y-5">
       {/* Error */}
       {error && (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="rounded-lg border border-error/30 bg-error-muted p-3 text-sm text-error animate-fade-in">
           {error}
         </div>
       )}
@@ -255,16 +256,16 @@ export function HomePage(): JSX.Element {
 
       {/* Repo List */}
       <div
-        className={`relative ${dragOver ? 'ring-2 ring-primary ring-offset-2 ring-offset-background rounded-lg' : ''}`}
+        className={`relative ${dragOver ? 'ring-2 ring-primary ring-offset-2 ring-offset-background rounded-xl' : ''}`}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {dragOver && (
-          <div className="absolute inset-0 z-40 flex items-center justify-center rounded-lg bg-primary/5 border-2 border-dashed border-primary/40">
+          <div className="absolute inset-0 z-40 flex items-center justify-center rounded-xl bg-primary/5 border-2 border-dashed border-primary/30 animate-fade-in">
             <div className="text-center">
-              <span className="text-4xl">📂</span>
+              <FolderOpen size={40} className="mx-auto text-primary/60" />
               <p className="mt-2 text-sm font-medium text-primary">{t('repos.dropOverlay')}</p>
             </div>
           </div>
@@ -277,20 +278,21 @@ export function HomePage(): JSX.Element {
               ? `${t('repos.title')} (${filteredRepos.length}/${repos.length})`
               : `${t('repos.title')} (${repos.length})`}
           </h2>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <Button variant="ghost" size="sm" onClick={syncAll} disabled={loading}>
-              ⟳ {t('dashboard.syncAll')}
+              <RotateCw size={14} className="mr-1" />
+              {t('dashboard.syncAll')}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setShowScan(true)}>
+              <Search size={14} className="mr-1" />
               {t('repos.scan')}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setShowAdd(true)}>
+              <Plus size={14} className="mr-1" />
               {t('repos.addRepo')}
             </Button>
             <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
-              <span className={loading ? 'inline-block animate-spin' : ''}>
-                {loading ? '⟳' : '🔄'}
-              </span>{' '}
+              <RefreshCw size={14} className={loading ? 'mr-1 animate-spin' : 'mr-1'} />
               {t('repos.refresh')}
             </Button>
           </div>
@@ -350,8 +352,8 @@ export function HomePage(): JSX.Element {
 
       {/* Agent error */}
       {agentError && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
-          <p className="text-sm text-red-400">⚠ {agentError}</p>
+        <div className="rounded-lg border border-error/30 bg-error-muted p-3 animate-fade-in">
+          <p className="text-sm text-error">{agentError}</p>
         </div>
       )}
 
@@ -364,12 +366,16 @@ export function HomePage(): JSX.Element {
           onClick={() => history.length > 3 && setHistoryExpanded((v) => !v)}
         >
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
-              {history.length > 3 ? (historyExpanded ? '▾' : '▸') : '▾'}
+            <span className="text-muted-foreground">
+              {history.length > 3 ? (
+                historyExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />
+              ) : (
+                <ChevronDown size={12} />
+              )}
             </span>
             <h3 className="text-sm font-medium text-muted-foreground">{t('dashboard.syncHistory')}</h3>
             {history.length > 0 && (
-              <span className="text-xs text-muted-foreground">({history.length})</span>
+              <span className="text-xs text-muted-foreground tabular-nums">({history.length})</span>
             )}
           </div>
           {history.length > 0 && (
@@ -397,14 +403,14 @@ export function HomePage(): JSX.Element {
         ) : history.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('dashboard.noHistory')}</p>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {displayHistory.map((record) => (
               <HistoryRow key={record.id} record={record} />
             ))}
             {!historyExpanded && history.length > 3 && (
               <button
                 onClick={() => setHistoryExpanded(true)}
-                className="w-full px-2 py-1 text-center text-xs text-muted-foreground hover:text-primary transition-colors"
+                className="w-full px-2 py-1.5 text-center text-xs text-muted-foreground hover:text-primary transition-colors"
               >
                 ··· {t('home.viewMore', { count: history.length - 3 })} ···
               </button>
@@ -458,22 +464,22 @@ function HistoryRow({ record }: { record: SyncHistoryRecord }): JSX.Element {
     record.summaryStatus === 'failed'
 
   return (
-    <div className="rounded-md px-2 py-1.5 text-sm">
+    <div className="rounded-md px-2 py-1.5 text-sm hover:bg-accent/30 transition-colors duration-150">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
-          <span>{config.icon}</span>
+          <span className="shrink-0">{config.icon}</span>
           <span className="font-medium truncate">{record.repoName}</span>
           <span className="text-muted-foreground">{config.label}</span>
           {record.commitsPulled > 0 && (
-            <span className="text-xs text-muted-foreground">+{record.commitsPulled} commits</span>
+            <span className="text-xs text-muted-foreground tabular-nums">+{record.commitsPulled} commits</span>
           )}
           {record.agentUsed && (
-            <span className="text-[10px] px-1 py-0 rounded bg-secondary text-secondary-foreground">
-              🤖 {record.agentUsed}
+            <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-secondary text-secondary-foreground font-mono">
+              {record.agentUsed}
             </span>
           )}
           {record.errorMessage && (
-            <span className="truncate text-xs text-red-500" title={record.errorMessage}>
+            <span className="truncate text-xs text-error" title={record.errorMessage}>
               {record.errorMessage}
             </span>
           )}
@@ -486,12 +492,11 @@ function HistoryRow({ record }: { record: SyncHistoryRecord }): JSX.Element {
         <div className="mt-1 ml-6">
           {record.summaryStatus === 'generating' || record.summaryStatus === 'pending' ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="inline-block h-3 w-3 rounded-full bg-primary/50 animate-pulse" />
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
               {t('summary.generating')}
             </div>
           ) : record.summaryStatus === 'done' && record.summary ? (
             <div className="text-xs text-muted-foreground leading-relaxed">
-              <span className="mr-1">📝</span>
               {expanded || shouldShowFull(record.summary) ? (
                 <>
                   {record.summary}
@@ -518,7 +523,7 @@ function HistoryRow({ record }: { record: SyncHistoryRecord }): JSX.Element {
             </div>
           ) : record.summaryStatus === 'failed' ? (
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-red-500">❌ {t('summary.failed')}</span>
+              <span className="text-error">{t('summary.failed')}</span>
               <button
                 onClick={handleRetry}
                 className="text-primary hover:underline"
@@ -533,13 +538,13 @@ function HistoryRow({ record }: { record: SyncHistoryRecord }): JSX.Element {
   )
 }
 
-function getHistoryConfig(status: string, t: TFunction): { icon: string; label: string } {
+function getHistoryConfig(status: string, t: TFunction): { icon: React.ReactNode; label: string } {
   switch (status) {
-    case 'synced': return { icon: '✅', label: t('status.synced') }
-    case 'up_to_date': return { icon: '—', label: t('status.upToDate') }
-    case 'conflict': return { icon: '⚡', label: t('status.conflict') }
-    case 'error': return { icon: '❌', label: t('status.error') }
-    default: return { icon: '•', label: status }
+    case 'synced': return { icon: <CheckCircle2 size={14} className="text-success" />, label: t('status.synced') }
+    case 'up_to_date': return { icon: <span className="text-muted-foreground text-xs">—</span>, label: t('status.upToDate') }
+    case 'conflict': return { icon: <Zap size={14} className="text-error" />, label: t('status.conflict') }
+    case 'error': return { icon: <XCircle size={14} className="text-error" />, label: t('status.error') }
+    default: return { icon: <span className="text-muted-foreground text-xs">•</span>, label: status }
   }
 }
 

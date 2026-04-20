@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { ScannedRepo, BranchMapping } from '@/types/engine'
+import { ArrowRight } from 'lucide-react'
 
 interface ScanDialogProps {
   open: boolean
@@ -53,7 +54,18 @@ export function ScanDialog({
     }
   }, [open, initialDir, onScan])
 
-  if (!open) return null
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+    } else if (mounted) {
+      const timer = setTimeout(() => setMounted(false), 200)
+      return () => clearTimeout(timer)
+    }
+  }, [open, mounted])
+
+  if (!mounted) return null
 
   const handleSelectDirectory = async (): Promise<void> => {
     try {
@@ -148,8 +160,16 @@ export function ScanDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg border border-border bg-card p-6 shadow-lg">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center transition-[visibility] duration-200 ${!open && 'invisible'}`}>
+      <div
+        className={`absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0'}`}
+        onClick={handleClose}
+      />
+      <div
+        className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-2xl transition-all duration-200 ${
+          open ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+        }`}
+      >
         <h3 className="text-lg font-semibold">{t('scanRepo.title')}</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           {t('scanRepo.description')}
@@ -290,7 +310,7 @@ export function ScanDialog({
                                 />
                               )}
                             </div>
-                            <span className="text-muted-foreground text-xs">→</span>
+                            <ArrowRight size={12} className="text-muted-foreground" />
                             <div className="flex-1">
                               {repo.remoteBranches && repo.remoteBranches.length > 0 ? (
                                 <select

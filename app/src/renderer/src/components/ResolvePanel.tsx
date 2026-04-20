@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Loader2, Check, X } from 'lucide-react'
 
 interface ResolvePanelProps {
   repoName: string
@@ -39,7 +40,7 @@ export function ResolvePanel({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+    <div className="rounded-lg border border-border bg-card p-4 shadow-card space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">{t('resolvePanel.title')}</h3>
         <Badge
@@ -62,9 +63,9 @@ export function ResolvePanel({
       )}
 
       {summary && (
-        <div className="rounded-md bg-accent/30 p-3">
+        <div className="rounded-md bg-primary/5 border border-primary/10 p-3">
           <p className="text-xs font-medium text-muted-foreground">{t('resolvePanel.agentSummary')}</p>
-          <p className="mt-1 text-sm">{summary}</p>
+          <p className="mt-1 text-sm leading-relaxed">{summary}</p>
         </div>
       )}
 
@@ -73,8 +74,9 @@ export function ResolvePanel({
           <p className="text-xs font-medium text-muted-foreground">{t('resolvePanel.resolvedFiles')}</p>
           <ul className="mt-1 space-y-0.5">
             {resolvedFiles.map((f) => (
-              <li key={f} className="text-xs text-emerald-400">
-                ✓ {f}
+              <li key={f} className="text-xs text-success">
+                <Check size={12} className="inline mr-1" />
+                {f}
               </li>
             ))}
           </ul>
@@ -99,7 +101,7 @@ export function ResolvePanel({
         )}
         {status === 'resolving' && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="animate-pulse">🟠</span>
+            <Loader2 size={14} className="animate-spin text-warning" />
             {t('resolvePanel.resolvingStatus', { repoName })}
           </div>
         )}

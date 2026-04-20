@@ -1,12 +1,12 @@
 /**
- * IDEOpenButton — opens a repo in the default IDE, with dropdown for alternatives
+ * IDEOpenButton — opens a repo in the default IDE
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useSettingsDrawer } from '@/contexts/SettingsDrawerContext'
-import type { IDEInfo } from '@/types/ide'
+import { Code, Loader2 } from 'lucide-react'
 
 interface IDEOpenButtonProps {
   repoPath: string
@@ -14,104 +14,37 @@ interface IDEOpenButtonProps {
 
 export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
   const { t } = useTranslation()
-  const { getInstalledIDEs, getDefaultIDE, setDefaultIDE, openInIDE, ideLoading } = useSettings()
+  const { getDefaultIDE, openInIDE, ideLoading } = useSettings()
   const { openDrawer } = useSettingsDrawer()
-  const [open, setOpen] = useState(false)
   const [opening, setOpening] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
 
   const defaultIDE = getDefaultIDE()
-  const installedIDEs = getInstalledIDEs()
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
+  const handleOpen = useCallback(async () => {
+    if (!defaultIDE) {
+      openDrawer()
+      return
     }
-    if (open) document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
-  const handleOpen = useCallback(
-    async (ide: IDEInfo) => {
-      setOpening(true)
-      const result = await openInIDE(repoPath, ide.id)
-      setOpening(false)
-      setOpen(false)
-      if (!result.success) {
-        alert(result.error ?? t('ide.openFailed'))
-      }
-    },
-    [repoPath, openInIDE, t]
-  )
-
-  const handleMainClick = useCallback(() => {
-    if (defaultIDE) {
-      handleOpen(defaultIDE)
-    } else {
-      setOpen(!open)
+    setOpening(true)
+    const result = await openInIDE(repoPath, defaultIDE.id)
+    setOpening(false)
+    if (!result.success) {
+      alert(result.error ?? t('ide.openFailed'))
     }
-  }, [defaultIDE, open, handleOpen])
-
-  const handleSettingsClick = useCallback(() => {
-    setOpen(false)
-    openDrawer()
-  }, [openDrawer])
+  }, [repoPath, defaultIDE, openInIDE, openDrawer, t])
 
   if (ideLoading) return <></>
 
-  if (installedIDEs.length === 0) return <></>
-
-  // data-action: marker to prevent RepoRow expand toggle when clicking IDE buttons
+  // data-action: marker to prevent RepoRow expand toggle when clicking
   return (
-    <div className="relative" ref={dropdownRef} data-action>
-      <div className="flex">
-        <button
-          onClick={handleMainClick}
-          disabled={opening}
-          className="rounded-l px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-          title={defaultIDE ? t('ide.openWith', { name: defaultIDE.name }) : t('ide.selectIdeToOpen')}
-        >
-          {opening ? '⏳' : '<>'} {defaultIDE ? defaultIDE.name : t('ide.open')}
-        </button>
-        {installedIDEs.length > 1 && (
-          <button
-            onClick={() => setOpen(!open)}
-            className="rounded-r border-l border-border px-1 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            title={t('ide.selectOtherIde')}
-          >
-            ▾
-          </button>
-        )}
-      </div>
-
-      {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[180px] rounded-md border border-border bg-card py-1 shadow-lg">
-          {installedIDEs.map((ide) => (
-            <button
-              key={ide.id}
-              onClick={() => handleOpen(ide)}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-foreground hover:bg-accent"
-            >
-              {ide.id === defaultIDE?.id && <span className="text-primary">✓</span>}
-              {ide.id !== defaultIDE?.id && <span className="w-3" />}
-              {ide.name}
-              {ide.id === defaultIDE?.id && (
-                <span className="text-muted-foreground">{t('ide.default')}</span>
-              )}
-            </button>
-          ))}
-          <div className="my-1 border-t border-border" />
-          <button
-            onClick={handleSettingsClick}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            {t('ide.setDefault')}
-          </button>
-        </div>
-      )}
-    </div>
+    <button
+      data-action
+      onClick={handleOpen}
+      disabled={opening}
+      className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+      title={defaultIDE ? t('ide.openWith', { name: defaultIDE.name }) : t('ide.selectIdeToOpen')}
+    >
+      {opening ? <Loader2 size={14} className="animate-spin" /> : <Code size={14} />}
+    </button>
   )
 }

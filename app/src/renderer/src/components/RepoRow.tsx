@@ -1,9 +1,10 @@
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import type { Repo, RepoStatus } from '@/types/engine'
-import { getStatusConfig } from '@/components/StatusCard'
+import { getStatusConfig, StatusIcon, getStatusColor } from '@/components/StatusCard'
 import { IDEOpenButton } from '@/components/IDEOpenButton'
-import { isConflictStatus } from '@/lib/utils'
+import { isConflictStatus, cn } from '@/lib/utils'
+import { ChevronRight, Settings, RotateCw, Trash2 } from 'lucide-react'
 
 interface RepoStatusBadgeProps {
   status: RepoStatus
@@ -26,7 +27,6 @@ export function RepoStatusBadge({ status, className }: RepoStatusBadgeProps): JS
 
   return (
     <Badge variant={variantMap[status] ?? 'muted'} className={className}>
-      <span className="mr-1">{config.icon}</span>
       {config.label}
     </Badge>
   )
@@ -44,10 +44,15 @@ interface RepoRowProps {
 export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettings }: RepoRowProps): JSX.Element {
   const { t } = useTranslation()
   const isConflict = isConflictStatus(repo.status)
+  const statusColor = getStatusColor(repo.status)
 
   return (
     <div
-      className="group cursor-pointer rounded-lg border border-border bg-card transition-colors hover:bg-accent/30"
+      className={cn(
+        'group relative cursor-pointer rounded-lg border border-border bg-card shadow-card',
+        'transition-all duration-200 hover:shadow-card-hover hover:-translate-y-px',
+        'hover:border-border/80'
+      )}
       onClick={(e) => {
         // Don't toggle if clicking action buttons
         const target = e.target as HTMLElement
@@ -55,27 +60,41 @@ export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettin
         onToggle()
       }}
     >
-      <div className="p-4">
+      {/* Left status indicator bar */}
+      <div
+        className="absolute left-0 top-2 bottom-2 w-[3px] rounded-l-lg transition-colors"
+        style={{ backgroundColor: statusColor }}
+      />
+
+      <div className="p-4 pl-5">
         {/* Row 1: name, branch, status, ahead/behind */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <span className="text-sm text-muted-foreground">{isExpanded ? '▾' : '▸'}</span>
+            <ChevronRight
+              size={14}
+              className={cn(
+                'shrink-0 text-muted-foreground transition-transform duration-200',
+                isExpanded && 'rotate-90'
+              )}
+            />
             <span className="font-semibold text-foreground truncate">{repo.name}</span>
             {repo.branch && (
-              <span className="text-xs text-muted-foreground whitespace-nowrap">{repo.branch}</span>
+              <code className="rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground font-mono">
+                {repo.branch}
+              </code>
             )}
             <RepoStatusBadge status={repo.status} />
             {(repo.aheadBy > 0 || repo.behindBy > 0) && (
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {repo.aheadBy > 0 && `↗${repo.aheadBy}`}
-                {repo.behindBy > 0 && ` ↙${repo.behindBy}`}
+              <span className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
+                {repo.aheadBy > 0 && `↑${repo.aheadBy}`}
+                {repo.behindBy > 0 && ` ↓${repo.behindBy}`}
               </span>
             )}
           </div>
         </div>
 
         {/* Row 2: origin URL + action buttons */}
-        <div className="flex items-center justify-between mt-1">
+        <div className="flex items-center justify-between mt-1.5">
           <div className="min-w-0 flex-1">
             {repo.origin && (
               <p className="truncate text-xs text-muted-foreground">
@@ -92,33 +111,33 @@ export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettin
             )}
           </div>
 
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 ml-2 shrink-0">
+          <div className="flex items-center gap-0.5 opacity-30 transition-opacity duration-150 group-hover:opacity-100 ml-2 shrink-0">
             <button
               data-action
               onClick={() => onSettings(repo.name)}
-              className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               title={t('postSync.settings')}
             >
-              ⚙️
+              <Settings size={14} />
             </button>
             <IDEOpenButton repoPath={repo.path} />
             {!isConflict && (
               <button
                 data-action
                 onClick={() => onSync(repo.name)}
-                className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                 title={t('repos.syncNow')}
               >
-                ⟳
+                <RotateCw size={14} />
               </button>
             )}
             <button
               data-action
               onClick={() => onRemove(repo.name)}
-              className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-500"
+              className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-error-muted hover:text-error"
               title={t('repos.remove')}
             >
-              🗑
+              <Trash2 size={14} />
             </button>
           </div>
         </div>
@@ -126,3 +145,5 @@ export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettin
     </div>
   )
 }
+
+

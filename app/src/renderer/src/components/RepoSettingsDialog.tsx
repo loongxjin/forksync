@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { PostSyncCommand } from '@/types/engine'
 import { engineApi } from '@/lib/api'
+import { Trash2, X } from 'lucide-react'
 
 interface RepoSettingsDialogProps {
   repoName: string
@@ -75,22 +76,35 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
     }
   }
 
-  if (!open) return null
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+    } else if (mounted) {
+      const timer = setTimeout(() => setMounted(false), 200)
+      return () => clearTimeout(timer)
+    }
+  }, [open, mounted])
+
+  if (!mounted) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center transition-[visibility] duration-200 ${!open && 'invisible'}`}>
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className={`absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0'}`} onClick={onClose} />
 
       {/* Dialog */}
-      <div className="relative z-10 w-full max-w-lg rounded-lg border border-border bg-card p-6 shadow-lg">
+      <div className={`relative z-10 w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl transition-all duration-200 ${
+        open ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+      }`}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{t('postSync.title')}</h2>
           <button
             onClick={onClose}
             className="rounded px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
 
@@ -114,7 +128,7 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
                   disabled={saving}
                   className="ml-2 shrink-0 rounded px-1.5 py-0.5 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
                 >
-                  🗑
+                  <Trash2 size={12} className="text-muted-foreground hover:text-error" />
                 </button>
               </div>
             ))}

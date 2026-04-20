@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
+import { Bot } from 'lucide-react'
 import type { AgentInfo } from '@/types/engine'
 
 interface AgentStatusBadgeProps {
@@ -15,7 +16,7 @@ export function AgentStatusBadge({ agents, preferred }: AgentStatusBadgeProps): 
   if (installedCount === 0) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-sm">🤖</span>
+        <Bot size={16} className="text-muted-foreground" />
         <span className="text-sm text-muted-foreground">{t('agentBadge.noAgentsInstalled')}</span>
       </div>
     )
@@ -23,7 +24,7 @@ export function AgentStatusBadge({ agents, preferred }: AgentStatusBadgeProps): 
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-sm">🤖</span>
+      <Bot size={16} className="text-primary" />
       <span className="text-sm font-medium">
         {preferredAgent?.name ?? agents[0]?.name}
       </span>

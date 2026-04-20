@@ -3,6 +3,7 @@ import { useAgents } from '@/contexts/AgentContext'
 import { useSettings } from '@/contexts/SettingsContext'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { CheckCircle2, XCircle, Clock } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
@@ -148,7 +149,7 @@ export function AgentConfig(): JSX.Element {
               className="flex items-center justify-between rounded-md border border-border bg-card p-3"
             >
               <div className="flex items-center gap-2">
-                <span>{agent.installed ? '✅' : '❌'}</span>
+                <span>{agent.installed ? <CheckCircle2 size={14} className="text-success" /> : <XCircle size={14} className="text-muted-foreground/50" />}</span>
                 <span className="text-sm font-medium">{agent.name}</span>
                 {agent.version && (
                   <span className="text-xs text-muted-foreground">v{agent.version}</span>
@@ -282,7 +283,7 @@ export function AgentConfig(): JSX.Element {
               >
                 <div className="flex items-center gap-2">
                   <span>
-                    {s.status === 'active' ? '🟢' : s.status === 'expired' ? '⏰' : '❌'}
+                    {s.status === 'active' ? <CheckCircle2 size={12} className="text-success" /> : s.status === 'expired' ? <Clock size={12} className="text-warning" /> : <XCircle size={12} className="text-muted-foreground/50" />}
                   </span>
                   <span className="font-medium">{s.agentName}</span>
                   <span className="text-muted-foreground">{s.repoId}</span>
