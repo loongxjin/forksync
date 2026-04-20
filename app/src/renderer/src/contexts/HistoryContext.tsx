@@ -25,6 +25,7 @@ type HistoryAction =
   | { type: 'SET_RECORDS'; records: SyncHistoryRecord[] }
   | { type: 'CLEAR' }
   | { type: 'SET_ERROR' }
+  | { type: 'UPDATE_RECORD'; repoName: string; updates: Partial<SyncHistoryRecord> }
 
 const initialState: HistoryState = {
   records: [],
@@ -47,6 +48,15 @@ function historyReducer(state: HistoryState, action: HistoryAction): HistoryStat
       }
     case 'CLEAR':
       return { ...state, records: [], initialized: false }
+    case 'UPDATE_RECORD':
+      return {
+        ...state,
+        records: state.records.map((r) =>
+          r.repoName === action.repoName
+            ? { ...r, ...action.updates }
+            : r
+        )
+      }
     case 'SET_ERROR':
       return { ...state, loading: false }
     default:
@@ -57,6 +67,7 @@ function historyReducer(state: HistoryState, action: HistoryAction): HistoryStat
 interface HistoryContextValue extends HistoryState {
   loadHistory: () => Promise<void>
   clearHistory: () => void
+  updateRecord: (repoName: string, updates: Partial<SyncHistoryRecord>) => void
 }
 
 const HistoryContext = createContext<HistoryContextValue | null>(null)
@@ -82,8 +93,12 @@ export function HistoryProvider({ children }: { children: ReactNode }): JSX.Elem
     dispatch({ type: 'CLEAR' })
   }, [])
 
+  const updateRecord = useCallback((repoName: string, updates: Partial<SyncHistoryRecord>) => {
+    dispatch({ type: 'UPDATE_RECORD', repoName, updates })
+  }, [])
+
   return (
-    <HistoryContext.Provider value={{ ...state, loadHistory, clearHistory }}>
+    <HistoryContext.Provider value={{ ...state, loadHistory, clearHistory, updateRecord }}>
       {children}
     </HistoryContext.Provider>
   )

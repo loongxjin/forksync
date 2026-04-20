@@ -33,7 +33,7 @@ export function HomePage(): JSX.Element {
   const { engineConfig } = useSettings()
   const {
     records: history, loading: historyLoading, initialized: historyInitialized,
-    lastLoadAt, loadHistory, clearHistory
+    lastLoadAt, loadHistory, clearHistory, updateRecord
   } = useHistory()
 
   const hasSyncing = useMemo(() => repos.some((r) => r.status === 'syncing'), [repos])
@@ -62,6 +62,23 @@ export function HomePage(): JSX.Element {
 
   // History list expanded: click title to toggle between showing all records vs 3 records
   const [historyExpanded, setHistoryExpanded] = useState(false)
+
+  const handleSummaryRetry = useCallback(async (record: SyncHistoryRecord): Promise<void> => {
+    // Optimistically update status to 'generating' so the polling kicks in
+    updateRecord(record.repoName, { summaryStatus: 'generating', summary: '' })
+    try {
+      const res = await engineApi.summarizeRetry(record.repoName)
+      if (!res.success) {
+        updateRecord(record.repoName, { summaryStatus: 'failed', summary: '' })
+        showToast?.(res.error ?? t('toast.summaryRetryFailed'), 'error')
+      } else {
+        loadHistory()
+      }
+    } catch {
+      updateRecord(record.repoName, { summaryStatus: 'failed', summary: '' })
+      showToast?.(t('toast.summaryRetryFailed'), 'error')
+    }
+  }, [updateRecord, loadHistory, showToast, t])
 
   // Initialize
   useEffect(() => {
@@ -405,7 +422,7 @@ export function HomePage(): JSX.Element {
         ) : (
           <div className="space-y-0.5">
             {displayHistory.map((record) => (
-              <HistoryRow key={record.id} record={record} />
+              <HistoryRow key={record.id} record={record} onRetry={handleSummaryRetry} />
             ))}
             {!historyExpanded && history.length > 3 && (
               <button
@@ -439,18 +456,14 @@ export function HomePage(): JSX.Element {
   )
 }
 
-function HistoryRow({ record }: { record: SyncHistoryRecord }): JSX.Element {
+function HistoryRow({ record, onRetry }: { record: SyncHistoryRecord; onRetry: (record: SyncHistoryRecord) => void }): JSX.Element {
   const { t } = useTranslation()
   const config = getHistoryConfig(record.status, t)
   const timeAgo = formatTimeAgo(record.createdAt, t)
   const [expanded, setExpanded] = useState(false)
 
-  const handleRetry = async (): Promise<void> => {
-    try {
-      await engineApi.summarizeRetry(record.repoName)
-    } catch {
-      // silent
-    }
+  const handleRetry = (): void => {
+    onRetry(record)
   }
 
   // shouldShowFull returns true if the summary has 3 or fewer lines.
