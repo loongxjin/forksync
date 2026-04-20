@@ -153,6 +153,13 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   }, [])
 
   const syncAll = useCallback(async () => {
+    // Optimistically set all non-conflict repos to syncing
+    for (const repo of state.repos) {
+      if (!isConflictStatus(repo.status)) {
+        dispatch({ type: 'SET_REPO_STATUS', repoId: repo.id, status: 'syncing' })
+      }
+    }
+
     dispatch({ type: 'SET_LOADING', loading: true })
     try {
       const res = await engineApi.syncAll()
@@ -197,7 +204,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     } catch (err) {
       dispatch({ type: 'SET_ERROR', error: (err as Error).message })
     }
-  }, [refresh, engineConfig])
+  }, [state, refresh, engineConfig])
 
   // Toast functions must be defined before syncRepo to avoid TDZ error
   const hideToast = useCallback(() => {
@@ -241,6 +248,11 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       }
 
       syncingReposRef.current.add(name)
+
+      // Optimistically set syncing status
+      if (repo) {
+        dispatch({ type: 'SET_REPO_STATUS', repoId: repo.id, status: 'syncing' })
+      }
 
       dispatch({ type: 'SET_LOADING', loading: true })
       try {

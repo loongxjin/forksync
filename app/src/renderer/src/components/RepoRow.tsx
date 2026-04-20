@@ -44,6 +44,7 @@ interface RepoRowProps {
 export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettings }: RepoRowProps): JSX.Element {
   const { t } = useTranslation()
   const isConflict = isConflictStatus(repo.status)
+  const isSyncing = repo.status === 'syncing'
   const statusColor = getStatusColor(repo.status)
 
   return (
@@ -121,7 +122,7 @@ export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettin
               <Settings size={14} />
             </button>
             <IDEOpenButton repoPath={repo.path} />
-            {!isConflict && (
+            {!isConflict && !isSyncing && (
               <button
                 data-action
                 onClick={() => onSync(repo.name)}
