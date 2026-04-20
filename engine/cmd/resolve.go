@@ -303,7 +303,7 @@ func completeAgentResolve(ctx context.Context, r types.Repo, store repo.Store, r
 	}
 
 	// Update status
-	r.Status = types.RepoStatusSynced
+	r.Status = types.RepoStatusUpToDate
 	r.ErrorMessage = ""
 	if updateErr := store.Update(r); updateErr != nil {
 		logger.Error("resolve: failed to update repo after complete", "repo", r.Name, "error", updateErr)
@@ -364,7 +364,7 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 	// Check if we're in a merge state
 	mergeHead := filepath.Join(r.Path, ".git", "MERGE_HEAD")
 	if _, err := os.Stat(mergeHead); err != nil {
-		r.Status = types.RepoStatusSynced
+		r.Status = types.RepoStatusUpToDate
 		r.ErrorMessage = ""
 		if updateErr := store.Update(r); updateErr != nil {
 			logger.Error("resolve: failed to update repo after accept (no merge)", "repo", r.Name, "error", updateErr)
@@ -391,7 +391,7 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 		}
 	}
 
-	r.Status = types.RepoStatusSynced
+	r.Status = types.RepoStatusUpToDate
 	r.ErrorMessage = ""
 	if updateErr := store.Update(r); updateErr != nil {
 		logger.Error("resolve: failed to update repo after accept", "repo", r.Name, "error", updateErr)
@@ -449,7 +449,7 @@ func triggerResolveSummary(ctx context.Context, r types.Repo, cfg *config.Config
 		return
 	}
 
-	if updateErr := histStore.UpdateStatus(record.ID, "synced"); updateErr != nil {
+	if updateErr := histStore.UpdateStatus(record.ID, "up_to_date"); updateErr != nil {
 		logger.Error("[resolve-accept] update history status", "error", updateErr)
 	}
 

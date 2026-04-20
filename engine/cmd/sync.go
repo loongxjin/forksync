@@ -75,10 +75,12 @@ func runSync(cmd *cobra.Command, args []string) error {
 	} else {
 		for _, r := range syncResults {
 			switch r.Status {
-			case types.RepoStatusSynced:
-				outputText("✅ %s: synced (%d commits pulled)", r.RepoName, r.CommitsPulled)
 			case types.RepoStatusUpToDate:
-				outputText("✅ %s: already up to date", r.RepoName)
+				if r.CommitsPulled > 0 {
+					outputText("✅ %s: synced (%d commits pulled)", r.RepoName, r.CommitsPulled)
+				} else {
+					outputText("✅ %s: already up to date", r.RepoName)
+				}
 			case types.RepoStatusConflict:
 				outputText("⚠️  %s: conflicts in %d files", r.RepoName, len(r.ConflictFiles))
 				for _, f := range r.ConflictFiles {

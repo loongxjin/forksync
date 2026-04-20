@@ -15,8 +15,8 @@ export function RepoStatusBadge({ status, className }: RepoStatusBadgeProps): JS
   const config = getStatusConfig(status)
 
   const variantMap: Record<string, 'success' | 'warning' | 'error' | 'info' | 'muted'> = {
-    synced: 'success',
     up_to_date: 'success',
+    sync_needed: 'warning',
     syncing: 'warning',
     conflict: 'error',
     resolving: 'info',

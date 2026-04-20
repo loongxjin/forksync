@@ -43,7 +43,7 @@ export function notifySyncResults(results: SyncResult[]): void {
   )
   const errors = results.filter((r) => r.status === 'error')
   const synced = results.filter(
-    (r) => r.status === 'synced' || r.status === 'up_to_date'
+    (r) => r.status === 'up_to_date'
   )
 
   // Conflict notification — high priority

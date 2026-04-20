@@ -17,14 +17,14 @@ type ApiResponse[T any] struct {
 type RepoStatus string
 
 const (
-	RepoStatusSynced       RepoStatus = "synced"
+	RepoStatusUpToDate     RepoStatus = "up_to_date"
+	RepoStatusSyncNeeded   RepoStatus = "sync_needed" // 上游有更新，需要同步
 	RepoStatusSyncing      RepoStatus = "syncing"
 	RepoStatusConflict     RepoStatus = "conflict"
 	RepoStatusResolving    RepoStatus = "resolving"  // agent 正在解决冲突
 	RepoStatusResolved     RepoStatus = "resolved"   // agent 解决完成，等待用户确认
 	RepoStatusError        RepoStatus = "error"
 	RepoStatusUnconfigured RepoStatus = "unconfigured"
-	RepoStatusUpToDate     RepoStatus = "up_to_date"
 )
 
 // Time 可序列化的 time.Time

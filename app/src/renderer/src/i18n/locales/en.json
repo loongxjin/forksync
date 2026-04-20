@@ -27,20 +27,19 @@
     "system": "System"
   },
   "status": {
-    "synced": "Synced",
     "syncing": "Syncing",
     "conflict": "Conflict",
     "resolving": "Resolving",
     "resolved": "Resolved",
     "error": "Error",
     "unconfigured": "Unconfigured",
-    "upToDate": "Up to date"
+    "upToDate": "Up to date",
+    "syncNeeded": "Sync Needed"
   },
   "dashboard": {
     "title": "Dashboard",
     "syncing": "Syncing...",
     "syncAll": "Sync All",
-    "synced": "Synced",
     "conflict": "Conflict",
     "syncing_status": "Syncing",
     "error_status": "Error",

@@ -27,20 +27,19 @@
     "system": "跟随系统"
   },
   "status": {
-    "synced": "已同步",
     "syncing": "同步中",
     "conflict": "冲突",
     "resolving": "解决中",
     "resolved": "已解决",
     "error": "错误",
     "unconfigured": "未配置",
-    "upToDate": "已最新"
+    "upToDate": "已最新",
+    "syncNeeded": "待同步"
   },
   "dashboard": {
     "title": "仪表盘",
     "syncing": "同步中...",
     "syncAll": "全部同步",
-    "synced": "已同步",
     "conflict": "冲突",
     "syncing_status": "同步中",
     "error_status": "错误",

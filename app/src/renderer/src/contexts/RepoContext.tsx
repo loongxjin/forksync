@@ -187,7 +187,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       if (engineConfig?.Sync?.AutoSummary && res.success) {
         const results = res.data.results ?? []
         for (const r of results) {
-          if (r.status === 'synced' && (r.commitsPulled ?? 0) > 0) {
+          if (r.status === 'up_to_date' && (r.commitsPulled ?? 0) > 0) {
             engineApi.summarize(r.repoName).catch(() => {
               // ignore background summary errors
             })
@@ -262,7 +262,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         // Fire-and-forget AI summarization if auto_summary is enabled
         if (engineConfig?.Sync?.AutoSummary && res.success) {
           const r = res.data.results?.find((x) => x.repoName === name)
-          if (r && r.status === 'synced' && (r.commitsPulled ?? 0) > 0) {
+          if (r && r.status === 'up_to_date' && (r.commitsPulled ?? 0) > 0) {
             engineApi.summarize(name).catch(() => {
               // ignore background summary errors
             })

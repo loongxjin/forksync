@@ -76,7 +76,7 @@ type Result struct {
 	RepoPath        string // used by summarizer to get commit list
 	UpstreamRef     string // upstream remote/branch ref for commit diff, e.g. "upstream/main"
 	OldHEAD         string // HEAD before merge, used to compute pulled commits
-	Status          string // types.RepoStatus values: synced, conflict, up_to_date, error
+	Status          string // types.RepoStatus values: up_to_date, conflict, error
 	CommitsPulled   int
 	ConflictFiles   []string
 	ErrorMessage    string
@@ -202,7 +202,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	if statusResult.BehindBy == 0 {
 		result.Status = string(types.RepoStatusUpToDate)
 		result.CommitsPulled = 0
-		s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
+		s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
 		s.finalizeResult(result)
 		return result
 	}
@@ -237,9 +237,9 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		if strategy == "agent_resolve" && s.sessionMgr != nil {
 			resolved := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)
 			if resolved {
-				result.Status = "synced"
+				result.Status = "up_to_date"
 				result.AutoResolved = len(mergeResult.Conflicts)
-				s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
+				s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
 				s.notifyResult(r.Name, result)
 				s.finalizeResult(result)
 				return result
@@ -255,12 +255,12 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	}
 
 	// Success
-	result.Status = "synced"
-	s.updateRepoStatus(r.ID, types.RepoStatusSynced, "")
+	result.Status = "up_to_date"
+	s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
 	result.PostSyncResults = s.runPostSyncCommands(ctx, r)
 	if postSyncErr := s.postSyncError(result.PostSyncResults); postSyncErr != "" {
 		result.ErrorMessage = postSyncErr
-		s.updateRepoStatus(r.ID, types.RepoStatusSynced, result.ErrorMessage)
+		s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, result.ErrorMessage)
 	}
 	s.notifyResult(r.Name, result)
 	s.finalizeResult(result)
@@ -422,7 +422,7 @@ func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg str
 	}
 	r.Status = status
 	r.ErrorMessage = errMsg
-	if status == types.RepoStatusSynced {
+	if status == types.RepoStatusUpToDate {
 		now := types.Time{Time: time.Now()}
 		r.LastSync = &now
 	}
@@ -453,7 +453,7 @@ func (s *Syncer) notifyResult(repoName string, result *Result) {
 		return
 	}
 	switch result.Status {
-	case "synced":
+	case "up_to_date":
 		if result.CommitsPulled > 0 {
 			s.notifier.NotifySyncSuccess(repoName, result.CommitsPulled)
 		}
@@ -471,15 +471,15 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 	if s.historyStore == nil {
 		return 0
 	}
-	// Don't record up_to_date to history - it's just a status check
-	if result.Status == "up_to_date" {
+	// Don't record to history if there were no actual changes
+	if result.CommitsPulled == 0 && result.Status != "conflict" && result.Status != "error" {
 		return 0
 	}
 
 	// Pre-set summary_status to "pending" if auto-summarization is enabled
 	summaryStatus := ""
 	if s.cfg != nil && s.cfg.Sync.AutoSummary &&
-		result.Status == "synced" && result.CommitsPulled > 0 {
+		result.Status == "up_to_date" && result.CommitsPulled > 0 {
 		summaryStatus = "pending"
 	}
 
@@ -508,17 +508,19 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 // logResult writes the sync result to the log file.
 func (s *Syncer) logResult(result *Result) {
 	switch result.Status {
-	case "synced":
-		logger.Info("repo synced", "repo", result.RepoName, "commits_pulled", result.CommitsPulled)
-		for _, ps := range result.PostSyncResults {
-			if ps.Success {
-				logger.Info("post-sync OK", "command", ps.Name)
-			} else {
-				logger.Error("post-sync failed", "command", ps.Name, "error", ps.Error)
-			}
-		}
 	case "up_to_date":
-		logger.Info("repo already up to date", "repo", result.RepoName)
+		if result.CommitsPulled > 0 {
+			logger.Info("repo synced", "repo", result.RepoName, "commits_pulled", result.CommitsPulled)
+			for _, ps := range result.PostSyncResults {
+				if ps.Success {
+					logger.Info("post-sync OK", "command", ps.Name)
+				} else {
+					logger.Error("post-sync failed", "command", ps.Name, "error", ps.Error)
+				}
+			}
+		} else {
+			logger.Info("repo already up to date", "repo", result.RepoName)
+		}
 	case "conflict":
 		logger.Warn("repo conflicts", "repo", result.RepoName, "files", len(result.ConflictFiles))
 	case "error":

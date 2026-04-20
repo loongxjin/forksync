@@ -11,14 +11,14 @@ func TestRepoStatusConstants(t *testing.T) {
 		status RepoStatus
 		want   string
 	}{
-		{"synced", RepoStatusSynced, "synced"},
+		{"up_to_date", RepoStatusUpToDate, "up_to_date"},
+		{"sync_needed", RepoStatusSyncNeeded, "sync_needed"},
 		{"syncing", RepoStatusSyncing, "syncing"},
 		{"conflict", RepoStatusConflict, "conflict"},
 		{"resolving", RepoStatusResolving, "resolving"},
 		{"resolved", RepoStatusResolved, "resolved"},
 		{"error", RepoStatusError, "error"},
 		{"unconfigured", RepoStatusUnconfigured, "unconfigured"},
-		{"up_to_date", RepoStatusUpToDate, "up_to_date"},
 	}
 
 	for _, tt := range tests {

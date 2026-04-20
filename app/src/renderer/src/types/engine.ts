@@ -22,14 +22,14 @@ export interface ApiResponse<T> {
 
 /** Repo status enum — 8 values matching Go RepoStatus constants */
 export type RepoStatus =
-  | 'synced'
+  | 'up_to_date'
+  | 'sync_needed'
   | 'syncing'
   | 'conflict'
   | 'resolving'
   | 'resolved'
   | 'error'
   | 'unconfigured'
-  | 'up_to_date'
 
 /** Agent session status */
 export type AgentSessionStatus = 'active' | 'expired' | 'failed'

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { RepoStatus } from '@/types/engine'
-import { CheckCircle2, Loader2, AlertTriangle, XCircle } from 'lucide-react'
+import { CheckCircle2, Loader2, AlertTriangle, XCircle, ArrowDownToLine } from 'lucide-react'
 
 export type FilterStatus = RepoStatus | null
 
@@ -21,11 +21,18 @@ interface StatusItem {
 
 const STATUS_ITEMS: StatusItem[] = [
   {
-    key: 'synced',
-    labelKey: 'status.synced',
+    key: 'up_to_date',
+    labelKey: 'status.upToDate',
     colorClass: 'text-success',
     activeClass: 'bg-success-muted text-success border-success/20',
     icon: <CheckCircle2 size={14} />
+  },
+  {
+    key: 'sync_needed',
+    labelKey: 'status.syncNeeded',
+    colorClass: 'text-warning',
+    activeClass: 'bg-warning-muted text-warning border-warning/20',
+    icon: <ArrowDownToLine size={14} />
   },
   {
     key: 'syncing',
@@ -54,9 +61,6 @@ export function StatusOverviewBar({ counts, activeFilter, onFilterChange }: Stat
   const { t } = useTranslation()
 
   const getCount = (key: RepoStatus): number => {
-    if (key === 'synced') {
-      return (counts['synced'] ?? 0) + (counts['up_to_date'] ?? 0)
-    }
     return counts[key] ?? 0
   }
 

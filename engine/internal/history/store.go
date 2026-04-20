@@ -20,7 +20,7 @@ type Record struct {
 	ID             int64     `json:"id"`
 	RepoID         string    `json:"repoId"`
 	RepoName       string    `json:"repoName"`
-	Status         string    `json:"status"` // synced, conflict, error
+	Status         string    `json:"status"` // up_to_date, conflict, error
 	CommitsPulled  int       `json:"commitsPulled"`
 	ConflictFiles  []string  `json:"conflictFiles"`
 	AgentUsed      string    `json:"agentUsed"`

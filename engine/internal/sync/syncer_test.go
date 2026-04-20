@@ -83,7 +83,7 @@ func TestResult_ToSyncResult(t *testing.T) {
 	r := &Result{
 		RepoID:         "repo-1",
 		RepoName:       "my-repo",
-		Status:         "synced",
+		Status:         "up_to_date",
 		CommitsPulled:  5,
 		ConflictFiles:  []string{"a.go", "b.go"},
 		ErrorMessage:   "",
@@ -100,8 +100,8 @@ func TestResult_ToSyncResult(t *testing.T) {
 	if got.RepoName != "my-repo" {
 		t.Errorf("RepoName = %q, want %q", got.RepoName, "my-repo")
 	}
-	if got.Status != types.RepoStatus("synced") {
-		t.Errorf("Status = %q, want %q", got.Status, "synced")
+	if got.Status != types.RepoStatus("up_to_date") {
+		t.Errorf("Status = %q, want %q", got.Status, "up_to_date")
 	}
 	if got.CommitsPulled != 5 {
 		t.Errorf("CommitsPulled = %d, want 5", got.CommitsPulled)
@@ -296,7 +296,7 @@ func (testListErr) Error() string { return "test list error" }
 func TestNotifyResult_NilNotifier(t *testing.T) {
 	s := &Syncer{notifier: nil}
 	// Should not panic.
-	s.notifyResult("repo", &Result{Status: "synced", CommitsPulled: 3})
+	s.notifyResult("repo", &Result{Status: "up_to_date", CommitsPulled: 3})
 	s.notifyResult("repo", &Result{Status: "conflict", ConflictFiles: []string{"a.go"}})
 	s.notifyResult("repo", &Result{Status: "error", ErrorMessage: "boom"})
 }
@@ -306,12 +306,12 @@ func TestNotifyResult_Synced(t *testing.T) {
 		notifier: &notify.Notifier{},
 	}
 	// Test with commits > 0 — should call NotifySyncSuccess path.
-	s.notifyResult("my-repo", &Result{Status: "synced", CommitsPulled: 5})
+	s.notifyResult("my-repo", &Result{Status: "up_to_date", CommitsPulled: 5})
 }
 
 func TestNotifyResult_SyncedZeroCommits(t *testing.T) {
 	s := &Syncer{notifier: notify.NewNotifier(false)}
-	s.notifyResult("my-repo", &Result{Status: "synced", CommitsPulled: 0})
+	s.notifyResult("my-repo", &Result{Status: "up_to_date", CommitsPulled: 0})
 }
 
 func TestNotifyResult_Conflict(t *testing.T) {
@@ -344,25 +344,25 @@ func TestUpdateRepoStatus_RepoNotFound(t *testing.T) {
 	store := newMockStore() // empty
 	s := NewSyncer(store)
 	// Should not panic when repo is not found.
-	s.updateRepoStatus("nonexistent", types.RepoStatusSynced, "")
+	s.updateRepoStatus("nonexistent", types.RepoStatusUpToDate, "")
 }
 
-func TestUpdateRepoStatus_SetsSynced(t *testing.T) {
+func TestUpdateRepoStatus_SetsUpToDate(t *testing.T) {
 	r := types.Repo{ID: "r1", Name: "test", Status: types.RepoStatusSyncing}
 	store := newMockStore(r)
 	s := NewSyncer(store)
 
-	s.updateRepoStatus("r1", types.RepoStatusSynced, "")
+	s.updateRepoStatus("r1", types.RepoStatusUpToDate, "")
 
 	updated, ok := store.Get("r1")
 	if !ok {
 		t.Fatal("repo not found")
 	}
-	if updated.Status != types.RepoStatusSynced {
-		t.Errorf("Status = %q, want %q", updated.Status, types.RepoStatusSynced)
+	if updated.Status != types.RepoStatusUpToDate {
+		t.Errorf("Status = %q, want %q", updated.Status, types.RepoStatusUpToDate)
 	}
 	if updated.LastSync == nil {
-		t.Error("LastSync should be set for synced status")
+		t.Error("LastSync should be set for up_to_date status")
 	}
 }
 

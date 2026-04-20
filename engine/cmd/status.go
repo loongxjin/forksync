@@ -63,7 +63,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 				isMerging, unmergedFiles, err := gitOps.IsMergingState(cmd.Context(), r.Path)
 				if err == nil && !isMerging {
 					// No merge in progress — conflicts were resolved externally
-					repos[idx].Status = types.RepoStatusSynced
+					repos[idx].Status = types.RepoStatusUpToDate
 					repos[idx].ErrorMessage = ""
 					if updateErr := store.Update(repos[idx]); updateErr != nil {
 						logger.Error("status: failed to update repo", "repo", r.Name, "error", updateErr)
@@ -98,7 +98,22 @@ func runStatus(cmd *cobra.Command, args []string) error {
 				repos[idx].AheadBy = statusResult.AheadBy
 				repos[idx].BehindBy = statusResult.BehindBy
 				if repos[idx].Status == types.RepoStatusUnconfigured && r.Upstream != "" {
-					repos[idx].Status = types.RepoStatusSynced
+					repos[idx].Status = types.RepoStatusUpToDate
+					if updateErr := store.Update(repos[idx]); updateErr != nil {
+						logger.Error("status: failed to update repo", "repo", r.Name, "error", updateErr)
+					}
+				}
+				// Detect sync_needed: upstream has new commits
+				if repos[idx].BehindBy > 0 &&
+					repos[idx].Status != types.RepoStatusSyncing &&
+					repos[idx].Status != types.RepoStatusError &&
+					repos[idx].Status != types.RepoStatusConflict &&
+					repos[idx].Status != types.RepoStatusResolving &&
+					repos[idx].Status != types.RepoStatusResolved {
+					repos[idx].Status = types.RepoStatusSyncNeeded
+					if updateErr := store.Update(repos[idx]); updateErr != nil {
+						logger.Error("status: failed to update repo", "repo", r.Name, "error", updateErr)
+					}
 				}
 			} else if err != nil {
 				logger.Error("status: status check failed", "repo", r.Name, "error", err)
@@ -132,7 +147,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			for _, r := range repos {
 				statusIcon := "⚪"
 				switch r.Status {
-				case types.RepoStatusSynced:
+				case types.RepoStatusUpToDate:
 					statusIcon = "🟢"
 				case types.RepoStatusSyncing:
 					statusIcon = "🟡"

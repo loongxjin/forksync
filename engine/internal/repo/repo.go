@@ -61,12 +61,27 @@ func (s *JSONStore) Load() error {
 		return err
 	}
 
+	// Migrate legacy status values
+	migrated := false
+	for i, r := range repos {
+		if r.Status == "synced" {
+			repos[i].Status = types.RepoStatusUpToDate
+			migrated = true
+		}
+	}
+
 	s.repos = make(map[string]types.Repo)
 	s.nameIndex = make(map[string]string)
 	for _, r := range repos {
 		s.repos[r.ID] = r
 		s.nameIndex[r.Name] = r.ID
 	}
+
+	// Persist migration if any repos were updated
+	if migrated {
+		_ = s.saveUnsafe()
+	}
+
 	return nil
 }
 

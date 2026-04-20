@@ -122,8 +122,8 @@ export function HomePage(): JSX.Element {
   // Filtered repos
   const filteredRepos = useMemo(() => {
     if (!filterStatus) return repos
-    if (filterStatus === 'synced') {
-      return repos.filter((r) => r.status === 'synced' || r.status === 'up_to_date')
+    if (filterStatus === 'up_to_date') {
+      return repos.filter((r) => r.status === 'up_to_date')
     }
     return repos.filter((r) => r.status === filterStatus)
   }, [repos, filterStatus])
@@ -540,8 +540,8 @@ function HistoryRow({ record }: { record: SyncHistoryRecord }): JSX.Element {
 
 function getHistoryConfig(status: string, t: TFunction): { icon: React.ReactNode; label: string } {
   switch (status) {
-    case 'synced': return { icon: <CheckCircle2 size={14} className="text-success" />, label: t('status.synced') }
-    case 'up_to_date': return { icon: <span className="text-muted-foreground text-xs">—</span>, label: t('status.upToDate') }
+    case 'synced': return { icon: <CheckCircle2 size={14} className="text-success" />, label: t('status.upToDate') }
+    case 'up_to_date': return { icon: <CheckCircle2 size={14} className="text-success" />, label: t('status.upToDate') }
     case 'conflict': return { icon: <Zap size={14} className="text-error" />, label: t('status.conflict') }
     case 'error': return { icon: <XCircle size={14} className="text-error" />, label: t('status.error') }
     default: return { icon: <span className="text-muted-foreground text-xs">•</span>, label: status }

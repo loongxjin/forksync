@@ -29,9 +29,10 @@ export function StatusCard({ icon, label, count, color }: StatusCardProps): JSX.
 
 export function StatusIcon({ status, size = 16 }: { status: RepoStatus; size?: number }): JSX.Element {
   switch (status) {
-    case 'synced':
     case 'up_to_date':
       return <CheckCircle2 size={size} className="text-success" />
+    case 'sync_needed':
+      return <AlertTriangle size={size} className="text-warning" />
     case 'syncing':
       return <Loader2 size={size} className="animate-spin text-warning" />
     case 'conflict':
@@ -55,10 +56,10 @@ export function StatusIcon({ status, size = 16 }: { status: RepoStatus; size?: n
 
 export function getStatusColor(status: RepoStatus): string {
   switch (status) {
-    case 'synced':
     case 'up_to_date':
     case 'resolved':
       return 'hsl(var(--success))'
+    case 'sync_needed':
     case 'syncing':
     case 'resolving':
       return 'hsl(var(--warning))'
@@ -78,14 +79,14 @@ const STATUS_CONFIG: Record<
   RepoStatus,
   { labelKey: string; color: string }
 > = {
-  synced: { labelKey: 'status.synced', color: 'hsl(var(--success))' },
+  up_to_date: { labelKey: 'status.upToDate', color: 'hsl(var(--success))' },
+  sync_needed: { labelKey: 'status.syncNeeded', color: 'hsl(var(--warning))' },
   syncing: { labelKey: 'status.syncing', color: 'hsl(var(--warning))' },
   conflict: { labelKey: 'status.conflict', color: 'hsl(var(--error))' },
   resolving: { labelKey: 'status.resolving', color: 'hsl(var(--warning))' },
   resolved: { labelKey: 'status.resolved', color: 'hsl(var(--success))' },
   error: { labelKey: 'status.error', color: 'hsl(var(--error))' },
-  unconfigured: { labelKey: 'status.unconfigured', color: 'hsl(var(--muted-foreground))' },
-  up_to_date: { labelKey: 'status.upToDate', color: 'hsl(var(--muted-foreground))' }
+  unconfigured: { labelKey: 'status.unconfigured', color: 'hsl(var(--muted-foreground))' }
 }
 
 export function getStatusConfig(status: RepoStatus) {
