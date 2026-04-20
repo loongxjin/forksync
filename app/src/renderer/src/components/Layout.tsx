@@ -34,19 +34,27 @@ function TitleBar(): JSX.Element {
       <div className="flex items-center">
         <svg width="18" height="18" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
           <defs>
-            <linearGradient id="bgT" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#13162b"/>
-              <stop offset="100%" stopColor="#0d1020"/>
+            <linearGradient id="bgT" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#1e3a5f"/>
+              <stop offset="100%" stopColor="#0f172a"/>
+            </linearGradient>
+            <linearGradient id="g1T" x1="180" y1="120" x2="330" y2="400" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#60a5fa"/>
+              <stop offset="100%" stopColor="#2563eb"/>
+            </linearGradient>
+            <linearGradient id="g2T" x1="180" y1="120" x2="330" y2="400" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#34d399"/>
+              <stop offset="100%" stopColor="#059669"/>
             </linearGradient>
           </defs>
-          <rect x="20" y="20" width="472" height="472" rx="100" fill="url(#bgT)"/>
-          <path d="M 256 96 A 160 160 0 0 1 416 256" fill="none" stroke="#5b8ad6" strokeWidth="24" strokeLinecap="round"/>
-          <polygon points="424,232 416,274 390,246" fill="#5b8ad6"/>
-          <path d="M 256 416 A 160 160 0 0 1 96 256" fill="none" stroke="#e8a838" strokeWidth="24" strokeLinecap="round"/>
-          <polygon points="88,280 96,238 122,266" fill="#e8a838"/>
-          <path d="M 256 226 A 30 30 0 0 1 256 286" fill="none" stroke="#5b8ad6" strokeWidth="4" opacity="0.5"/>
-          <path d="M 256 286 A 30 30 0 0 1 256 226" fill="none" stroke="#e8a838" strokeWidth="4" opacity="0.5"/>
-          <circle cx="256" cy="256" r="14" fill="#5b8ad6" opacity="0.9"/>
+          <rect x="20" y="20" width="472" height="472" rx="108" fill="url(#bgT)"/>
+          <rect x="21" y="21" width="470" height="470" rx="107" fill="none" stroke="white" strokeOpacity="0.07"/>
+          <path d="M 175 340 A 130 130 0 0 1 175 170" fill="none" stroke="url(#g1T)" strokeWidth="36" strokeLinecap="round"/>
+          <polygon points="210,135 193,188 157,152" fill="#3b82f6"/>
+          <path d="M 337 172 A 130 130 0 0 1 337 342" fill="none" stroke="url(#g2T)" strokeWidth="36" strokeLinecap="round"/>
+          <polygon points="302,377 319,324 355,360" fill="#059669"/>
+          <circle cx="256" cy="256" r="14" fill="white" opacity="0.10"/>
+          <circle cx="256" cy="256" r="7" fill="white" opacity="0.22"/>
         </svg>
         <h1 className="ml-2 text-sm font-semibold text-foreground tracking-tight">ForkSync</h1>
       </div>

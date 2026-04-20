@@ -1,26 +1,50 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#13162b"/>
-      <stop offset="100%" stop-color="#0d1020"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1e3a5f"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="g1" x1="180" y1="120" x2="330" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="180" y1="120" x2="330" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#059669"/>
     </linearGradient>
   </defs>
 
-  <!-- Background rounded rectangle -->
-  <rect x="20" y="20" width="472" height="472" rx="100" fill="url(#bg)"/>
+  <!-- Background -->
+  <rect x="20" y="20" width="472" height="472" rx="108" fill="url(#bg)"/>
+  <rect x="21" y="21" width="470" height="470" rx="107" fill="none" stroke="white" stroke-opacity="0.07"/>
 
-  <!-- Blue arc: upper-right semicircle -->
-  <path d="M 256 96 A 160 160 0 0 1 416 256" fill="none" stroke="#5b8ad6" stroke-width="24" stroke-linecap="round"/>
-  <polygon points="424,232 416,274 390,246" fill="#5b8ad6"/>
+  <!-- Blue arc: upper semicircle -->
+  <path d="M 175 340 A 130 130 0 0 1 175 170"
+        fill="none" stroke="url(#g1)" stroke-width="36" stroke-linecap="round"/>
 
-  <!-- Amber arc: lower-left semicircle -->
-  <path d="M 256 416 A 160 160 0 0 1 96 256" fill="none" stroke="#e8a838" stroke-width="24" stroke-linecap="round"/>
-  <polygon points="88,280 96,238 122,266" fill="#e8a838"/>
+  <!-- Blue arrowhead: end at (175,170), clockwise tangent = NW direction -->
+  <!-- Radius vector at end: (-81,-86), tangent (clockwise) = (-86,81) normalized → NW -->
+  <!-- Tip: (175 + (-86/113)*40, 170 + (81/113)*40) = (175-30, 170+29) = (145, 199) -->
+  <!-- Perpendicular to tangent for base: (-81,-86)/113 * 20 = (-14,-15) -->
+  <!-- Base1: (175 + (-14), 170 + (-15)) = (161, 155) -->
+  <!-- Base2: (175 - (-14), 170 - (-15)) = (189, 185) -->
+  <!-- Blue: equilateral triangle, tip=(175+35, 170-35)=(210,135), base offset ±(18,18) along (1,1)/√2 -->
+  <polygon points="210,135 193,188 157,152" fill="#3b82f6"/>
 
-  <!-- Center ring: half blue, half amber -->
-  <path d="M 256 226 A 30 30 0 0 1 256 286" fill="none" stroke="#5b8ad6" stroke-width="4" opacity="0.5"/>
-  <path d="M 256 286 A 30 30 0 0 1 256 226" fill="none" stroke="#e8a838" stroke-width="4" opacity="0.5"/>
+  <!-- Green arc: lower semicircle -->
+  <path d="M 337 172 A 130 130 0 0 1 337 342"
+        fill="none" stroke="url(#g2)" stroke-width="36" stroke-linecap="round"/>
 
-  <!-- Center dot -->
-  <circle cx="256" cy="256" r="14" fill="#5b8ad6" opacity="0.9"/>
+  <!-- Green arrowhead: end at (337,342), clockwise tangent = SE direction -->
+  <!-- Radius vector at end: (81,86), tangent (clockwise) = (86,-81) normalized → SE -->
+  <!-- Tip: (337 + (86/113)*40, 342 + (-81/113)*40) = (337+30, 342-29) = (367, 313) -->
+  <!-- Perpendicular to tangent for base: (81,86)/113 * 20 = (14,15) -->
+  <!-- Base1: (337 + 14, 342 + 15) = (351, 357) -->
+  <!-- Base2: (337 - 14, 342 - 15) = (323, 327) -->
+  <!-- Green: equilateral triangle, tip=(337-35, 342+35)=(302,377), base offset ±(18,18) along (1,1)/√2 -->
+  <polygon points="302,377 319,324 355,360" fill="#059669"/>
+
+  <!-- Center accent -->
+  <circle cx="256" cy="256" r="14" fill="white" opacity="0.10"/>
+  <circle cx="256" cy="256" r="7" fill="white" opacity="0.22"/>
 </svg>
