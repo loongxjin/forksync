@@ -101,9 +101,9 @@ export function HomePage(): JSX.Element {
   useEffect(() => {
     const now = Date.now()
     const shouldSkip =
-      historyInitialized && !hasSyncing && history.length > 0 && now - lastLoadAt < HISTORY_CACHE_MS
+      historyInitialized && !hasSyncing && now - lastLoadAt < HISTORY_CACHE_MS
     if (!shouldSkip) loadHistory()
-  }, [loadHistory, historyInitialized, history.length, lastLoadAt, hasSyncing])
+  }, [loadHistory, historyInitialized, lastLoadAt, hasSyncing])
 
   // Reload history after sync
   useEffect(() => {
