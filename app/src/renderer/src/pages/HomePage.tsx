@@ -201,9 +201,20 @@ export function HomePage(): JSX.Element {
   }, [resolveReject, refresh])
 
   // Repo actions
+  const removingRef = useRef<string | null>(null)
+  const [removingRepo, setRemovingRepo] = useState<string | null>(null)
+
   const handleRemove = useCallback(async (name: string) => {
+    if (removingRef.current) return
     if (confirm(t('repos.removeConfirm', { name }))) {
-      await removeRepo(name)
+      removingRef.current = name
+      setRemovingRepo(name)
+      try {
+        await removeRepo(name)
+      } finally {
+        removingRef.current = null
+        setRemovingRepo(null)
+      }
     }
   }, [removeRepo, t])
 
@@ -344,6 +355,7 @@ export function HomePage(): JSX.Element {
                   onSync={syncRepo}
                   onRemove={handleRemove}
                   onSettings={setSettingsRepo}
+                  removing={removingRepo === repo.name}
                 />
                 <Collapsible open={isExpanded}>
                   <CollapsibleContent>
@@ -465,8 +477,18 @@ function HistoryRow({ record, onRetry }: { record: SyncHistoryRecord; onRetry: (
   const config = getHistoryConfig(record.status, t)
   const timeAgo = formatTimeAgo(record.createdAt, t)
   const [expanded, setExpanded] = useState(false)
+  const [retrying, setRetrying] = useState(false)
+
+  // Reset retrying when summary status changes away from 'failed'
+  useEffect(() => {
+    if (record.summaryStatus !== 'failed') {
+      setRetrying(false)
+    }
+  }, [record.summaryStatus])
 
   const handleRetry = (): void => {
+    if (retrying) return
+    setRetrying(true)
     onRetry(record)
   }
 
@@ -543,9 +565,10 @@ function HistoryRow({ record, onRetry }: { record: SyncHistoryRecord; onRetry: (
               <span className="text-error">{t('summary.failed')}</span>
               <button
                 onClick={handleRetry}
-                className="text-primary hover:underline"
+                disabled={retrying}
+                className="text-primary hover:underline disabled:opacity-50"
               >
-                {t('summary.retry')}
+                {retrying ? t('common.processing') : t('summary.retry')}
               </button>
             </div>
           ) : null}

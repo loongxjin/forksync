@@ -64,6 +64,9 @@ export function AgentConfig(): JSX.Element {
   const [sessionTTL, setSessionTTL] = useState('')
   const [savingTimeout, setSavingTimeout] = useState(false)
   const [savingTTL, setSavingTTL] = useState(false)
+  const [cleaning, setCleaning] = useState(false)
+  const [configSaving, setConfigSaving] = useState(false)
+  const configSavingRef = useRef(false)
   const isEditingRef = useRef({ timeout: false, sessionTTL: false })
   const prevConfigRef = useRef({ timeout: '', sessionTTL: '' })
 
@@ -119,28 +122,52 @@ export function AgentConfig(): JSX.Element {
   }, [refreshAgents, refreshSessions])
 
   const handleCleanup = async (): Promise<void> => {
-    await cleanup()
+    setCleaning(true)
+    try {
+      await cleanup()
+    } finally {
+      setCleaning(false)
+    }
+  }
+
+  const wrapConfigSave = async (fn: () => Promise<void>): Promise<void> => {
+    if (configSavingRef.current) return
+    configSavingRef.current = true
+    setConfigSaving(true)
+    try {
+      await fn()
+    } finally {
+      configSavingRef.current = false
+      setConfigSaving(false)
+    }
   }
 
   const handleSetPreferred = async (name: string): Promise<void> => {
-    await updateConfig('agent.preferred', name)
-    // Refresh agents to reflect new preferred
-    refreshAgents()
+    await wrapConfigSave(async () => {
+      await updateConfig('agent.preferred', name)
+      refreshAgents()
+    })
   }
 
   const handleConflictModeChange = async (mode: string): Promise<void> => {
-    await updateConfig('agent.conflict_strategy', mode)
+    await wrapConfigSave(async () => {
+      await updateConfig('agent.conflict_strategy', mode)
+    })
   }
 
   const handleResolveStrategyChange = async (strategy: string): Promise<void> => {
-    await updateConfig('agent.resolve_strategy', strategy)
+    await wrapConfigSave(async () => {
+      await updateConfig('agent.resolve_strategy', strategy)
+    })
   }
 
   const handleAutoConfirm = async (val: boolean): Promise<void> => {
-    await updateConfig('agent.confirm_before_commit', String(!val))
+    await wrapConfigSave(async () => {
+      await updateConfig('agent.confirm_before_commit', String(!val))
+    })
   }
 
-  const isLoading = configLoading || !engineConfig
+  const isLoading = configLoading || !engineConfig || configSaving
   const currentPreferred = engineConfig?.Agent?.Preferred || ''
   const currentConflictMode = engineConfig?.Agent?.ConflictStrategy || 'agent_resolve'
   const currentResolveStrategy = engineConfig?.Agent?.ResolveStrategy || 'preserve_ours'
@@ -309,8 +336,8 @@ export function AgentConfig(): JSX.Element {
           <Label className="text-sm font-medium">
             {t('settings.agent.sessions', { count: sessions.length })}
           </Label>
-          <Button variant="outline" size="sm" onClick={handleCleanup}>
-            {t('settings.agent.cleanupExpired')}
+          <Button variant="outline" size="sm" onClick={handleCleanup} disabled={cleaning}>
+            {cleaning ? t('common.processing') : t('settings.agent.cleanupExpired')}
           </Button>
         </div>
         {sessions.length === 0 ? (

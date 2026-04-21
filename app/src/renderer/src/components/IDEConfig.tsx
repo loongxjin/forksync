@@ -2,7 +2,7 @@
  * IDEConfig — Settings page IDE configuration component
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { CheckCircle2, XCircle, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -21,6 +21,8 @@ export function IDEConfig(): JSX.Element {
   } = useSettings()
 
   const [detecting, setDetecting] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newName, setNewName] = useState('')
   const [newCli, setNewCli] = useState('')
@@ -34,16 +36,31 @@ export function IDEConfig(): JSX.Element {
   }, [refreshIDEConfig])
 
   const handleAddCustom = useCallback(async () => {
-    if (!newName.trim() || !newCli.trim()) return
-    await addCustomIDE(newName.trim(), newCli.trim())
-    setNewName('')
-    setNewCli('')
-    setShowAddForm(false)
+    if (!newName.trim() || !newCli.trim() || savingRef.current) return
+    savingRef.current = true
+    setSaving(true)
+    try {
+      await addCustomIDE(newName.trim(), newCli.trim())
+      setNewName('')
+      setNewCli('')
+      setShowAddForm(false)
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
   }, [newName, newCli, addCustomIDE])
 
   const handleRemoveCustom = useCallback(
     async (ideId: string) => {
-      await removeCustomIDE(ideId)
+      if (savingRef.current) return
+      savingRef.current = true
+      setSaving(true)
+      try {
+        await removeCustomIDE(ideId)
+      } finally {
+        savingRef.current = false
+        setSaving(false)
+      }
     },
     [removeCustomIDE]
   )
@@ -111,7 +128,8 @@ export function IDEConfig(): JSX.Element {
                   <span className="text-muted-foreground">(CLI: {custom.cliCommand})</span>
                   <button
                     onClick={() => handleRemoveCustom(custom.id)}
-                    className="text-red-400 hover:text-red-500"
+                    disabled={saving}
+                    className="text-red-400 hover:text-red-500 disabled:opacity-50"
                   >
                     <X size={12} className="text-red-400 hover:text-red-500" />
                   </button>
@@ -142,7 +160,8 @@ export function IDEConfig(): JSX.Element {
             <div className="flex gap-2">
               <button
                 onClick={handleAddCustom}
-                className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90"
+                disabled={saving || !newName.trim() || !newCli.trim()}
+                className="rounded bg-primary px-3 py-1 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 {t('common.add')}
               </button>

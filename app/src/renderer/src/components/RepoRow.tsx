@@ -39,9 +39,11 @@ interface RepoRowProps {
   onSync: (name: string) => void
   onRemove: (name: string) => void
   onSettings: (name: string) => void
+  /** Whether a remove operation is in progress for this repo */
+  removing: boolean
 }
 
-export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettings }: RepoRowProps): JSX.Element {
+export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettings, removing }: RepoRowProps): JSX.Element {
   const { t } = useTranslation()
   const isConflict = isConflictStatus(repo.status)
   const isSyncing = repo.status === 'syncing'
@@ -122,20 +124,22 @@ export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettin
               <Settings size={14} />
             </button>
             <IDEOpenButton repoPath={repo.path} />
-            {!isConflict && !isSyncing && (
+            {!isConflict && (
               <button
                 data-action
                 onClick={() => onSync(repo.name)}
-                className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                title={t('repos.syncNow')}
+                disabled={isSyncing}
+                className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                title={isSyncing ? t('repos.syncing') : t('repos.syncNow')}
               >
-                <RotateCw size={14} />
+                <RotateCw size={14} className={isSyncing ? 'animate-spin' : ''} />
               </button>
             )}
             <button
               data-action
               onClick={() => onRemove(repo.name)}
-              className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-error-muted hover:text-error"
+              disabled={removing}
+              className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-error-muted hover:text-error disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('repos.remove')}
             >
               <Trash2 size={14} />

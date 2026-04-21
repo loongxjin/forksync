@@ -134,6 +134,9 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   // Guard against concurrent refresh calls
   const refreshingRef = useRef(false)
 
+  // Guard against concurrent syncAll calls
+  const syncingAllRef = useRef(false)
+
   const refresh = useCallback(async () => {
     if (refreshingRef.current) return
     refreshingRef.current = true
@@ -153,6 +156,10 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   }, [])
 
   const syncAll = useCallback(async () => {
+    // Prevent concurrent syncAll
+    if (syncingAllRef.current) return
+    syncingAllRef.current = true
+
     // Optimistically set all non-conflict repos to syncing
     for (const repo of state.repos) {
       if (!isConflictStatus(repo.status)) {
@@ -203,6 +210,8 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       }
     } catch (err) {
       dispatch({ type: 'SET_ERROR', error: (err as Error).message })
+    } finally {
+      syncingAllRef.current = false
     }
   }, [state, refresh, engineConfig])
 
