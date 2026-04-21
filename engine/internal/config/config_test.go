@@ -42,7 +42,8 @@ func TestManager_Load_WithDefaults(t *testing.T) {
 	// Verify Agent config defaults
 	assert.NotEmpty(t, cfg.Agent.Priority)
 	assert.Equal(t, "10m", cfg.Agent.Timeout)
-	assert.Equal(t, "preserve_ours", cfg.Agent.ConflictStrategy)
+	assert.Equal(t, "agent_resolve", cfg.Agent.ConflictStrategy)
+	assert.Equal(t, "preserve_ours", cfg.Agent.ResolveStrategy)
 	assert.True(t, cfg.Agent.ConfirmBeforeCommit)
 	assert.Equal(t, "24h", cfg.Agent.SessionTTL)
 }
@@ -65,7 +66,8 @@ func TestManager_SaveAndReload(t *testing.T) {
 			Preferred:           "claude",
 			Priority:            []string{"claude", "opencode", "droid", "codex"},
 			Timeout:             "10m",
-			ConflictStrategy:    "preserve_ours",
+			ConflictStrategy:    "agent_resolve",
+			ResolveStrategy:     "preserve_ours",
 			ConfirmBeforeCommit: true,
 			SessionTTL:          "24h",
 		},
@@ -100,7 +102,8 @@ func TestManager_SaveAndReload(t *testing.T) {
 	assert.Equal(t, "claude", loadedCfg.Agent.Preferred)
 	assert.Equal(t, []string{"claude", "opencode", "droid", "codex"}, loadedCfg.Agent.Priority)
 	assert.Equal(t, "10m", loadedCfg.Agent.Timeout)
-	assert.Equal(t, "preserve_ours", loadedCfg.Agent.ConflictStrategy)
+	assert.Equal(t, "agent_resolve", loadedCfg.Agent.ConflictStrategy)
+	assert.Equal(t, "preserve_ours", loadedCfg.Agent.ResolveStrategy)
 	assert.True(t, loadedCfg.Agent.ConfirmBeforeCommit)
 	assert.Equal(t, "24h", loadedCfg.Agent.SessionTTL)
 
@@ -185,4 +188,65 @@ func TestNewManagerWithDir(t *testing.T) {
 	m := NewManagerWithDir(tmpDir)
 	assert.NotNil(t, m)
 	assert.Equal(t, tmpDir, m.ConfigDir())
+}
+
+func TestManager_Load_MigrateOldConflictStrategy(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Simulate old config with conflict_strategy = "preserve_theirs"
+	configContent := `
+agent:
+  conflict_strategy: preserve_theirs
+`
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	m := &Manager{
+		configDir: tmpDir,
+		viper:     viper.New(),
+	}
+
+	cfg, err := m.Load()
+	require.NoError(t, err)
+
+	// Should be migrated: conflict_strategy -> agent_resolve, resolve_strategy -> preserve_theirs
+	assert.Equal(t, "agent_resolve", cfg.Agent.ConflictStrategy)
+	assert.Equal(t, "preserve_theirs", cfg.Agent.ResolveStrategy)
+
+	// Verify persisted
+	m2 := &Manager{
+		configDir: tmpDir,
+		viper:     viper.New(),
+	}
+	cfg2, err := m2.Load()
+	require.NoError(t, err)
+	assert.Equal(t, "agent_resolve", cfg2.Agent.ConflictStrategy)
+	assert.Equal(t, "preserve_theirs", cfg2.Agent.ResolveStrategy)
+}
+
+func TestManager_Load_NoMigrationForNewValues(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// New config with correct values
+	configContent := `
+agent:
+  conflict_strategy: manual
+`
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	m := &Manager{
+		configDir: tmpDir,
+		viper:     viper.New(),
+	}
+
+	cfg, err := m.Load()
+	require.NoError(t, err)
+
+	// Should NOT be migrated
+	assert.Equal(t, "manual", cfg.Agent.ConflictStrategy)
+	// resolve_strategy should keep default
+	assert.Equal(t, "preserve_ours", cfg.Agent.ResolveStrategy)
 }

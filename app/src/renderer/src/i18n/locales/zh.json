@@ -179,15 +179,19 @@
       "supports": "支持 HTTP 和 SOCKS5 代理"
     },
     "agent": {
-      "strategies": {
-        "preserveOurs": "保留本地",
-        "preserveOursDesc": "保留本地修改，接受非冲突的上游变更",
-        "preserveTheirs": "保留上游",
-        "preserveTheirsDesc": "接受上游变更，仅必要时保留本地修改",
+      "modes": {
         "agentResolve": "Agent 解决",
-        "agentResolveDesc": "让 AI Agent 自动解决冲突",
+        "agentResolveDesc": "同步时自动调用 AI Agent 解决冲突",
         "manual": "手动解决",
-        "manualDesc": "始终手动解决冲突"
+        "manualDesc": "发生冲突后标记状态，等待手动处理"
+      },
+      "resolveStrategies": {
+        "preserveOurs": "保留本地",
+        "preserveOursDesc": "保留本地修改，冲突时优先采用本地版本",
+        "preserveTheirs": "保留上游",
+        "preserveTheirsDesc": "接受上游变更，冲突时优先采用上游版本",
+        "balanced": "智能合并",
+        "balancedDesc": "尽量同时保留双方的修改，仅在无法调和时取舍"
       },
       "detectedAgents": "检测到的 Agent",
       "preferred": "首选",
@@ -197,7 +201,8 @@
       "config": "Agent 配置",
       "timeout": "Agent 超时",
       "timeoutPlaceholder": "如：10m",
-      "conflictStrategy": "冲突策略",
+      "conflictMode": "冲突解决方式",
+      "resolveStrategy": "合并倾向",
       "autoConfirm": "自动确认 Agent 结果",
       "autoConfirmDesc": "Agent 成功解决冲突后跳过手动确认",
       "sessionTTL": "会话有效期",

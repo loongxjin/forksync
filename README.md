@@ -311,7 +311,7 @@ Agents are auto-discovered via `PATH`. Set a preferred agent in config or let Fo
 | Strategy | Description |
 |----------|-------------|
 | `preserve_ours` | Keep local changes, accept non-conflicting upstream changes |
-| `accept_theirs` | Prefer upstream changes, keep local only where necessary |
+| `preserve_theirs` | Prefer upstream changes, keep local only where necessary |
 | `balanced` | Smart merge, try to preserve both sides' changes |
 | `agent_resolve` | Delegate to AI agent for automatic resolution |
 
@@ -335,7 +335,7 @@ agent:
     - droid
     - codex
   timeout: "10m"                 # Agent resolve timeout
-  conflict_strategy: "preserve_ours"  # preserve_ours | accept_theirs | balanced | agent_resolve
+  conflict_strategy: "preserve_ours"  # preserve_ours | preserve_theirs | balanced | agent_resolve
   confirm_before_commit: true    # Show diff before committing agent changes
   session_ttl: "24h"             # Agent session expiration
 

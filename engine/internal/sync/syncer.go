@@ -280,14 +280,17 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		return false
 	}
 
-	// Determine conflict strategy
-	strategy := r.ConflictStrategy
-	if strategy == "" && s.cfg != nil {
-		strategy = s.cfg.Agent.ConflictStrategy
+	// Determine resolve sub-strategy for the agent prompt
+	resolveStrategy := ""
+	if s.cfg != nil {
+		resolveStrategy = s.cfg.Agent.ResolveStrategy
+	}
+	if resolveStrategy == "" {
+		resolveStrategy = "preserve_ours"
 	}
 
 	// Resolve conflicts via agent
-	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, strategy)
+	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy)
 	if err != nil || !result.Success {
 		return false
 	}

@@ -144,10 +144,10 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		}
 	}
 
-	// Determine strategy
-	strategy := "preserve_ours"
-	if cfg != nil && cfg.Agent.ConflictStrategy != "" {
-		strategy = cfg.Agent.ConflictStrategy
+	// Determine resolve sub-strategy for the agent prompt
+	resolveStrategy := "preserve_ours"
+	if cfg != nil && cfg.Agent.ResolveStrategy != "" {
+		resolveStrategy = cfg.Agent.ResolveStrategy
 	}
 
 	// Update repo status to resolving
@@ -195,7 +195,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	defer cancel()
 
 	// Resolve conflicts
-	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, strategy)
+	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy)
 	if err != nil {
 		resolved.Store(true) // agent finished (with error) — we handle the status
 		r.Status = types.RepoStatusConflict

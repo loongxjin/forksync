@@ -115,6 +115,7 @@ func TestManager_Set_AllStringKeys(t *testing.T) {
 		"agent.preferred",
 		"agent.timeout",
 		"agent.conflict_strategy",
+		"agent.resolve_strategy",
 		"agent.session_ttl",
 		"github.token",
 		"proxy.url",
@@ -183,8 +184,8 @@ func TestGetKeyType(t *testing.T) {
 func TestValidConfigKeys(t *testing.T) {
 	keys := ValidConfigKeys()
 	assert.NotEmpty(t, keys)
-	// Should have at least 13 keys (sync:3 + agent:6 + github:1 + notification:1 + proxy:2 = 13)
-	assert.GreaterOrEqual(t, len(keys), 13)
+	// Should have at least 14 keys (sync:3 + agent:7 + github:1 + notification:1 + proxy:2 = 15)
+	assert.GreaterOrEqual(t, len(keys), 14)
 }
 
 func newViper() *viper.Viper {

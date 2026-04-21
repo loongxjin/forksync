@@ -43,11 +43,15 @@ function Toggle({
   )
 }
 
-const conflictStrategyKeys = [
-  { value: 'preserve_ours', labelKey: 'settings.agent.strategies.preserveOurs', descKey: 'settings.agent.strategies.preserveOursDesc' },
-  { value: 'preserve_theirs', labelKey: 'settings.agent.strategies.preserveTheirs', descKey: 'settings.agent.strategies.preserveTheirsDesc' },
-  { value: 'agent_resolve', labelKey: 'settings.agent.strategies.agentResolve', descKey: 'settings.agent.strategies.agentResolveDesc' },
-  { value: 'manual', labelKey: 'settings.agent.strategies.manual', descKey: 'settings.agent.strategies.manualDesc' }
+const conflictModeOptions = [
+  { value: 'agent_resolve', labelKey: 'settings.agent.modes.agentResolve', descKey: 'settings.agent.modes.agentResolveDesc' },
+  { value: 'manual', labelKey: 'settings.agent.modes.manual', descKey: 'settings.agent.modes.manualDesc' }
+]
+
+const resolveStrategyOptions = [
+  { value: 'preserve_ours', labelKey: 'settings.agent.resolveStrategies.preserveOurs', descKey: 'settings.agent.resolveStrategies.preserveOursDesc' },
+  { value: 'preserve_theirs', labelKey: 'settings.agent.resolveStrategies.preserveTheirs', descKey: 'settings.agent.resolveStrategies.preserveTheirsDesc' },
+  { value: 'balanced', labelKey: 'settings.agent.resolveStrategies.balanced', descKey: 'settings.agent.resolveStrategies.balancedDesc' }
 ]
 
 export function AgentConfig(): JSX.Element {
@@ -124,8 +128,12 @@ export function AgentConfig(): JSX.Element {
     refreshAgents()
   }
 
-  const handleStrategyChange = async (strategy: string): Promise<void> => {
-    await updateConfig('agent.conflict_strategy', strategy)
+  const handleConflictModeChange = async (mode: string): Promise<void> => {
+    await updateConfig('agent.conflict_strategy', mode)
+  }
+
+  const handleResolveStrategyChange = async (strategy: string): Promise<void> => {
+    await updateConfig('agent.resolve_strategy', strategy)
   }
 
   const handleAutoConfirm = async (val: boolean): Promise<void> => {
@@ -134,7 +142,9 @@ export function AgentConfig(): JSX.Element {
 
   const isLoading = configLoading || !engineConfig
   const currentPreferred = engineConfig?.Agent?.Preferred || ''
-  const currentStrategy = engineConfig?.Agent?.ConflictStrategy || 'preserve_ours'
+  const currentConflictMode = engineConfig?.Agent?.ConflictStrategy || 'agent_resolve'
+  const currentResolveStrategy = engineConfig?.Agent?.ResolveStrategy || 'preserve_ours'
+  const isAgentResolveMode = currentConflictMode === 'agent_resolve'
   const autoConfirmEnabled = !(engineConfig?.Agent?.ConfirmBeforeCommit ?? true)
 
   return (
@@ -202,25 +212,25 @@ export function AgentConfig(): JSX.Element {
           </div>
         </div>
 
-        {/* Conflict Strategy */}
+        {/* Conflict Mode */}
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">{t('settings.agent.conflictStrategy')}</Label>
+          <Label className="text-xs text-muted-foreground">{t('settings.agent.conflictMode')}</Label>
           <div className="space-y-1">
-            {conflictStrategyKeys.map((s) => (
+            {conflictModeOptions.map((s) => (
               <label
                 key={s.value}
                 className={`flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors ${
-                  currentStrategy === s.value
+                  currentConflictMode === s.value
                     ? 'border-primary bg-primary/5'
                     : 'border-border hover:bg-accent/30'
                 }`}
               >
                 <input
                   type="radio"
-                  name="conflict_strategy"
+                  name="conflict_mode"
                   value={s.value}
-                  checked={currentStrategy === s.value}
-                  onChange={() => handleStrategyChange(s.value)}
+                  checked={currentConflictMode === s.value}
+                  onChange={() => handleConflictModeChange(s.value)}
                   disabled={isLoading}
                   className="mt-0.5"
                 />
@@ -231,6 +241,37 @@ export function AgentConfig(): JSX.Element {
               </label>
             ))}
           </div>
+
+          {/* Resolve Strategy (sub-option, only shown when agent_resolve is selected) */}
+          {isAgentResolveMode && (
+            <div className="ml-6 mt-2 space-y-1">
+              <Label className="text-xs text-muted-foreground">{t('settings.agent.resolveStrategy')}</Label>
+              {resolveStrategyOptions.map((s) => (
+                <label
+                  key={s.value}
+                  className={`flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors ${
+                    currentResolveStrategy === s.value
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border hover:bg-accent/30'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="resolve_strategy"
+                    value={s.value}
+                    checked={currentResolveStrategy === s.value}
+                    onChange={() => handleResolveStrategyChange(s.value)}
+                    disabled={isLoading}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <div className="text-sm font-medium">{t(s.labelKey)}</div>
+                    <div className="text-xs text-muted-foreground">{t(s.descKey)}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Auto Confirm */}

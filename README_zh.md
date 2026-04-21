@@ -311,7 +311,7 @@ Agent 通过系统 `PATH` 自动发现。你可以在配置文件中设置首选
 | 策略 | 说明 |
 |------|------|
 | `preserve_ours` | 保留本地修改，接受非冲突的上游变更 |
-| `accept_theirs` | 优先采用上游变更，仅必要时保留本地修改 |
+| `preserve_theirs` | 优先采用上游变更，仅必要时保留本地修改 |
 | `balanced` | 智能合并，尽量保留双方的变更 |
 | `agent_resolve` | 委托 AI Agent 自动解决 |
 
@@ -335,7 +335,7 @@ agent:
     - droid
     - codex
   timeout: "10m"                 # Agent 解决超时时间
-  conflict_strategy: "preserve_ours"  # preserve_ours | accept_theirs | balanced | agent_resolve
+  conflict_strategy: "preserve_ours"  # preserve_ours | preserve_theirs | balanced | agent_resolve
   confirm_before_commit: true    # 提交前展示 diff
   session_ttl: "24h"             # Agent 会话过期时间
 

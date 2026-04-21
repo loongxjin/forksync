@@ -179,15 +179,19 @@
       "supports": "Supports HTTP and SOCKS5 proxies"
     },
     "agent": {
-      "strategies": {
-        "preserveOurs": "Preserve Ours",
-        "preserveOursDesc": "Keep local changes, accept upstream non-conflict changes",
-        "preserveTheirs": "Preserve Theirs",
-        "preserveTheirsDesc": "Accept upstream changes, keep local non-conflict changes",
+      "modes": {
         "agentResolve": "Agent Resolve",
-        "agentResolveDesc": "Let AI agent resolve conflicts automatically",
+        "agentResolveDesc": "Automatically invoke AI agent to resolve conflicts on sync",
         "manual": "Manual",
-        "manualDesc": "Always resolve conflicts manually"
+        "manualDesc": "Mark conflict status and wait for manual resolution"
+      },
+      "resolveStrategies": {
+        "preserveOurs": "Preserve Ours",
+        "preserveOursDesc": "Keep local changes, prefer local version on conflict",
+        "preserveTheirs": "Preserve Theirs",
+        "preserveTheirsDesc": "Accept upstream changes, prefer upstream version on conflict",
+        "balanced": "Balanced Merge",
+        "balancedDesc": "Try to keep both sides' changes, only choose when irreconcilable"
       },
       "detectedAgents": "Detected Agents",
       "preferred": "preferred",
@@ -197,7 +201,8 @@
       "config": "Agent Configuration",
       "timeout": "Agent Timeout",
       "timeoutPlaceholder": "e.g. 10m",
-      "conflictStrategy": "Conflict Strategy",
+      "conflictMode": "Conflict Resolution",
+      "resolveStrategy": "Merge Preference",
       "autoConfirm": "Auto-confirm Agent Results",
       "autoConfirmDesc": "Skip manual confirmation when agent resolves conflicts successfully",
       "sessionTTL": "Session TTL",

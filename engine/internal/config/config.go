@@ -34,6 +34,7 @@ type AgentConfig struct {
 	Priority            []string `mapstructure:"priority" yaml:"priority"`
 	Timeout             string   `mapstructure:"timeout" yaml:"timeout"`
 	ConflictStrategy    string   `mapstructure:"conflict_strategy" yaml:"conflict_strategy"`
+	ResolveStrategy     string   `mapstructure:"resolve_strategy" yaml:"resolve_strategy"`
 	ConfirmBeforeCommit bool     `mapstructure:"confirm_before_commit" yaml:"confirm_before_commit"`
 	SessionTTL          string   `mapstructure:"session_ttl" yaml:"session_ttl"`
 }
@@ -98,7 +99,8 @@ func (m *Manager) Load() (*Config, error) {
 	m.viper.SetDefault("sync.summary_timeout", "3m")
 	m.viper.SetDefault("agent.priority", []string{"claude", "opencode", "droid", "codex"})
 	m.viper.SetDefault("agent.timeout", "10m")
-	m.viper.SetDefault("agent.conflict_strategy", "preserve_ours")
+	m.viper.SetDefault("agent.conflict_strategy", "agent_resolve")
+	m.viper.SetDefault("agent.resolve_strategy", "preserve_ours")
 	m.viper.SetDefault("agent.confirm_before_commit", true)
 	m.viper.SetDefault("agent.session_ttl", "24h")
 	m.viper.SetDefault("notification.enabled", true)
@@ -114,6 +116,18 @@ func (m *Manager) Load() (*Config, error) {
 	if err := m.viper.Unmarshal(&cfg); err != nil {
 		return nil, err
 	}
+
+	// Backward compatibility: if conflict_strategy contains a resolve strategy
+	// value (preserve_ours, preserve_theirs, balanced), migrate it to the new
+	// two-field model: conflict_strategy=agent_resolve + resolve_strategy=<value>.
+	resolveStrategies := map[string]bool{"preserve_ours": true, "preserve_theirs": true, "balanced": true}
+	if resolveStrategies[cfg.Agent.ConflictStrategy] {
+		cfg.Agent.ResolveStrategy = cfg.Agent.ConflictStrategy
+		cfg.Agent.ConflictStrategy = "agent_resolve"
+		// Persist migration
+		_ = m.Save(&cfg)
+	}
+
 	return &cfg, nil
 }
 
@@ -146,6 +160,7 @@ var validConfigKeys = map[string]string{
 	"agent.priority":              "[]string",
 	"agent.timeout":               "string",
 	"agent.conflict_strategy":     "string",
+	"agent.resolve_strategy":      "string",
 	"agent.confirm_before_commit": "bool",
 	"agent.session_ttl":           "string",
 	// github
@@ -208,6 +223,8 @@ func (m *Manager) Get(key string) (interface{}, error) {
 		return cfg.Agent.Timeout, nil
 	case "agent.conflict_strategy":
 		return cfg.Agent.ConflictStrategy, nil
+	case "agent.resolve_strategy":
+		return cfg.Agent.ResolveStrategy, nil
 	case "agent.confirm_before_commit":
 		return cfg.Agent.ConfirmBeforeCommit, nil
 	case "agent.session_ttl":
@@ -281,6 +298,8 @@ func (m *Manager) Set(key string, value string) error {
 		cfg.Agent.Timeout = value
 	case "agent.conflict_strategy":
 		cfg.Agent.ConflictStrategy = value
+	case "agent.resolve_strategy":
+		cfg.Agent.ResolveStrategy = value
 	case "agent.confirm_before_commit":
 		v, err := strconv.ParseBool(value)
 		if err != nil {
