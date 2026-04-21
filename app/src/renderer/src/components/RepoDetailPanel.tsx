@@ -6,9 +6,11 @@ import type { Repo, PostSyncCommand } from '@/types/engine'
 interface RepoDetailPanelProps {
   repo: Repo
   onEditCommands: () => void
+  /** Incremented by parent when commands may have changed externally */
+  commandsVersion?: number
 }
 
-export function RepoDetailPanel({ repo, onEditCommands }: RepoDetailPanelProps): JSX.Element {
+export function RepoDetailPanel({ repo, onEditCommands, commandsVersion }: RepoDetailPanelProps): JSX.Element {
   const { t } = useTranslation()
   const [commands, setCommands] = useState<PostSyncCommand[]>([])
   const [loading, setLoading] = useState(false)
@@ -29,7 +31,7 @@ export function RepoDetailPanel({ repo, onEditCommands }: RepoDetailPanelProps):
 
   useEffect(() => {
     loadCommands()
-  }, [loadCommands])
+  }, [loadCommands, commandsVersion])
 
   return (
     <div className="px-4 pb-4 space-y-4">

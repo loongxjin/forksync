@@ -57,6 +57,9 @@ export function HomePage(): JSX.Element {
   const [settingsRepo, setSettingsRepo] = useState<string | null>(null)
   const [scanInitialDir, setScanInitialDir] = useState('')
 
+  // Bump when RepoSettingsDialog closes so RepoDetailPanel reloads commands
+  const [commandsVersion, setCommandsVersion] = useState(0)
+
   // Drag-drop state
   const [dragOver, setDragOver] = useState(false)
 
@@ -357,6 +360,7 @@ export function HomePage(): JSX.Element {
                       <RepoDetailPanel
                         repo={repo}
                         onEditCommands={() => setSettingsRepo(repo.name)}
+                        commandsVersion={commandsVersion}
                       />
                     )}
                   </CollapsibleContent>
@@ -450,7 +454,7 @@ export function HomePage(): JSX.Element {
       <RepoSettingsDialog
         repoName={settingsRepo ?? ''}
         open={settingsRepo !== null}
-        onClose={() => setSettingsRepo(null)}
+        onClose={() => { setSettingsRepo(null); setCommandsVersion((v) => v + 1) }}
       />
     </div>
   )
