@@ -235,7 +235,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 			strategy = s.cfg.Agent.ConflictStrategy
 		}
 		if strategy == "agent_resolve" && s.sessionMgr != nil {
-			resolved := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)
+			resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)
 			if resolved {
 				result.Status = "up_to_date"
 				result.AutoResolved = len(mergeResult.Conflicts)
@@ -244,7 +244,16 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 				s.finalizeResult(result)
 				return result
 			}
-			// Agent resolve failed or needs confirmation — fall through to conflict status
+			if pending != nil {
+				result.Status = "resolved"
+				result.AgentUsed = s.sessionMgr.ProviderName()
+				result.PendingConfirm = pending
+				s.updateRepoStatus(r.ID, types.RepoStatusResolved, "")
+				s.notifyResult(r.Name, result)
+				s.finalizeResult(result)
+				return result
+			}
+			// Agent resolve failed — fall through to conflict status
 		}
 
 		result.Status = "conflict"
@@ -268,16 +277,19 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 }
 
 // tryAgentResolve attempts to resolve conflicts using the agent CLI.
-// Returns true if all conflicts were successfully resolved and committed.
-func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string) bool {
+// Returns (resolved, pending):
+//   - resolved=true, pending=nil: all conflicts resolved and committed (auto-confirm)
+//   - resolved=false, pending=files: conflicts resolved but awaiting user confirmation
+//   - resolved=false, pending=nil: agent failed to resolve
+func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string) (bool, []string) {
 	if s.sessionMgr == nil {
-		return false
+		return false, nil
 	}
 
 	// Create or reuse a session for this repo
 	_, err := s.sessionMgr.GetOrCreate(ctx, r.ID, r.Path)
 	if err != nil {
-		return false
+		return false, nil
 	}
 
 	// Determine resolve sub-strategy for the agent prompt
@@ -297,7 +309,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 			"agent", s.sessionMgr.ProviderName(),
 			"error", err,
 		)
-		return false
+		return false, nil
 	}
 	if !result.Success {
 		logger.Warn("sync: agent reported unsuccessful resolve",
@@ -305,7 +317,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 			"agent", s.sessionMgr.ProviderName(),
 			"summary", result.Summary,
 		)
-		return false
+		return false, nil
 	}
 
 	// Verify no conflict markers remain in resolved files
@@ -326,7 +338,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 			"files", stillConflicted,
 			"summary", result.Summary,
 		)
-		return false
+		return false, nil
 	}
 
 	// Stage resolved files
@@ -337,7 +349,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 				"file", file,
 				"error", err,
 			)
-			return false
+			return false, nil
 		}
 	}
 
@@ -345,6 +357,22 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	if checkErr := s.gitOps.CheckStaged(ctx, r.Path); checkErr != nil {
 		// Log but don't fail — whitespace issues are non-critical
 		_ = checkErr
+	}
+
+	// Check if auto-confirm is enabled
+	autoConfirm := true
+	if s.cfg != nil {
+		autoConfirm = !s.cfg.Agent.ConfirmBeforeCommit
+	}
+
+	if !autoConfirm {
+		// Agent resolved successfully but user wants to confirm — stop before commit
+		logger.Info("sync: agent resolved conflicts, awaiting user confirmation",
+			"repo", r.Name,
+			"agent", s.sessionMgr.ProviderName(),
+			"files", result.ResolvedFiles,
+		)
+		return false, result.ResolvedFiles
 	}
 
 	// Complete the merge with a commit
@@ -355,10 +383,10 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 			"agent", s.sessionMgr.ProviderName(),
 			"error", err,
 		)
-		return false
+		return false, nil
 	}
 
-	return true
+	return true, nil
 }
 
 // SyncAll syncs all managed repositories.
@@ -493,6 +521,8 @@ func (s *Syncer) notifyResult(repoName string, result *Result) {
 		if result.CommitsPulled > 0 {
 			s.notifier.NotifySyncSuccess(repoName, result.CommitsPulled)
 		}
+	case "resolved":
+		s.notifier.NotifyResolved(repoName, len(result.PendingConfirm), result.AgentUsed)
 	case "conflict":
 		s.notifier.NotifyConflict(repoName, len(result.ConflictFiles))
 	case "error":
@@ -508,7 +538,7 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 		return 0
 	}
 	// Don't record to history if there were no actual changes
-	if result.CommitsPulled == 0 && result.Status != "conflict" && result.Status != "error" {
+	if result.CommitsPulled == 0 && result.Status != "conflict" && result.Status != "error" && result.Status != "resolved" {
 		return 0
 	}
 
@@ -557,6 +587,11 @@ func (s *Syncer) logResult(result *Result) {
 		} else {
 			logger.Info("repo already up to date", "repo", result.RepoName)
 		}
+	case "resolved":
+		logger.Info("repo conflicts resolved, awaiting confirmation",
+			"repo", result.RepoName,
+			"files", len(result.PendingConfirm),
+			"agent", result.AgentUsed)
 	case "conflict":
 		logger.Warn("repo conflicts", "repo", result.RepoName, "files", len(result.ConflictFiles))
 	case "error":

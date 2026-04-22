@@ -35,6 +35,15 @@ func (n *Notifier) NotifyConflict(repoName string, conflictCount int) {
 	n.send("ForkSync - Conflict", msg)
 }
 
+// NotifyResolved sends a notification when conflicts are resolved but awaiting user confirmation.
+func (n *Notifier) NotifyResolved(repoName string, fileCount int, agent string) {
+	if !n.enabled {
+		return
+	}
+	msg := fmt.Sprintf("Conflicts resolved in %s by %s (%d files, awaiting confirmation)", repoName, agent, fileCount)
+	n.send("ForkSync - Awaiting Confirmation", msg)
+}
+
 // NotifyError sends a notification for sync errors.
 func (n *Notifier) NotifyError(repoName string, errMsg string) {
 	if !n.enabled {
