@@ -333,15 +333,25 @@ func completeAgentResolve(ctx context.Context, r types.Repo, store repo.Store, r
 	return nil
 }
 
-// runResolveReject rolls back agent changes using git checkout.
+// runResolveReject rolls back the merge using git merge --abort,
+// restoring the repository to its pre-merge state.
 func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error {
-	// Checkout all conflicted files to restore pre-resolution state
-	conflictPaths := conflict.DetectConflicts(cmd.Context(), r.Path)
+	ctx := cmd.Context()
 	gitOps := git.NewOperations()
-	for _, f := range conflictPaths {
-		if err := gitOps.CheckoutFile(cmd.Context(), r.Path, f); err != nil {
-			outputText("⚠️  checkout %s failed: %v", f, err)
+
+	err := gitOps.AbortMerge(ctx, r.Path)
+	if err != nil {
+		logger.Error("resolve: merge --abort failed", "repo", r.Name, "error", err)
+		r.Status = types.RepoStatusConflict
+		r.ErrorMessage = fmt.Sprintf("reject failed: merge --abort error: %v", err)
+		_ = store.Update(r)
+
+		if isJSON() {
+			outputJSON(types.RejectData{RepoID: r.ID, RolledBack: false}, fmt.Errorf("merge --abort failed: %w", err))
+		} else {
+			outputText("⚠️  Failed to rollback: %v", err)
 		}
+		return fmt.Errorf("merge --abort: %w", err)
 	}
 
 	r.Status = types.RepoStatusConflict
@@ -353,7 +363,7 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error 
 	if isJSON() {
 		outputJSON(types.RejectData{RepoID: r.ID, RolledBack: true}, nil)
 	} else {
-		outputText("🔄 Rolled back agent changes for %s", r.Name)
+		outputText("🔄 Rolled back merge for %s", r.Name)
 	}
 	return nil
 }
