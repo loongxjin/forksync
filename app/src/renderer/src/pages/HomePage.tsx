@@ -179,10 +179,11 @@ export function HomePage(): JSX.Element {
         return next
       })
       await refresh()
+      loadHistory()
     } finally {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
     }
-  }, [resolveAccept, refresh])
+  }, [resolveAccept, refresh, loadHistory])
 
   const handleReject = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
