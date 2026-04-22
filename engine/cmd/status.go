@@ -111,6 +111,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 					repos[idx].Status != types.RepoStatusResolving &&
 					repos[idx].Status != types.RepoStatusResolved {
 					repos[idx].Status = types.RepoStatusSyncNeeded
+					repos[idx].ErrorMessage = ""
 					if updateErr := store.Update(repos[idx]); updateErr != nil {
 						logger.Error("status: failed to update repo", "repo", r.Name, "error", updateErr)
 					}
