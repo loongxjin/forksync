@@ -147,8 +147,19 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	// Check if repo is already in a conflict/merge state before proceeding.
 	// This is a pre-check guard, NOT an actual sync attempt — so we skip
 	// recording history to avoid polluting the sync log.
+	// Note: IsMergingState auto-stages files that have been manually resolved
+	// but not yet staged, so unmergedFiles only contains truly conflicted files.
 	isMerging, unmergedFiles, err := s.gitOps.IsMergingState(ctx, r.Path)
 	if err == nil && isMerging {
+		if len(unmergedFiles) == 0 {
+			// All conflicts were resolved but not staged — now auto-staged.
+			// MERGE_HEAD still exists, transition to resolved state for user confirmation.
+			result.Status = "resolved"
+			s.updateRepoStatus(r.ID, types.RepoStatusResolved, "")
+			s.notifyResult(r.Name, result)
+			s.logResult(result)
+			return result
+		}
 		result.Status = "conflict"
 		result.ConflictFiles = unmergedFiles
 		result.ErrorMessage = "repository has unresolved merge conflicts, please resolve conflicts before syncing"

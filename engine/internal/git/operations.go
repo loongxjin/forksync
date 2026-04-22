@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	git "github.com/go-git/go-git/v5"
 	gitConfig "github.com/go-git/go-git/v5/config"
@@ -337,7 +338,15 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 	if err != nil {
 		if strings.Contains(outputStr, "CONFLICT") {
 			conflicts := o.detectConflicts(ctx, repo.Path)
-			return &MergeResult{HasConflicts: true, Conflicts: conflicts}, nil
+			// Filter out files that have been manually resolved but not yet staged.
+			// Auto-stage them so they don't appear as unresolved conflicts.
+			stillConflicted := o.FilterResolvedFiles(ctx, repo.Path, conflicts)
+			if len(stillConflicted) == 0 {
+				// All conflicts were auto-staged — no real conflicts remain.
+				// MERGE_HEAD still exists, caller should handle this state.
+				return &MergeResult{HasConflicts: false}, nil
+			}
+			return &MergeResult{HasConflicts: true, Conflicts: stillConflicted}, nil
 		}
 		return nil, fmt.Errorf("merge %s: %s: %w", upstreamRef, outputStr, err)
 	}
@@ -382,6 +391,8 @@ func (o *Operations) GetConflictedContent(_ context.Context, repoPath, filePath 
 
 // IsMergingState checks if the repository has an in-progress merge (unmerged files).
 // It runs `git ls-files --unmerge` to check for unmerged entries.
+// Files that have been manually resolved (no conflict markers) but not yet staged
+// are automatically staged.
 func (o *Operations) IsMergingState(ctx context.Context, repoPath string) (bool, []string, error) {
 	// Check for MERGE_HEAD which indicates a merge is in progress
 	mergeHead := filepath.Join(repoPath, ".git", "MERGE_HEAD")
@@ -391,7 +402,36 @@ func (o *Operations) IsMergingState(ctx context.Context, repoPath string) (bool,
 
 	// MERGE_HEAD exists — check for unmerged files
 	unmergedFiles := o.detectConflicts(ctx, repoPath)
-	return true, unmergedFiles, nil
+	if len(unmergedFiles) == 0 {
+		return true, nil, nil
+	}
+
+	// Filter out files that have been manually resolved but not staged.
+	// Auto-stage them so they are counted as resolved.
+	stillConflicted := o.FilterResolvedFiles(ctx, repoPath, unmergedFiles)
+	return true, stillConflicted, nil
+}
+
+// FilterResolvedFiles checks unmerged files and auto-stages those without conflict markers.
+// Returns the list of files that still have conflict markers.
+// Files that have been resolved (no markers) are automatically staged via git add.
+func (o *Operations) FilterResolvedFiles(ctx context.Context, repoPath string, unmergedFiles []string) []string {
+	var stillConflicted []string
+	for _, file := range unmergedFiles {
+		content, err := o.GetConflictedContent(ctx, repoPath, file)
+		if err != nil {
+			// Can't read file — assume it's still conflicted
+			stillConflicted = append(stillConflicted, file)
+			continue
+		}
+		if conflict.HasConflictMarkers(content) {
+			stillConflicted = append(stillConflicted, file)
+		} else {
+			// File is resolved but not staged — auto-stage it
+			_ = o.StageFile(ctx, repoPath, file)
+		}
+	}
+	return stillConflicted
 }
 
 // AbortMerge aborts an in-progress merge.

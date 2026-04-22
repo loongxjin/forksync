@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
-	"github.com/loongxjin/forksync/engine/internal/conflict"
-	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/conflict"
+	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
@@ -206,66 +206,66 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		return fmt.Errorf("agent resolve: %w", err)
 	}
 
-		// Verify: check for remaining conflict markers
-		remaining := conflict.DetectConflicts(ctx, r.Path)
-		if len(remaining) > 0 {
-			// Agent may have removed conflict markers but not staged the files,
-			// leaving them in unmerged state. Check and auto-stage those files.
-			var trulyUnresolved []string
-			for _, f := range remaining {
-				content, err := git.NewOperations().GetConflictedContent(ctx, r.Path, f)
-				if err != nil {
-					trulyUnresolved = append(trulyUnresolved, f)
-					continue
-				}
-				if conflict.HasConflictMarkers(content) {
-					// Still has markers — agent didn't resolve this one
-					trulyUnresolved = append(trulyUnresolved, f)
-				} else {
-					// Markers removed but not staged — auto-stage to mark as resolved
-					if stageErr := git.NewOperations().StageFile(ctx, r.Path, f); stageErr != nil {
-						logger.Warn("resolve: auto-stage resolved file failed",
-							"repo", r.Name, "file", f, "error", stageErr)
-						trulyUnresolved = append(trulyUnresolved, f)
-					}
-				}
+	// Verify: check for remaining conflict markers
+	remaining := conflict.DetectConflicts(ctx, r.Path)
+	if len(remaining) > 0 {
+		// Agent may have removed conflict markers but not staged the files,
+		// leaving them in unmerged state. Check and auto-stage those files.
+		var trulyUnresolved []string
+		for _, f := range remaining {
+			content, err := git.NewOperations().GetConflictedContent(ctx, r.Path, f)
+			if err != nil {
+				trulyUnresolved = append(trulyUnresolved, f)
+				continue
 			}
-
-			if len(trulyUnresolved) > 0 {
-				resolved.Store(true) // agent finished but left conflicts — we handle the status
-				r.Status = types.RepoStatusConflict
-				r.ErrorMessage = fmt.Sprintf("agent left %d unresolved conflicts: %s", len(trulyUnresolved), strings.Join(trulyUnresolved, ", "))
-				if updateErr := store.Update(r); updateErr != nil {
-					logger.Error("resolve: failed to update repo after unresolved conflicts", "repo", r.Name, "error", updateErr)
+			if conflict.HasConflictMarkers(content) {
+				// Still has markers — agent didn't resolve this one
+				trulyUnresolved = append(trulyUnresolved, f)
+			} else {
+				// Markers removed but not staged — auto-stage to mark as resolved
+				if stageErr := git.NewOperations().StageFile(ctx, r.Path, f); stageErr != nil {
+					logger.Warn("resolve: auto-stage resolved file failed",
+						"repo", r.Name, "file", f, "error", stageErr)
+					trulyUnresolved = append(trulyUnresolved, f)
 				}
-
-				logger.Warn("resolve: agent left unresolved conflicts",
-					"repo", r.Name,
-					"remaining", trulyUnresolved,
-					"agent", provider.Name(),
-					"summary", result.Summary,
-					"resolved_files", result.ResolvedFiles,
-				)
-
-				if isJSON() {
-					outputJSON(types.ResolveData{
-						RepoID:      r.ID,
-						Conflicts:   toConflictFiles(trulyUnresolved),
-						AgentResult: agentResultToTypes(result),
-					}, fmt.Errorf("agent did not resolve all conflicts"))
-				} else {
-					outputText("⚠️  Agent could not resolve all conflicts (%d remaining)", len(trulyUnresolved))
-					outputText("   Unresolved: %s", strings.Join(trulyUnresolved, ", "))
-					if len(result.ResolvedFiles) > 0 {
-						outputText("   Resolved: %s", strings.Join(result.ResolvedFiles, ", "))
-					}
-					if result.Summary != "" {
-						outputText("   Agent summary: %s", result.Summary)
-					}
-				}
-				return nil
 			}
 		}
+
+		if len(trulyUnresolved) > 0 {
+			resolved.Store(true) // agent finished but left conflicts — we handle the status
+			r.Status = types.RepoStatusConflict
+			r.ErrorMessage = fmt.Sprintf("agent left %d unresolved conflicts: %s", len(trulyUnresolved), strings.Join(trulyUnresolved, ", "))
+			if updateErr := store.Update(r); updateErr != nil {
+				logger.Error("resolve: failed to update repo after unresolved conflicts", "repo", r.Name, "error", updateErr)
+			}
+
+			logger.Warn("resolve: agent left unresolved conflicts",
+				"repo", r.Name,
+				"remaining", trulyUnresolved,
+				"agent", provider.Name(),
+				"summary", result.Summary,
+				"resolved_files", result.ResolvedFiles,
+			)
+
+			if isJSON() {
+				outputJSON(types.ResolveData{
+					RepoID:      r.ID,
+					Conflicts:   toConflictFiles(trulyUnresolved),
+					AgentResult: agentResultToTypes(result),
+				}, fmt.Errorf("agent did not resolve all conflicts"))
+			} else {
+				outputText("⚠️  Agent could not resolve all conflicts (%d remaining)", len(trulyUnresolved))
+				outputText("   Unresolved: %s", strings.Join(trulyUnresolved, ", "))
+				if len(result.ResolvedFiles) > 0 {
+					outputText("   Resolved: %s", strings.Join(result.ResolvedFiles, ", "))
+				}
+				if result.Summary != "" {
+					outputText("   Agent summary: %s", result.Summary)
+				}
+			}
+			return nil
+		}
+	}
 
 	// Get diff for user confirmation
 	diffBytes, _ := git.NewOperations().Diff(ctx, r.Path)
@@ -460,7 +460,6 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 	}
 	return nil
 }
-
 
 // toConflictFiles converts string paths to ConflictFile slices.
 func toConflictFiles(paths []string) []types.ConflictFile {
