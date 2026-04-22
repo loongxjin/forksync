@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
 
+	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/github"
 	"github.com/loongxjin/forksync/engine/internal/repo"
@@ -56,19 +58,8 @@ func runAdd(cmd *cobra.Command, args []string) error {
 
 	// Auto-detect upstream if not provided
 	resolvedUpstream := upstreamURL
-	if resolvedUpstream == "" && originURL != "" && github.IsGitHubURL(originURL) {
-		ghToken := ""
-		if cfg != nil {
-			ghToken = cfg.GitHub.Token
-		}
-		ghClient := github.NewClient(ghToken)
-		owner, repoName, parseErr := github.ParseRepoURL(originURL)
-		if parseErr == nil {
-			result, detectErr := ghClient.DetectFork(cmd.Context(), owner, repoName)
-			if detectErr == nil && result.IsFork && result.UpstreamURL != "" {
-				resolvedUpstream = result.UpstreamURL
-			}
-		}
+	if resolvedUpstream == "" {
+		resolvedUpstream = autoDetectUpstream(cmd.Context(), cfg, originURL)
 	}
 
 	// Get current branch
@@ -129,4 +120,34 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// autoDetectUpstream attempts to detect the upstream URL for a fork via the GitHub API.
+// Returns the upstream URL if detected, or an empty string if detection fails.
+func autoDetectUpstream(ctx context.Context, cfg *config.Config, originURL string) string {
+	if originURL == "" || !github.IsGitHubURL(originURL) {
+		return ""
+	}
+
+	ghToken := ""
+	if cfg != nil {
+		ghToken = cfg.GitHub.Token
+	}
+
+	ghClient := github.NewClient(ghToken)
+	owner, repoName, parseErr := github.ParseRepoURL(originURL)
+	if parseErr != nil {
+		return ""
+	}
+
+	result, detectErr := ghClient.DetectFork(ctx, owner, repoName)
+	if detectErr != nil {
+		return ""
+	}
+
+	if result.IsFork && result.UpstreamURL != "" {
+		return result.UpstreamURL
+	}
+
+	return ""
 }

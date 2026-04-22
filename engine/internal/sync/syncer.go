@@ -246,51 +246,9 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		return result
 	}
 
-	if mergeResult.HasConflicts {
-		result.ConflictsFound = len(mergeResult.Conflicts)
-		result.ConflictFiles = mergeResult.Conflicts
-
-		// Step 4: Try agent auto-resolve if configured and session manager available
-		strategy := r.ConflictStrategy
-		if strategy == "" && s.cfg != nil {
-			strategy = s.cfg.Agent.ConflictStrategy
+		if mergeResult.HasConflicts {
+			return s.handleMergeConflicts(ctx, r, result, mergeResult)
 		}
-		if strategy == "agent_resolve" && s.sessionMgr != nil {
-			resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)
-			if resolved {
-				result.Status = string(types.RepoStatusUpToDate)
-				result.AutoResolved = len(mergeResult.Conflicts)
-				s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
-				s.notifyResult(r.Name, result)
-				s.finalizeResult(result)
-				return result
-			}
-			if pending != nil {
-				result.Status = string(types.RepoStatusResolved)
-				result.AgentUsed = pending.Agent
-				result.AutoResolved = len(pending.Files)
-				result.PendingConfirm = pending.Files
-				result.AgentResult = &types.AgentResolveResult{
-					Success:       true,
-					ResolvedFiles: pending.Files,
-					Diff:          pending.Diff,
-					Summary:       pending.Summary,
-					AgentName:     pending.Agent,
-				}
-				s.updateRepoStatus(r.ID, types.RepoStatusResolved, "")
-				s.notifyResult(r.Name, result)
-				s.finalizeResult(result)
-				return result
-			}
-			// Agent resolve failed — fall through to conflict status
-		}
-
-		result.Status = "conflict"
-		s.updateRepoStatus(r.ID, types.RepoStatusConflict, "")
-		s.notifyResult(r.Name, result)
-		s.finalizeResult(result)
-		return result
-	}
 
 	// Success
 	result.Status = string(types.RepoStatusUpToDate)
@@ -300,6 +258,53 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		result.ErrorMessage = postSyncErr
 		s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, result.ErrorMessage)
 	}
+	s.notifyResult(r.Name, result)
+	s.finalizeResult(result)
+	return result
+}
+
+// handleMergeConflicts processes merge conflicts, attempting agent auto-resolve if configured.
+// Returns the final result for the sync operation.
+func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result *Result, mergeResult *git.MergeResult) *Result {
+	result.ConflictsFound = len(mergeResult.Conflicts)
+	result.ConflictFiles = mergeResult.Conflicts
+
+	// Try agent auto-resolve if configured and session manager available
+	strategy := r.ConflictStrategy
+	if strategy == "" && s.cfg != nil {
+		strategy = s.cfg.Agent.ConflictStrategy
+	}
+	if strategy == "agent_resolve" && s.sessionMgr != nil {
+		resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)
+		if resolved {
+			result.Status = string(types.RepoStatusUpToDate)
+			result.AutoResolved = len(mergeResult.Conflicts)
+			s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
+			s.notifyResult(r.Name, result)
+			s.finalizeResult(result)
+			return result
+		}
+		if pending != nil {
+			result.Status = string(types.RepoStatusResolved)
+			result.AgentUsed = pending.Agent
+			result.AutoResolved = len(pending.Files)
+			result.PendingConfirm = pending.Files
+			result.AgentResult = &types.AgentResolveResult{
+				Success:       true,
+				ResolvedFiles: pending.Files,
+				Diff:          pending.Diff,
+				Summary:       pending.Summary,
+				AgentName:     pending.Agent,
+			}
+			s.updateRepoStatus(r.ID, types.RepoStatusResolved, "")
+			s.notifyResult(r.Name, result)
+			s.finalizeResult(result)
+			return result
+		}
+	}
+
+	result.Status = string(types.RepoStatusConflict)
+	s.updateRepoStatus(r.ID, types.RepoStatusConflict, "")
 	s.notifyResult(r.Name, result)
 	s.finalizeResult(result)
 	return result

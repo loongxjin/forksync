@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -60,66 +61,14 @@ func runScan(cmd *cobra.Command, args []string) error {
 		if !d.IsDir() {
 			return nil
 		}
-
 		if !gitOps.IsGitRepo(cmd.Context(), path) {
 			return nil
 		}
 
-		// Get remotes to find origin URL
-		remotes, _ := gitOps.GetRemotes(cmd.Context(), path)
-		originURL := ""
-		for _, r := range remotes {
-			if r.Name == "origin" {
-				originURL = r.URL
-				break
-			}
+		result := processScannedRepo(cmd.Context(), path, gitOps, ghClient)
+		if result != nil {
+			scannedRepos = append(scannedRepos, *result)
 		}
-
-		repoName := filepath.Base(path)
-		scanned := types.ScannedRepo{
-			Path:   path,
-			Name:   repoName,
-			Origin: originURL,
-		}
-
-		// Try to detect if it's a fork via GitHub API
-		if originURL != "" && github.IsGitHubURL(originURL) {
-			owner, repo, parseErr := github.ParseRepoURL(originURL)
-			if parseErr == nil {
-				result, detectErr := ghClient.DetectFork(cmd.Context(), owner, repo)
-				if detectErr == nil {
-					scanned.IsFork = result.IsFork
-					if result.UpstreamURL != "" {
-						scanned.SuggestedUpstream = result.UpstreamURL
-					}
-				}
-			}
-		}
-
-		localBranches, _ := gitOps.GetLocalBranches(cmd.Context(), path)
-		scanned.LocalBranches = localBranches
-
-		originBranches, _ := gitOps.GetRemoteBranches(cmd.Context(), path, "origin")
-		scanned.RemoteBranches = originBranches
-
-		for _, r := range remotes {
-			if r.Name == "upstream" {
-				upstreamBranches, _ := gitOps.GetRemoteBranches(cmd.Context(), path, "upstream")
-				branchMap := make(map[string]struct{})
-				for _, b := range scanned.RemoteBranches {
-					branchMap[b] = struct{}{}
-				}
-				for _, b := range upstreamBranches {
-					if _, ok := branchMap[b]; !ok {
-						scanned.RemoteBranches = append(scanned.RemoteBranches, b)
-						branchMap[b] = struct{}{}
-					}
-				}
-				break
-			}
-		}
-
-		scannedRepos = append(scannedRepos, scanned)
 
 		// Don't recurse into .git subdirectories
 		return filepath.SkipDir
@@ -150,4 +99,64 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// processScannedRepo handles the per-directory logic for scanning a git repo.
+// It returns nil if the directory should be skipped.
+func processScannedRepo(ctx context.Context, dir string, gitOps *git.Operations, ghClient *github.Client) *types.ScannedRepo {
+	// Get remotes to find origin URL
+	remotes, _ := gitOps.GetRemotes(ctx, dir)
+	originURL := ""
+	for _, r := range remotes {
+		if r.Name == "origin" {
+			originURL = r.URL
+			break
+		}
+	}
+
+	repoName := filepath.Base(dir)
+	scanned := types.ScannedRepo{
+		Path:   dir,
+		Name:   repoName,
+		Origin: originURL,
+	}
+
+	// Try to detect if it's a fork via GitHub API
+	if originURL != "" && github.IsGitHubURL(originURL) {
+		owner, repo, parseErr := github.ParseRepoURL(originURL)
+		if parseErr == nil {
+			result, detectErr := ghClient.DetectFork(ctx, owner, repo)
+			if detectErr == nil {
+				scanned.IsFork = result.IsFork
+				if result.UpstreamURL != "" {
+					scanned.SuggestedUpstream = result.UpstreamURL
+				}
+			}
+		}
+	}
+
+	localBranches, _ := gitOps.GetLocalBranches(ctx, dir)
+	scanned.LocalBranches = localBranches
+
+	originBranches, _ := gitOps.GetRemoteBranches(ctx, dir, "origin")
+	scanned.RemoteBranches = originBranches
+
+	for _, r := range remotes {
+		if r.Name == "upstream" {
+			upstreamBranches, _ := gitOps.GetRemoteBranches(ctx, dir, "upstream")
+			branchMap := make(map[string]struct{})
+			for _, b := range scanned.RemoteBranches {
+				branchMap[b] = struct{}{}
+			}
+			for _, b := range upstreamBranches {
+				if _, ok := branchMap[b]; !ok {
+					scanned.RemoteBranches = append(scanned.RemoteBranches, b)
+					branchMap[b] = struct{}{}
+				}
+			}
+			break
+		}
+	}
+
+	return &scanned
 }
