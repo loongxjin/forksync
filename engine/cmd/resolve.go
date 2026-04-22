@@ -291,7 +291,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 
 	if resolveNoConfirm || !confirmBeforeCommit {
 		// Auto-commit
-		return completeAgentResolve(ctx, r, store, result)
+		return completeAgentResolve(ctx, cmd, r, store, result, cfg, cfgMgr)
 	}
 
 	// Show diff and wait for confirmation
@@ -327,7 +327,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 }
 
 // completeAgentResolve stages files and completes the merge.
-func completeAgentResolve(ctx context.Context, r types.Repo, store repo.Store, result *agent.AgentResult) error {
+func completeAgentResolve(ctx context.Context, cmd *cobra.Command, r types.Repo, store repo.Store, result *agent.AgentResult, cfg *config.Config, cfgMgr *config.Manager) error {
 	// Stage all resolved files
 	gitOps := git.NewOperations()
 	for _, f := range result.ResolvedFiles {
@@ -348,6 +348,9 @@ func completeAgentResolve(ctx context.Context, r types.Repo, store repo.Store, r
 	if updateErr := store.Update(r); updateErr != nil {
 		logger.Error("resolve: failed to update repo after complete", "repo", r.Name, "error", updateErr)
 	}
+
+	// Trigger AI summary generation if enabled
+	triggerResolveSummary(cmd.Context(), r, cfg, cfgMgr)
 
 	if isJSON() {
 		outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)

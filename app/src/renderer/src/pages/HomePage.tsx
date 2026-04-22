@@ -164,10 +164,11 @@ export function HomePage(): JSX.Element {
         setResolveResults((prev) => ({ ...prev, [repo.name]: result }))
       }
       await refresh()
+      loadHistory()
     } finally {
       setLocalLoading((prev) => ({ ...prev, [repo.name]: false }))
     }
-  }, [resolve, preferred, updateRepoStatus, refresh, engineConfig])
+  }, [resolve, preferred, updateRepoStatus, refresh, engineConfig, loadHistory])
 
   const handleAccept = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
