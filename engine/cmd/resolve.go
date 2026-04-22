@@ -349,8 +349,8 @@ func completeAgentResolve(ctx context.Context, cmd *cobra.Command, r types.Repo,
 		logger.Error("resolve: failed to update repo after complete", "repo", r.Name, "error", updateErr)
 	}
 
-	// Trigger AI summary generation if enabled
-	triggerResolveSummary(cmd.Context(), r, cfg, cfgMgr)
+	// Update existing conflict history record to "synced"
+	updateResolveHistoryStatus(r, cfg, cfgMgr)
 
 	if isJSON() {
 		outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
@@ -450,8 +450,8 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 		logger.Error("resolve: failed to update repo after accept", "repo", r.Name, "error", updateErr)
 	}
 
-	// Update existing conflict history record to "synced" and trigger AI summary if enabled.
-	triggerResolveSummary(cmd.Context(), r, cfg, cfgMgr)
+	// Update existing conflict history record to "synced"
+	updateResolveHistoryStatus(r, cfg, cfgMgr)
 
 	if isJSON() {
 		outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
@@ -485,9 +485,10 @@ func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
 	}
 }
 
-// triggerResolveSummary updates the conflict history record to "synced" and triggers
-// AI summary generation if auto_summary is enabled.
-func triggerResolveSummary(ctx context.Context, r types.Repo, cfg *config.Config, cfgMgr *config.Manager) {
+// updateResolveHistoryStatus updates the existing conflict history record to "up_to_date".
+// If auto_summary is enabled and the record has no summary status yet, it also pre-sets
+// summary_status to "pending" so the frontend polling can show the generating indicator.
+func updateResolveHistoryStatus(r types.Repo, cfg *config.Config, cfgMgr *config.Manager) {
 	histStore, err := history.NewStore(cfgMgr.ConfigDir())
 	if err != nil {
 		logger.Error("[resolve-accept] open history store", "error", err)
@@ -505,12 +506,9 @@ func triggerResolveSummary(ctx context.Context, r types.Repo, cfg *config.Config
 		logger.Error("[resolve-accept] update history status", "error", updateErr)
 	}
 
-	if cfg == nil || !cfg.Sync.AutoSummary {
-		return
-	}
-
-	_, err = generateSummary(ctx, cfg, histStore, record, r)
-	if err != nil {
-		logger.Error("[resolve-accept] summary generation failed", "error", err)
+	if cfg != nil && cfg.Sync.AutoSummary && record.SummaryStatus == "" {
+		if updateErr := histStore.UpdateSummary(record.ID, "", "pending"); updateErr != nil {
+			logger.Error("[resolve-accept] update summary status", "error", updateErr)
+		}
 	}
 }

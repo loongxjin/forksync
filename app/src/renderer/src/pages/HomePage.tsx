@@ -203,10 +203,16 @@ export function HomePage(): JSX.Element {
       })
       await refresh()
       loadHistory()
+      // Fire-and-forget AI summarization after resolving conflicts
+      if (engineConfig?.Sync?.AutoSummary) {
+        engineApi.summarize(repoName).catch(() => {
+          // ignore background summary errors
+        })
+      }
     } finally {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
     }
-  }, [resolveAccept, refresh, loadHistory])
+  }, [resolveAccept, refresh, loadHistory, engineConfig])
 
   const handleReject = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
