@@ -134,9 +134,9 @@ func runAgentSessions(cmd *cobra.Command, args []string) error {
 		for _, s := range infos {
 			statusIcon := "🟢"
 			switch s.Status {
-			case "expired":
+			case string(types.SessionStatusExpired):
 				statusIcon = "⏰"
-			case "failed":
+			case string(types.SessionStatusFailed):
 				statusIcon = "❌"
 			}
 			sid := s.ID

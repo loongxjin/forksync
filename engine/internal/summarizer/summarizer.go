@@ -13,6 +13,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/history"
+	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
 // Task represents a summarization job.
@@ -73,7 +74,7 @@ func (s *Summarizer) Start() {
 func (s *Summarizer) Enqueue(task Task) {
 	if s.closed.Load() {
 		s.logger.Printf("[summarizer] stopped, dropping summary task for %s (history #%d)", task.RepoName, task.HistoryID)
-		_ = s.historyStore.UpdateSummary(task.HistoryID, "", "failed")
+		_ = s.historyStore.UpdateSummary(task.HistoryID, "", string(types.SummaryStatusFailed))
 		return
 	}
 	select {
@@ -83,7 +84,7 @@ func (s *Summarizer) Enqueue(task Task) {
 	default:
 		s.logger.Printf("[summarizer] queue full, dropping summary task for %s", task.RepoName)
 		// Mark as failed since status was already set to pending at record time
-		_ = s.historyStore.UpdateSummary(task.HistoryID, "", "failed")
+		_ = s.historyStore.UpdateSummary(task.HistoryID, "", string(types.SummaryStatusFailed))
 	}
 }
 
@@ -100,7 +101,7 @@ func (s *Summarizer) processTask(task Task) {
 	s.logger.Printf("[summarizer] processing summary for %s (history #%d)", task.RepoName, task.HistoryID)
 
 	// Update status to generating
-	_ = s.historyStore.UpdateSummary(task.HistoryID, "", "generating")
+	_ = s.historyStore.UpdateSummary(task.HistoryID, "", string(types.SummaryStatusGenerating))
 
 	// Determine which agent to use
 	agentName := s.config.Sync.SummaryAgent
@@ -132,7 +133,7 @@ func (s *Summarizer) processTask(task Task) {
 	}
 
 	// Success
-	if err := s.historyStore.UpdateSummary(task.HistoryID, summary, "done"); err != nil {
+	if err := s.historyStore.UpdateSummary(task.HistoryID, summary, string(types.SummaryStatusDone)); err != nil {
 		s.logger.Printf("[summarizer] failed to save summary for %s: %v", task.RepoName, err)
 		return
 	}
@@ -142,7 +143,7 @@ func (s *Summarizer) processTask(task Task) {
 
 // failTask marks a task as failed.
 func (s *Summarizer) failTask(task Task, errMsg string) {
-	_ = s.historyStore.UpdateSummary(task.HistoryID, "", "failed")
+	_ = s.historyStore.UpdateSummary(task.HistoryID, "", string(types.SummaryStatusFailed))
 	s.logger.Printf("[summarizer] summary failed for %s (history #%d): %s", task.RepoName, task.HistoryID, errMsg)
 }
 

@@ -349,7 +349,7 @@ func completeAgentResolve(ctx context.Context, cmd *cobra.Command, r types.Repo,
 		logger.Error("resolve: failed to update repo after complete", "repo", r.Name, "error", updateErr)
 	}
 
-	// Update existing conflict history record to "synced"
+	// Update existing conflict history record to "up_to_date"
 	updateResolveHistoryStatus(r, cfg, cfgMgr)
 
 	if isJSON() {
@@ -502,12 +502,12 @@ func updateResolveHistoryStatus(r types.Repo, cfg *config.Config, cfgMgr *config
 		return
 	}
 
-	if updateErr := histStore.UpdateStatus(record.ID, "up_to_date"); updateErr != nil {
+	if updateErr := histStore.UpdateStatus(record.ID, string(types.RepoStatusUpToDate)); updateErr != nil {
 		logger.Error("[resolve-accept] update history status", "error", updateErr)
 	}
 
 	if cfg != nil && cfg.Sync.AutoSummary && record.SummaryStatus == "" {
-		if updateErr := histStore.UpdateSummary(record.ID, "", "pending"); updateErr != nil {
+		if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusPending)); updateErr != nil {
 			logger.Error("[resolve-accept] update summary status", "error", updateErr)
 		}
 	}

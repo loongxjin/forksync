@@ -8,6 +8,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/notify"
 	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
+	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
 // DefaultInterval is the default sync interval.
@@ -101,13 +102,13 @@ func (s *Scheduler) runSync(ctx context.Context) {
 			continue
 		}
 		switch r.Status {
-		case "synced":
+		case string(types.RepoStatusUpToDate):
 			if r.CommitsPulled > 0 {
 				s.notifier.NotifySyncSuccess(r.RepoName, r.CommitsPulled)
 			}
-		case "conflict":
+		case string(types.RepoStatusConflict):
 			s.notifier.NotifyConflict(r.RepoName, len(r.ConflictFiles))
-		case "error":
+		case string(types.RepoStatusError):
 			s.notifier.NotifyError(r.RepoName, r.ErrorMessage)
 		}
 	}

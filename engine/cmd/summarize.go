@@ -62,11 +62,11 @@ func runSummarize(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no sync history found for %q", args[0])
 	}
 
-	if summarizeRetry && record.SummaryStatus != "failed" {
+	if summarizeRetry && record.SummaryStatus != string(types.SummaryStatusFailed) {
 		return fmt.Errorf("latest sync for %q is not in failed state (current: %s)", args[0], record.SummaryStatus)
 	}
 
-	if !summarizeRetry && record.SummaryStatus == "done" {
+	if !summarizeRetry && record.SummaryStatus == string(types.SummaryStatusDone) {
 		if isJSON() {
 			outputJSON(SummarizeData{
 				HistoryID:     record.ID,
@@ -91,7 +91,7 @@ func runSummarize(cmd *cobra.Command, args []string) error {
 			HistoryID:     record.ID,
 			RepoName:      record.RepoName,
 			Summary:       summary,
-			SummaryStatus: "done",
+			SummaryStatus: string(types.SummaryStatusDone),
 		}, nil)
 	} else {
 		outputText("📝 %s — summarized", record.RepoName)

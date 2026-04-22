@@ -93,11 +93,11 @@ func runHistory(cmd *cobra.Command, args []string) error {
 		for _, r := range records {
 			icon := "✅"
 			switch r.Status {
-			case "conflict":
+			case string(types.RepoStatusConflict):
 				icon = "⚠️"
-			case "error":
+			case string(types.RepoStatusError):
 				icon = "❌"
-			case "up_to_date":
+			case string(types.RepoStatusUpToDate):
 				icon = "—"
 			}
 			outputText("%s %s  %s  (%d commits)", icon, r.CreatedAt.Format("2006-01-02 15:04"), r.RepoName, r.CommitsPulled)
@@ -112,9 +112,9 @@ func runHistory(cmd *cobra.Command, args []string) error {
 			}
 			if r.Summary != "" {
 				outputText("   📝 %s", r.Summary)
-			} else if r.SummaryStatus == "generating" {
+			} else if r.SummaryStatus == string(types.SummaryStatusGenerating) {
 				outputText("   🤖 AI summary generating...")
-			} else if r.SummaryStatus == "failed" {
+			} else if r.SummaryStatus == string(types.SummaryStatusFailed) {
 				outputText("   ❌ AI summary generation failed")
 			}
 		}

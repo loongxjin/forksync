@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
 // SessionRecord represents a persisted agent session for a repository.
@@ -17,7 +19,7 @@ type SessionRecord struct {
 	SessionID  string    `json:"sessionId"`
 	CreatedAt  time.Time `json:"createdAt"`
 	LastUsedAt time.Time `json:"lastUsedAt"`
-	Status     string    `json:"status"` // "active" | "expired" | "failed"
+	Status     string    `json:"status"` // types.SessionStatus values
 }
 
 // SessionStore handles persistence of session records to disk.
@@ -157,7 +159,7 @@ func (s *SessionStore) CleanupExpired() (int, error) {
 
 	cleaned := 0
 	for _, rec := range records {
-		if rec.Status == "expired" || rec.Status == "failed" {
+		if rec.Status == string(types.SessionStatusExpired) || rec.Status == string(types.SessionStatusFailed) {
 			if err := s.Delete(rec.RepoID); err == nil {
 				cleaned++
 			}

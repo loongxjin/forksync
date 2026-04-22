@@ -27,6 +27,25 @@ const (
 	RepoStatusUnconfigured RepoStatus = "unconfigured"
 )
 
+// SessionStatus Agent 会话状态枚举
+type SessionStatus string
+
+const (
+	SessionStatusActive   SessionStatus = "active"
+	SessionStatusExpired  SessionStatus = "expired"
+	SessionStatusFailed   SessionStatus = "failed"
+)
+
+// SummaryStatus 同步摘要生成状态枚举
+type SummaryStatus string
+
+const (
+	SummaryStatusPending    SummaryStatus = "pending"
+	SummaryStatusGenerating SummaryStatus = "generating"
+	SummaryStatusDone       SummaryStatus = "done"
+	SummaryStatusFailed     SummaryStatus = "failed"
+)
+
 // Time 可序列化的 time.Time
 type Time struct {
 	time.Time

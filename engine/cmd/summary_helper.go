@@ -42,14 +42,14 @@ func generateSummary(
 	}
 
 	// Update status to generating
-	if updateErr := histStore.UpdateSummary(record.ID, "", "generating"); updateErr != nil {
+	if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusGenerating)); updateErr != nil {
 		logger.Error("summarize: failed to set generating status", "error", updateErr)
 	}
 
 	// Get commits (oldHEAD..upstreamRef)
 	upstreamRef := resolveUpstreamRef(ctx, r)
 	if record.OldHEAD == "" {
-		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
+		if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusFailed)); updateErr != nil {
 			logger.Error("summarize: failed to set failed status (no old HEAD)", "error", updateErr)
 		}
 		return "", fmt.Errorf("no old HEAD recorded for %q, cannot determine pulled commits", r.Name)
@@ -58,7 +58,7 @@ func generateSummary(
 	gitOps := git.NewOperations()
 	gitCommits, err := gitOps.GetCommitLog(ctx, r.Path, record.OldHEAD, upstreamRef)
 	if err != nil || len(gitCommits) == 0 {
-		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
+		if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusFailed)); updateErr != nil {
 			logger.Error("summarize: failed to set failed status (no commits)", "error", updateErr)
 		}
 		return "", fmt.Errorf("no commits found for summarization")
@@ -82,14 +82,14 @@ func generateSummary(
 	executor := summarizer.NewExecutor()
 	summary, err := executor.Summarize(ctx, commits, lang, agentName)
 	if err != nil {
-		if updateErr := histStore.UpdateSummary(record.ID, "", "failed"); updateErr != nil {
+		if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusFailed)); updateErr != nil {
 			logger.Error("summarize: failed to set failed status after error", "error", updateErr)
 		}
 		return "", fmt.Errorf("summarization failed: %w", err)
 	}
 
 	// Save result
-	if updateErr := histStore.UpdateSummary(record.ID, summary, "done"); updateErr != nil {
+	if updateErr := histStore.UpdateSummary(record.ID, summary, string(types.SummaryStatusDone)); updateErr != nil {
 		logger.Error("summarize: failed to save summary result", "error", updateErr)
 	}
 

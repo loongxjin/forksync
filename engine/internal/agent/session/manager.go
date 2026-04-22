@@ -59,7 +59,7 @@ func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*ag
 
 	// 2. Check disk store
 	rec, err := m.store.Load(repoID)
-	if err == nil && rec.Status == "active" {
+	if err == nil && rec.Status == string(types.SessionStatusActive) {
 		// Check if expired
 		if time.Since(rec.LastUsedAt) < m.ttl {
 			sess := &agent.Session{
@@ -72,7 +72,7 @@ func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*ag
 			return sess, nil
 		}
 		// Expired — mark it
-		_ = m.store.UpdateStatus(repoID, "expired")
+		_ = m.store.UpdateStatus(repoID, string(types.SessionStatusExpired))
 	}
 
 	// 3. Create new session
@@ -108,14 +108,14 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 		m.invalidateSession(repoID)
 		sess, retryErr := m.createSessionLocked(ctx, repoID, repoPath)
 		if retryErr != nil {
-			_ = m.store.UpdateStatus(repoID, "failed")
+			_ = m.store.UpdateStatus(repoID, string(types.SessionStatusFailed))
 			return nil, fmt.Errorf("resume failed (%v); recreate session also failed: %w", err, retryErr)
 		}
 		// Retry with merged prompt (this is a new session too)
 		prompt = agent.BuildInitialConflictPrompt(conflictFiles, strategy)
 		result, err = m.provider.ResolveConflicts(ctx, sess, prompt)
 		if err != nil {
-			_ = m.store.UpdateStatus(repoID, "failed")
+			_ = m.store.UpdateStatus(repoID, string(types.SessionStatusFailed))
 			return result, err
 		}
 	}
@@ -152,7 +152,7 @@ func (m *Manager) invalidateSession(repoID string) {
 	m.mu.Lock()
 	delete(m.active, repoID)
 	m.mu.Unlock()
-	_ = m.store.UpdateStatus(repoID, "failed")
+	_ = m.store.UpdateStatus(repoID, string(types.SessionStatusFailed))
 }
 
 // createSessionLocked creates a new session after acquiring the mutex.
@@ -188,7 +188,7 @@ func (m *Manager) createSession(ctx context.Context, repoID, repoPath string) (*
 		SessionID:  sess.ID,
 		CreatedAt:  time.Now(),
 		LastUsedAt: time.Now(),
-		Status:     "active",
+		Status:     string(types.SessionStatusActive),
 	}
 	if err := m.store.Save(rec); err != nil {
 		return nil, fmt.Errorf("save session record: %w", err)

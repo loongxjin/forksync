@@ -141,7 +141,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	s.mu.Lock()
 	if s.active[r.ID] {
 		s.mu.Unlock()
-		result.Status = "error"
+		result.Status = string(types.RepoStatusError)
 		result.ErrorMessage = "sync already in progress"
 		s.finalizeResult(result)
 		return result
@@ -164,13 +164,13 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		if len(unmergedFiles) == 0 {
 			// All conflicts were resolved but not staged — now auto-staged.
 			// MERGE_HEAD still exists, transition to resolved state for user confirmation.
-			result.Status = "resolved"
+			result.Status = string(types.RepoStatusResolved)
 			s.updateRepoStatus(r.ID, types.RepoStatusResolved, "")
 			s.notifyResult(r.Name, result)
 			s.logResult(result)
 			return result
 		}
-		result.Status = "conflict"
+		result.Status = string(types.RepoStatusConflict)
 		result.ConflictFiles = unmergedFiles
 		result.ErrorMessage = "repository has unresolved merge conflicts, please resolve conflicts before syncing"
 		result.ConflictsFound = len(unmergedFiles)
@@ -183,7 +183,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 
 	// Also check if stored status indicates a conflict state that hasn't been resolved
 	if r.Status == types.RepoStatusConflict || r.Status == types.RepoStatusResolving || r.Status == types.RepoStatusResolved {
-		result.Status = "conflict"
+		result.Status = string(types.RepoStatusConflict)
 		result.ErrorMessage = fmt.Sprintf("repository is in %s state, please resolve conflicts before syncing", r.Status)
 		// DO NOT call finalizeResult — this is not a real sync, don't pollute history
 		s.logResult(result)
@@ -202,7 +202,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 
 	// Step 1: Fetch
 	if err := s.gitOps.Fetch(ctx, r); err != nil {
-		result.Status = "error"
+		result.Status = string(types.RepoStatusError)
 		result.ErrorMessage = fmt.Sprintf("fetch failed: %v", err)
 		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
 		s.notifyResult(r.Name, result)
@@ -213,7 +213,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	// Step 2: Check ahead/behind
 	statusResult, err := s.gitOps.Status(ctx, r)
 	if err != nil {
-		result.Status = "error"
+		result.Status = string(types.RepoStatusError)
 		result.ErrorMessage = fmt.Sprintf("status check failed: %v", err)
 		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
 		s.finalizeResult(result)
@@ -238,7 +238,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 
 	mergeResult, err := s.gitOps.Merge(ctx, r)
 	if err != nil {
-		result.Status = "error"
+		result.Status = string(types.RepoStatusError)
 		result.ErrorMessage = fmt.Sprintf("merge failed: %v", err)
 		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
 		s.notifyResult(r.Name, result)
@@ -258,7 +258,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		if strategy == "agent_resolve" && s.sessionMgr != nil {
 			resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)
 			if resolved {
-				result.Status = "up_to_date"
+				result.Status = string(types.RepoStatusUpToDate)
 				result.AutoResolved = len(mergeResult.Conflicts)
 				s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
 				s.notifyResult(r.Name, result)
@@ -266,7 +266,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 				return result
 			}
 			if pending != nil {
-				result.Status = "resolved"
+				result.Status = string(types.RepoStatusResolved)
 				result.AgentUsed = pending.Agent
 				result.AutoResolved = len(pending.Files)
 				result.PendingConfirm = pending.Files
@@ -293,7 +293,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	}
 
 	// Success
-	result.Status = "up_to_date"
+	result.Status = string(types.RepoStatusUpToDate)
 	s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
 	result.PostSyncResults = s.runPostSyncCommands(ctx, r)
 	if postSyncErr := s.postSyncError(result.PostSyncResults); postSyncErr != "" {
@@ -438,7 +438,7 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 	repos, err := s.store.List()
 	if err != nil {
 		return []*Result{{
-			Status:       "error",
+			Status:       string(types.RepoStatusError),
 			ErrorMessage: fmt.Sprintf("list repos: %v", err),
 		}}
 	}
@@ -470,7 +470,7 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 }
 
 // runPostSyncCommands executes the repo's post-sync commands in order.
-// It stops on the first failure. The sync status remains "synced" regardless.
+// It stops on the first failure. The sync status remains "up_to_date" regardless.
 func (s *Syncer) runPostSyncCommands(ctx context.Context, r types.Repo) []types.PostSyncResult {
 	if len(r.PostSyncCommands) == 0 {
 		return nil
@@ -561,15 +561,15 @@ func (s *Syncer) notifyResult(repoName string, result *Result) {
 		return
 	}
 	switch result.Status {
-	case "up_to_date":
+	case string(types.RepoStatusUpToDate):
 		if result.CommitsPulled > 0 {
 			s.notifier.NotifySyncSuccess(repoName, result.CommitsPulled)
 		}
-	case "resolved":
+	case string(types.RepoStatusResolved):
 		s.notifier.NotifyResolved(repoName, len(result.PendingConfirm), result.AgentUsed)
-	case "conflict":
+	case string(types.RepoStatusConflict):
 		s.notifier.NotifyConflict(repoName, len(result.ConflictFiles))
-	case "error":
+	case string(types.RepoStatusError):
 		s.notifier.NotifyError(repoName, result.ErrorMessage)
 	}
 }
@@ -582,15 +582,15 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 		return 0
 	}
 	// Don't record to history if there were no actual changes
-	if result.CommitsPulled == 0 && result.Status != "conflict" && result.Status != "error" && result.Status != "resolved" {
+	if result.CommitsPulled == 0 && result.Status != string(types.RepoStatusConflict) && result.Status != string(types.RepoStatusError) && result.Status != string(types.RepoStatusResolved) {
 		return 0
 	}
 
 	// Pre-set summary_status to "pending" if auto-summarization is enabled
 	summaryStatus := ""
 	if s.cfg != nil && s.cfg.Sync.AutoSummary &&
-		result.Status == "up_to_date" && result.CommitsPulled > 0 {
-		summaryStatus = "pending"
+		result.Status == string(types.RepoStatusUpToDate) && result.CommitsPulled > 0 {
+		summaryStatus = string(types.SummaryStatusPending)
 	}
 
 	id, err := s.historyStore.Record(history.Record{
@@ -618,7 +618,7 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 // logResult writes the sync result to the log file.
 func (s *Syncer) logResult(result *Result) {
 	switch result.Status {
-	case "up_to_date":
+	case string(types.RepoStatusUpToDate):
 		if result.CommitsPulled > 0 {
 			logger.Info("repo synced", "repo", result.RepoName, "commits_pulled", result.CommitsPulled)
 			for _, ps := range result.PostSyncResults {
@@ -631,14 +631,14 @@ func (s *Syncer) logResult(result *Result) {
 		} else {
 			logger.Info("repo already up to date", "repo", result.RepoName)
 		}
-	case "resolved":
+	case string(types.RepoStatusResolved):
 		logger.Info("repo conflicts resolved, awaiting confirmation",
 			"repo", result.RepoName,
 			"files", len(result.PendingConfirm),
 			"agent", result.AgentUsed)
-	case "conflict":
+	case string(types.RepoStatusConflict):
 		logger.Warn("repo conflicts", "repo", result.RepoName, "files", len(result.ConflictFiles))
-	case "error":
+	case string(types.RepoStatusError):
 		logger.Error("repo sync error", "repo", result.RepoName, "error", result.ErrorMessage)
 	}
 }
