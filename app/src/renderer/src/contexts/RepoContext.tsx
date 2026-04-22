@@ -210,6 +210,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       }
     } catch (err) {
       dispatch({ type: 'SET_ERROR', error: (err as Error).message })
+      await refresh()
     } finally {
       syncingAllRef.current = false
     }
@@ -291,6 +292,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         }
       } catch (err) {
         dispatch({ type: 'SET_ERROR', error: (err as Error).message })
+        await refresh()
       } finally {
         syncingReposRef.current.delete(name)
       }

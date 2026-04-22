@@ -165,6 +165,9 @@ export function HomePage(): JSX.Element {
       }
       await refresh()
       loadHistory()
+    } catch (err) {
+      // Agent process crashed/timed out — refresh to recover from optimistic 'resolving' status
+      await refresh().catch(() => {})
     } finally {
       setLocalLoading((prev) => ({ ...prev, [repo.name]: false }))
     }
