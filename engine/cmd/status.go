@@ -97,7 +97,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			if err == nil && statusResult != nil {
 				repos[idx].AheadBy = statusResult.AheadBy
 				repos[idx].BehindBy = statusResult.BehindBy
-				if repos[idx].Status == types.RepoStatusUnconfigured && r.Upstream != "" {
+				if repos[idx].Status == types.RepoStatusUnconfigured {
 					repos[idx].Status = types.RepoStatusUpToDate
 					if updateErr := store.Update(repos[idx]); updateErr != nil {
 						logger.Error("status: failed to update repo", "repo", r.Name, "error", updateErr)
