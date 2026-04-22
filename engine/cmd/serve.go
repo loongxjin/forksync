@@ -63,6 +63,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 		defer histStore.Close()
 	}
 
+	// Set up agent session manager for auto conflict resolution
+	if mgr := newSessionManager(cfg, cfgMgr); mgr != nil {
+		syncer.SetSessionManager(mgr)
+	}
+
 	// Create and start scheduler (nil notifier — notifications handled by Electron layer)
 	scheduler := sched.NewScheduler(syncer, nil, cfg)
 

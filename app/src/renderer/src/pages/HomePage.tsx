@@ -158,7 +158,8 @@ export function HomePage(): JSX.Element {
     setLocalLoading((prev) => ({ ...prev, [repo.name]: true }))
     try {
       updateRepoStatus(repo.id, 'resolving')
-      const result = await resolve(repo.name, { agent: preferred || undefined })
+      const noConfirm = engineConfig?.Agent?.ConfirmBeforeCommit === false
+      const result = await resolve(repo.name, { agent: preferred || undefined, noConfirm })
       if (result) {
         setResolveResults((prev) => ({ ...prev, [repo.name]: result }))
       }
@@ -166,7 +167,7 @@ export function HomePage(): JSX.Element {
     } finally {
       setLocalLoading((prev) => ({ ...prev, [repo.name]: false }))
     }
-  }, [resolve, preferred, updateRepoStatus, refresh])
+  }, [resolve, preferred, updateRepoStatus, refresh, engineConfig])
 
   const handleAccept = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
