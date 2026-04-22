@@ -206,26 +206,42 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		return fmt.Errorf("agent resolve: %w", err)
 	}
 
-	// Verify: check for remaining conflict markers
-	remaining := conflict.DetectConflicts(ctx, r.Path)
-	if len(remaining) > 0 {
-		resolved.Store(true) // agent finished but left conflicts — we handle the status
-		r.Status = types.RepoStatusConflict
-		r.ErrorMessage = fmt.Sprintf("agent left %d unresolved conflicts", len(remaining))
-		if updateErr := store.Update(r); updateErr != nil {
-			logger.Error("resolve: failed to update repo after unresolved conflicts", "repo", r.Name, "error", updateErr)
-		}
+		// Verify: check for remaining conflict markers
+		remaining := conflict.DetectConflicts(ctx, r.Path)
+		if len(remaining) > 0 {
+			resolved.Store(true) // agent finished but left conflicts — we handle the status
+			r.Status = types.RepoStatusConflict
+			r.ErrorMessage = fmt.Sprintf("agent left %d unresolved conflicts: %s", len(remaining), strings.Join(remaining, ", "))
+			if updateErr := store.Update(r); updateErr != nil {
+				logger.Error("resolve: failed to update repo after unresolved conflicts", "repo", r.Name, "error", updateErr)
+			}
 
-		if isJSON() {
-			outputJSON(types.ResolveData{
-				RepoID:    r.ID,
-				Conflicts: toConflictFiles(remaining),
-			}, fmt.Errorf("agent did not resolve all conflicts"))
-		} else {
-			outputText("⚠️  Agent could not resolve all conflicts (%d remaining)", len(remaining))
+			logger.Warn("resolve: agent left unresolved conflicts",
+				"repo", r.Name,
+				"remaining", remaining,
+				"agent", provider.Name(),
+				"summary", result.Summary,
+				"resolved_files", result.ResolvedFiles,
+			)
+
+			if isJSON() {
+				outputJSON(types.ResolveData{
+					RepoID:      r.ID,
+					Conflicts:   toConflictFiles(remaining),
+					AgentResult: agentResultToTypes(result),
+				}, fmt.Errorf("agent did not resolve all conflicts"))
+			} else {
+				outputText("⚠️  Agent could not resolve all conflicts (%d remaining)", len(remaining))
+				outputText("   Unresolved: %s", strings.Join(remaining, ", "))
+				if len(result.ResolvedFiles) > 0 {
+					outputText("   Resolved: %s", strings.Join(result.ResolvedFiles, ", "))
+				}
+				if result.Summary != "" {
+					outputText("   Agent summary: %s", result.Summary)
+				}
+			}
+			return nil
 		}
-		return nil
-	}
 
 	// Get diff for user confirmation
 	diffBytes, _ := git.NewOperations().Diff(ctx, r.Path)

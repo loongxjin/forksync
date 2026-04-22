@@ -291,24 +291,52 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 
 	// Resolve conflicts via agent
 	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy)
-	if err != nil || !result.Success {
+	if err != nil {
+		logger.Warn("sync: agent resolve failed",
+			"repo", r.Name,
+			"agent", s.sessionMgr.ProviderName(),
+			"error", err,
+		)
+		return false
+	}
+	if !result.Success {
+		logger.Warn("sync: agent reported unsuccessful resolve",
+			"repo", r.Name,
+			"agent", s.sessionMgr.ProviderName(),
+			"summary", result.Summary,
+		)
 		return false
 	}
 
 	// Verify no conflict markers remain in resolved files
+	var stillConflicted []string
 	for _, file := range result.ResolvedFiles {
 		content, err := s.gitOps.GetConflictedContent(ctx, r.Path, file)
 		if err != nil {
 			continue
 		}
 		if conflict.HasConflictMarkers(content) {
-			return false // still has markers
+			stillConflicted = append(stillConflicted, file)
 		}
+	}
+	if len(stillConflicted) > 0 {
+		logger.Warn("sync: agent left conflict markers in files",
+			"repo", r.Name,
+			"agent", s.sessionMgr.ProviderName(),
+			"files", stillConflicted,
+			"summary", result.Summary,
+		)
+		return false
 	}
 
 	// Stage resolved files
 	for _, file := range result.ResolvedFiles {
 		if err := s.gitOps.StageFile(ctx, r.Path, file); err != nil {
+			logger.Warn("sync: failed to stage resolved file",
+				"repo", r.Name,
+				"file", file,
+				"error", err,
+			)
 			return false
 		}
 	}
@@ -322,6 +350,11 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	// Complete the merge with a commit
 	commitMsg := fmt.Sprintf("Merge upstream (auto-resolved by %s)", s.sessionMgr.ProviderName())
 	if err := s.gitOps.Commit(ctx, r.Path, commitMsg, true); err != nil {
+		logger.Warn("sync: failed to commit resolved conflicts",
+			"repo", r.Name,
+			"agent", s.sessionMgr.ProviderName(),
+			"error", err,
+		)
 		return false
 	}
 
