@@ -160,7 +160,8 @@ async function detectSingleIDE(ide: Omit<IDEInfo, 'installed' | 'openMethod'>): 
     if (flatpakId && existsSync('/usr/bin/flatpak')) {
       try {
         await execAsync('flatpak', ['info', flatpakId])
-        return { ...ide, installed: true, openMethod: 'cli', cliCommand: `flatpak run ${flatpakId}` }
+        // Store flatpak command and args separately for proper execFile usage
+        return { ...ide, installed: true, openMethod: 'flatpak', cliCommand: `flatpak:${flatpakId}` }
       } catch {
         // not installed via flatpak
       }
@@ -235,6 +236,15 @@ async function openInIDE(repoPath: string, ideId: string): Promise<IDEOpenResult
         }
       })
       child.unref()
+    } else if (ide.openMethod === 'flatpak') {
+      // cliCommand is stored as 'flatpak:<id>', extract the flatpak app ID
+      const flatpakId = ide.cliCommand.replace('flatpak:', '')
+      const child = execFile('flatpak', ['run', flatpakId, repoPath], (err) => {
+        if (err) {
+          console.error(`Failed to open ${repoPath} with ${ide.name} via flatpak:`, err)
+        }
+      })
+      child.unref()
     } else if (process.platform === 'darwin') {
       const child = execFile('open', ['-a', ide.appName, repoPath], (err) => {
         if (err) {
@@ -250,13 +260,8 @@ async function openInIDE(repoPath: string, ideId: string): Promise<IDEOpenResult
       })
       child.unref()
     } else {
-      // Linux fallback: try xdg-open with the repo path
-      const child = execFile('xdg-open', [repoPath], (err) => {
-        if (err) {
-          console.error(`Failed to open ${repoPath}:`, err)
-        }
-      })
-      child.unref()
+      // Linux: app-based openMethod is not supported
+      return { success: false, error: t('ide.openMethodNotSupported', { method: ide.openMethod }) }
     }
     return { success: true }
   } catch (err) {

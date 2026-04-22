@@ -75,7 +75,7 @@
   }
 }
 
-/* macOS title bar drag region */
+/* Title bar drag region (macOS / Windows with titleBarOverlay / Linux frameless) */
 .titlebar {
   -webkit-app-region: drag;
   user-select: none;
@@ -84,6 +84,32 @@
 .titlebar a,
 .titlebar input {
   -webkit-app-region: no-drag;
+}
+
+/* Linux window control buttons */
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.window-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: hsl(var(--muted-foreground));
+  transition: background-color 0.15s, color 0.15s;
+  -webkit-app-region: no-drag;
+}
+.window-control:hover {
+  background-color: hsl(var(--muted-foreground) / 0.15);
+  color: hsl(var(--foreground));
+}
+.window-control-close:hover {
+  background-color: hsl(var(--destructive));
+  color: white;
 }
 
 /* Custom scrollbar (macOS style) */

@@ -91,3 +91,10 @@ const api = {
 }
 
 contextBridge.exposeInMainWorld('api', api)
+
+contextBridge.exposeInMainWorld('platform', process.platform)
+
+// Raw ipcSend for Linux window controls and other one-way messages
+contextBridge.exposeInMainWorld('ipcSend', (channel: string): void => {
+  ipcRenderer.send(channel)
+})

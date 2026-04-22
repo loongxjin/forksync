@@ -6,6 +6,27 @@ import { registerIDEHandlers } from './ide'
 import { injectShellPath } from './shell-path'
 
 function createWindow(): void {
+  const platform = process.platform
+
+  // Build platform-specific window options
+  const platformWindowOptions: Electron.BrowserWindowConstructorOptions = {}
+
+  if (platform === 'darwin') {
+    // macOS: use hiddenInset title bar (traffic lights visible)
+    platformWindowOptions.titleBarStyle = 'hiddenInset'
+  } else if (platform === 'win32') {
+    // Windows: frameless with native window control overlay
+    platformWindowOptions.frame = false
+    platformWindowOptions.titleBarOverlay = {
+      color: '#0c1222',
+      symbolColor: '#c8d6e5',
+      height: 38
+    }
+  } else {
+    // Linux: frameless, window controls rendered in TitleBar component
+    platformWindowOptions.frame = false
+  }
+
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -13,12 +34,12 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     title: 'ForkSync',
-    titleBarStyle: 'hiddenInset',
     icon: nativeImage.createFromPath(join(__dirname, '../../resources/icon.png')),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
-    }
+    },
+    ...platformWindowOptions
   })
 
   mainWindow.on('ready-to-show', () => {

@@ -236,7 +236,8 @@
     "setDefault": "Set default IDE...",
     "pathNotExist": "Path not found: {{path}}",
     "ideNotFound": "IDE not found: {{ideId}}",
-    "ideNotDetected": "{{name}} not detected, please confirm it is installed"
+    "ideNotDetected": "{{name}} not detected, please confirm it is installed",
+    "openMethodNotSupported": "Opening via {{method}} is not supported on this system"
   },
   "agentBadge": {
     "noAgentsInstalled": "No agents installed",

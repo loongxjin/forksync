@@ -7,8 +7,11 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { useSettingsDrawer } from '@/contexts/SettingsDrawerContext'
 import { useTranslation } from 'react-i18next'
 import i18n from 'i18next'
-import { SettingsDrawer } from './SettingsDrawer'
 import { Settings, Moon, Sun, Monitor, Languages } from 'lucide-react'
+import { SettingsDrawer } from './SettingsDrawer'
+
+/** Platform detected from preload */
+const platform: string = window.platform || 'darwin'
 
 function TitleBar(): JSX.Element {
   const { theme, setTheme } = useSettings()
@@ -29,8 +32,14 @@ function TitleBar(): JSX.Element {
     localStorage.setItem('forksync-locale', next)
   }
 
+  // macOS: pl-20 to leave space for traffic lights
+  // Windows: use titleBarOverlay (system buttons), normal padding
+  // Linux: frameless, we render our own buttons on the right
+  const isMac = platform === 'darwin'
+  const isLinux = platform === 'linux'
+
   return (
-    <div className="titlebar flex h-[38px] shrink-0 items-center justify-between border-b border-border bg-card pl-20 pr-4">
+    <div className={`titlebar flex h-[38px] shrink-0 items-center justify-between border-b border-border bg-card ${isMac ? 'pl-20' : 'pl-4'} ${isLinux ? 'pr-24' : 'pr-4'}`}>
       <div className="flex items-center">
         <svg width="18" height="18" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
           <defs>
@@ -81,7 +90,42 @@ function TitleBar(): JSX.Element {
         >
           <Languages size={16} />
         </button>
+
+        {/* Linux window control buttons (minimize, maximize, close) */}
+        {isLinux && <LinuxWindowControls />}
       </div>
+    </div>
+  )
+}
+
+/** Minimal window control buttons for Linux (frameless window) */
+function LinuxWindowControls(): JSX.Element {
+  return (
+    <div className="window-controls flex items-center ml-2">
+      <button
+        className="window-control window-control-minimize"
+        onClick={() => window.ipcSend?.('window:minimize')}
+      >
+        <svg width="10" height="1" viewBox="0 0 10 1">
+          <rect width="10" height="1" fill="currentColor" rx="0.5"/>
+        </svg>
+      </button>
+      <button
+        className="window-control window-control-maximize"
+        onClick={() => window.ipcSend?.('window:maximize')}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" rx="1"/>
+        </svg>
+      </button>
+      <button
+        className="window-control window-control-close"
+        onClick={() => window.ipcSend?.('window:close')}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+        </svg>
+      </button>
     </div>
   )
 }

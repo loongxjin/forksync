@@ -5,7 +5,7 @@
  * can invoke them via contextBridge-exposed API.
  */
 
-import { ipcMain, dialog, app } from 'electron'
+import { ipcMain, dialog, app, BrowserWindow } from 'electron'
 import { t } from './i18n'
 import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
 import { join } from 'path'
@@ -128,20 +128,28 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('app:setAutoLaunch', async (_event, enabled: boolean) => {
     try {
       if (process.platform === 'linux') {
-        const autoStartDir = join(homedir(), '.config', 'autostart')
+        // Respect $XDG_CONFIG_HOME, fallback to ~/.config
+        const configDir = process.env.XDG_CONFIG_HOME || join(homedir(), '.config')
+        const autoStartDir = join(configDir, 'autostart')
         const desktopFile = join(autoStartDir, 'forksync.desktop')
 
         if (enabled) {
           if (!existsSync(autoStartDir)) {
             mkdirSync(autoStartDir, { recursive: true })
           }
+          const execPath = process.execPath
           const content = `[Desktop Entry]
 Type=Application
 Name=ForkSync
-Exec=${process.execPath}
+Comment=Fork Repository Sync Tool
+Exec="${execPath}"
+Icon=forksync
+Categories=Development;
+Terminal=false
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
+X-KDE-autostart-after=panel
 `
           writeFileSync(desktopFile, content, 'utf-8')
         } else {
@@ -179,6 +187,28 @@ X-GNOME-Autostart-enabled=true
 
   ipcMain.handle('fs:isGitRepo', async (_event, dirPath: string) => {
     return existsSync(join(dirPath, '.git'))
+  })
+
+  // Linux window control buttons (frameless window)
+  ipcMain.on('window:minimize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    win?.minimize()
+  })
+
+  ipcMain.on('window:maximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) {
+      if (win.isMaximized()) {
+        win.unmaximize()
+      } else {
+        win.maximize()
+      }
+    }
+  })
+
+  ipcMain.on('window:close', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    win?.close()
   })
 
   // Initialize notification config from engine

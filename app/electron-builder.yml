@@ -11,12 +11,34 @@ extraResources:
       - forksync.exe
 mac:
   category: public.app-category.developer-tools
-  target: dmg
+  target:
+    - target: dmg
+    - target: zip
   icon: resources/icon.icns
+  # Uncomment for code signing (set CSC_LINK and CSC_KEY_PASSWORD env vars)
+  # hardenedRuntime: true
+  # entitlements: resources/entitlements.mac.plist
+  # entitlementsInherit: resources/entitlements.mac.plist
 linux:
-  target: AppImage
+  target:
+    - target: AppImage
+    - target: deb
+    - target: rpm
   category: Development
   icon: resources/icon.png
+  maintainer: ForkSync Team
 win:
-  target: nsis
+  target:
+    - target: nsis
   icon: resources/icon.ico
+  # Uncomment for code signing (set CSC_LINK and CSC_KEY_PASSWORD env vars)
+  # certificateFile: ''
+  # certificatePassword: ''
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+  installerHeaderIcon: resources/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

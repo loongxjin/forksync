@@ -8,7 +8,7 @@ export interface IDEInfo {
   cliCommand: string // CLI command: 'code' | 'cursor' | 'trae'
   appName: string // macOS app name: 'Visual Studio Code' | 'Cursor' | 'Trae'
   installed: boolean // whether IDE is detected as installed
-  openMethod: 'cli' | 'app' // open via CLI command or `open -a`
+  openMethod: 'cli' | 'app' | 'flatpak' // open via CLI command, `open -a`, or flatpak
   isCustom?: boolean // user-added custom IDE
 }
 

@@ -236,7 +236,8 @@
     "setDefault": "设置默认 IDE...",
     "pathNotExist": "路径不存在: {{path}}",
     "ideNotFound": "未找到 IDE: {{ideId}}",
-    "ideNotDetected": "{{name}} 未检测到，请确认已安装"
+    "ideNotDetected": "{{name}} 未检测到，请确认已安装",
+    "openMethodNotSupported": "不支持在当前系统使用 {{method}} 方式打开"
   },
   "agentBadge": {
     "noAgentsInstalled": "未安装 Agent",
