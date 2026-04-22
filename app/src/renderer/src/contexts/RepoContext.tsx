@@ -331,11 +331,11 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
 
   const removeRepo = useCallback(
     async (name: string) => {
-      dispatch({ type: 'SET_LOADING', loading: true })
+      const repo = state.repos.find((r) => r.name === name)
       try {
         const res = await engineApi.remove(name)
-        if (res.success) {
-          await refresh()
+        if (res.success && repo) {
+          dispatch({ type: 'REMOVE_REPO', repoId: repo.id })
         } else {
           dispatch({ type: 'SET_ERROR', error: res.error })
         }
@@ -343,7 +343,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         dispatch({ type: 'SET_ERROR', error: (err as Error).message })
       }
     },
-    [refresh]
+    [state.repos]
   )
 
   const markStartupSyncDone = useCallback(() => {
