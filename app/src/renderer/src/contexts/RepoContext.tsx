@@ -295,7 +295,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         syncingReposRef.current.delete(name)
       }
     },
-    [refresh, showToast, engineConfig]
+    [state, refresh, showToast, engineConfig]
   )
 
   const scan = useCallback(async (dir: string) => {
