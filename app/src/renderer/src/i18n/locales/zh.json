@@ -128,6 +128,7 @@
     "notFound": "未找到该仓库。",
     "conflictResolution": "冲突解决",
     "diffPreview": "Diff 预览",
+    "fullStagedDiff": "完整 staged diff",
     "conflictFiles": "冲突文件",
     "runResolveHint": "点击「解决」以检测冲突文件。"
   },

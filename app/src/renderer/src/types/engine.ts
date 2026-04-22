@@ -104,6 +104,7 @@ export interface SyncResult {
   conflictsFound?: number
   autoResolved?: number
   pendingConfirm?: string[]
+  agentResult?: AgentResolveResult
   postSyncResults?: PostSyncResult[]
 }
 

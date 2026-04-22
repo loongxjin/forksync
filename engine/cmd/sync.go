@@ -93,6 +93,18 @@ func runSync(cmd *cobra.Command, args []string) error {
 				}
 			case types.RepoStatusError:
 				outputText("❌ %s: %s", r.RepoName, r.ErrorMessage)
+			case types.RepoStatusResolved:
+				agent := r.AgentUsed
+				if r.AgentResult != nil && r.AgentResult.AgentName != "" {
+					agent = r.AgentResult.AgentName
+				}
+				outputText("🔄 %s: conflicts resolved by %s, awaiting confirmation", r.RepoName, agent)
+				if r.AgentResult != nil && r.AgentResult.Summary != "" {
+					outputText("   Summary: %s", r.AgentResult.Summary)
+				}
+				for _, f := range r.PendingConfirm {
+					outputText("   - %s", f)
+				}
 			}
 		}
 	}

@@ -91,6 +91,7 @@ export function ConflictInlinePanel({
           <div className="mb-3">
             <p className="text-xs font-medium text-muted-foreground mb-1">
               {t('conflicts.diffPreview')} — {selectedFile}
+              <span className="text-error ml-1">({t('conflicts.fullStagedDiff')})</span>
             </p>
             <DiffViewer diff={diff} className="max-h-64" />
           </div>

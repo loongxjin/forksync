@@ -105,11 +105,29 @@ export function HomePage(): JSX.Element {
     if (!shouldSkip) loadHistory()
   }, [loadHistory, historyInitialized, lastLoadAt, hasSyncing])
 
-  // Reload history after sync
+  // Reload history after sync, and populate resolveResults for auto-resolved repos
   useEffect(() => {
     if (!syncResultsMountedRef.current) {
       syncResultsMountedRef.current = true
       return
+    }
+    // If any sync result has agent resolution data, populate resolveResults
+    // so ConflictInlinePanel can show diff, summary and file list.
+    const resolvedSyncs = syncResults.filter(
+      (r) => r.status === 'resolved' && r.agentResult
+    )
+    if (resolvedSyncs.length > 0) {
+      setResolveResults((prev) => {
+        const next = { ...prev }
+        for (const sr of resolvedSyncs) {
+          next[sr.repoName] = {
+            repoId: sr.repoId,
+            conflicts: (sr.pendingConfirm ?? []).map((p) => ({ path: p })),
+            agentResult: sr.agentResult
+          }
+        }
+        return next
+      })
     }
     loadHistory()
   }, [syncResults, loadHistory])

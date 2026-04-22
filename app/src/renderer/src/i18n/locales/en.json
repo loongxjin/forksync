@@ -128,6 +128,7 @@
     "notFound": "Repository not found.",
     "conflictResolution": "Conflict Resolution",
     "diffPreview": "Diff Preview",
+    "fullStagedDiff": "full staged diff",
     "conflictFiles": "Conflict Files",
     "runResolveHint": "Run resolve to detect conflict files."
   },

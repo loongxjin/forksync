@@ -69,6 +69,14 @@ func (s *Syncer) SetSummarizer(sm *summarizer.Summarizer) {
 	s.summarizer = sm
 }
 
+// pendingInfo holds agent resolution details when awaiting user confirmation.
+type pendingInfo struct {
+	Files   []string
+	Diff    string
+	Summary string
+	Agent   string
+}
+
 // Result contains the result of syncing a single repo.
 type Result struct {
 	RepoID          string
@@ -80,12 +88,13 @@ type Result struct {
 	CommitsPulled   int
 	ConflictFiles   []string
 	ErrorMessage    string
-	AgentUsed       string    // agent name if auto-resolve was attempted
-	ConflictsFound  int       // number of conflicts detected
-	AutoResolved    int       // number of files auto-resolved by agent
-	PendingConfirm  []string  // files pending user confirmation
+	AgentUsed       string                  // agent name if auto-resolve was attempted
+	ConflictsFound  int                     // number of conflicts detected
+	AutoResolved    int                     // number of files auto-resolved by agent
+	PendingConfirm  []string                // files pending user confirmation
+	AgentResult     *types.AgentResolveResult // agent resolution result when pending confirmation
 	PostSyncResults []types.PostSyncResult
-	HistoryID       int64     // ID of the created history record
+	HistoryID       int64                   // ID of the created history record
 }
 
 // ToSyncResult converts Result to types.SyncResult for JSON output.
@@ -101,6 +110,7 @@ func (r *Result) ToSyncResult() types.SyncResult {
 		ConflictsFound:  r.ConflictsFound,
 		AutoResolved:    r.AutoResolved,
 		PendingConfirm:  r.PendingConfirm,
+		AgentResult:     r.AgentResult,
 		PostSyncResults: r.PostSyncResults,
 	}
 }
@@ -257,8 +267,16 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 			}
 			if pending != nil {
 				result.Status = "resolved"
-				result.AgentUsed = s.sessionMgr.ProviderName()
-				result.PendingConfirm = pending
+				result.AgentUsed = pending.Agent
+				result.AutoResolved = len(pending.Files)
+				result.PendingConfirm = pending.Files
+				result.AgentResult = &types.AgentResolveResult{
+					Success:       true,
+					ResolvedFiles: pending.Files,
+					Diff:          pending.Diff,
+					Summary:       pending.Summary,
+					AgentName:     pending.Agent,
+				}
 				s.updateRepoStatus(r.ID, types.RepoStatusResolved, "")
 				s.notifyResult(r.Name, result)
 				s.finalizeResult(result)
@@ -290,9 +308,9 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 // tryAgentResolve attempts to resolve conflicts using the agent CLI.
 // Returns (resolved, pending):
 //   - resolved=true, pending=nil: all conflicts resolved and committed (auto-confirm)
-//   - resolved=false, pending=files: conflicts resolved but awaiting user confirmation
+//   - resolved=false, pending=*pendingInfo: conflicts resolved but awaiting user confirmation
 //   - resolved=false, pending=nil: agent failed to resolve
-func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string) (bool, []string) {
+func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string) (bool, *pendingInfo) {
 	if s.sessionMgr == nil {
 		return false, nil
 	}
@@ -383,7 +401,22 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 			"agent", s.sessionMgr.ProviderName(),
 			"files", result.ResolvedFiles,
 		)
-		return false, result.ResolvedFiles
+		// Get staged diff for user review
+		diffBytes, diffErr := s.gitOps.DiffStaged(ctx, r.Path)
+		diff := ""
+		if diffErr == nil {
+			diff = string(diffBytes)
+			const maxDiffSize = 100 * 1024 // 100KB limit
+			if len(diff) > maxDiffSize {
+				diff = diff[:maxDiffSize] + "\n\n... (diff truncated)"
+			}
+		}
+		return false, &pendingInfo{
+			Files:   result.ResolvedFiles,
+			Diff:    diff,
+			Summary: result.Summary,
+			Agent:   s.sessionMgr.ProviderName(),
+		}
 	}
 
 	// Complete the merge with a commit

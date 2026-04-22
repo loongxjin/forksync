@@ -667,3 +667,8 @@ func (o *Operations) CheckoutFile(ctx context.Context, repoPath, file string) er
 func (o *Operations) Diff(ctx context.Context, repoPath string) ([]byte, error) {
 	return o.runGit(ctx, repoPath, "diff")
 }
+
+// DiffStaged returns the staged diff output for the repository.
+func (o *Operations) DiffStaged(ctx context.Context, repoPath string) ([]byte, error) {
+	return o.runGit(ctx, repoPath, "diff", "--staged")
+}

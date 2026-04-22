@@ -123,8 +123,9 @@ type SyncResult struct {
 	AgentUsed        string            `json:"agentUsed,omitempty"`
 	ConflictsFound   int               `json:"conflictsFound,omitempty"`
 	AutoResolved     int               `json:"autoResolved,omitempty"`
-	PendingConfirm   []string          `json:"pendingConfirm,omitempty"`
-	PostSyncResults  []PostSyncResult  `json:"postSyncResults,omitempty"`
+	PendingConfirm   []string            `json:"pendingConfirm,omitempty"`
+	PostSyncResults  []PostSyncResult    `json:"postSyncResults,omitempty"`
+	AgentResult      *AgentResolveResult `json:"agentResult,omitempty"`
 }
 
 // PostSyncResult represents the result of running a single post-sync command.
