@@ -2,9 +2,6 @@ package agent
 
 import (
 	"context"
-	"fmt"
-	"os/exec"
-	"time"
 )
 
 // CodexAdapter implements AgentProvider for Codex CLI (OpenAI).
@@ -15,79 +12,29 @@ import (
 //
 // Codex CLI uses "resume --last" as a subcommand to continue the last session.
 type CodexAdapter struct {
-	binary string
+	baseAdapter
 }
 
 func NewCodexAdapter() *CodexAdapter {
-	return &CodexAdapter{binary: "codex"}
-}
-
-func (a *CodexAdapter) Name() string { return "codex" }
-
-func (a *CodexAdapter) IsAvailable() bool {
-	_, err := exec.LookPath(a.binary)
-	return err == nil
+	return &CodexAdapter{baseAdapter{binary: "codex", name: "codex"}}
 }
 
 func (a *CodexAdapter) StartSession(ctx context.Context, opts SessionOptions) (*Session, error) {
-	output, err := a.runCommand(ctx, false, opts.RepoPath, "ok")
-	if err != nil {
-		return nil, fmt.Errorf("codex start session: %w", err)
-	}
-
-	return &Session{
-		ID:        extractSessionID(output),
-		Provider:  "codex",
-		RepoPath:  opts.RepoPath,
-		StartedAt: time.Now(),
-		IsNew:     true,
-	}, nil
+	return a.baseAdapter.StartSession(ctx, opts, a.buildArgs)
 }
 
 func (a *CodexAdapter) ResolveConflicts(ctx context.Context, session *Session, prompt string) (*AgentResult, error) {
-	output, err := a.runCommand(ctx, session.ID != "", session.RepoPath, prompt)
-	if err != nil {
-		return &AgentResult{
-			Success:   false,
-			SessionID: session.ID,
-			Summary:   fmt.Sprintf("codex error: %v", err),
-		}, fmt.Errorf("codex resolve: %w", err)
-	}
-
-	sessionID := extractSessionID(output)
-	if sessionID == "" {
-		sessionID = session.ID
-	}
-
-	return &AgentResult{
-		Success:   true,
-		SessionID: sessionID,
-		Summary:   truncateOutput(output, 500),
-	}, nil
-}
-
-func (a *CodexAdapter) EndSession(ctx context.Context, sessionID string) error {
-	return nil
+	return a.baseAdapter.ResolveConflicts(ctx, session, prompt, a.buildArgs)
 }
 
 // buildArgs constructs the CLI arguments for a Codex invocation.
-func (a *CodexAdapter) buildArgs(resume bool, prompt string) []string {
-	args := []string{}
-	if resume {
+// Uses "codex exec" for non-interactive execution.
+// sessionID is non-empty when resuming an existing session.
+func (a *CodexAdapter) buildArgs(sessionID, prompt string) []string {
+	args := []string{"exec"}
+	if sessionID != "" {
 		args = append(args, "resume", "--last")
 	}
 	args = append(args, "--dangerously-bypass-approvals-and-sandbox", prompt)
 	return args
-}
-
-func (a *CodexAdapter) runCommand(ctx context.Context, resume bool, repoPath, prompt string) (string, error) {
-	args := a.buildArgs(resume, prompt)
-	cmd := exec.CommandContext(ctx, a.binary, args...)
-	cmd.Dir = repoPath
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("codex CLI: %s: %w", string(output), err)
-	}
-	return string(output), nil
 }

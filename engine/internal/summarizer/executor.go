@@ -11,6 +11,14 @@ import (
 // DefaultTimeout for agent CLI invocations.
 const DefaultTimeout = 3 * time.Minute
 
+// agentArgs maps each supported summary agent to its base CLI arguments (before the prompt).
+var summaryAgentArgs = map[string][]string{
+	"claude":   {"--print", "--dangerously-skip-permissions"},
+	"opencode": {"run"},
+	"droid":    {"exec", "--auto", "high"},
+	"codex":    {"exec", "--dangerously-bypass-approvals-and-sandbox"},
+}
+
 // Executor invokes agent CLIs to generate summaries.
 type Executor struct {
 	timeout time.Duration
@@ -32,87 +40,22 @@ func (e *Executor) Summarize(ctx context.Context, commits []CommitInfo, lang str
 	ctx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
 
-	prompt := BuildPrompt(commits, lang)
-
-	switch agentName {
-	case "claude":
-		return e.runClaude(ctx, prompt)
-	case "opencode":
-		return e.runOpenCode(ctx, prompt)
-	case "droid":
-		return e.runDroid(ctx, prompt)
-	case "codex":
-		return e.runCodex(ctx, prompt)
-	default:
+	baseArgs, ok := summaryAgentArgs[agentName]
+	if !ok {
 		return "", fmt.Errorf("unsupported summary agent: %s", agentName)
 	}
+
+	prompt := BuildPrompt(commits, lang)
+	args := append(append([]string{}, baseArgs...), prompt)
+	return e.runAgentCLI(ctx, agentName, args)
 }
 
-// runClaude invokes Claude Code CLI in --print mode.
-func (e *Executor) runClaude(ctx context.Context, prompt string) (string, error) {
-	args := []string{
-		"--print",
-		"--dangerously-skip-permissions",
-		prompt,
-	}
-
-	cmd := exec.CommandContext(ctx, "claude", args...)
+// runAgentCLI runs the agent binary with the given args and returns cleaned output.
+func (e *Executor) runAgentCLI(ctx context.Context, binary string, args []string) (string, error) {
+	cmd := exec.CommandContext(ctx, binary, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("claude CLI: %s: %w", strings.TrimSpace(string(output)), err)
-	}
-
-	result := strings.TrimSpace(string(output))
-	return StripMarkdownBlocks(result), nil
-}
-
-// runOpenCode invokes OpenCode CLI in non-interactive mode.
-func (e *Executor) runOpenCode(ctx context.Context, prompt string) (string, error) {
-	args := []string{
-		"run",
-		prompt,
-	}
-
-	cmd := exec.CommandContext(ctx, "opencode", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("opencode CLI: %s: %w", strings.TrimSpace(string(output)), err)
-	}
-
-	result := strings.TrimSpace(string(output))
-	return StripMarkdownBlocks(result), nil
-}
-
-// runDroid invokes Droid CLI in non-interactive exec mode.
-func (e *Executor) runDroid(ctx context.Context, prompt string) (string, error) {
-	args := []string{
-		"exec",
-		"--auto", "high",
-		prompt,
-	}
-
-	cmd := exec.CommandContext(ctx, "droid", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("droid CLI: %s: %w", strings.TrimSpace(string(output)), err)
-	}
-
-	result := strings.TrimSpace(string(output))
-	return StripMarkdownBlocks(result), nil
-}
-
-// runCodex invokes Codex CLI in non-interactive exec mode.
-func (e *Executor) runCodex(ctx context.Context, prompt string) (string, error) {
-	args := []string{
-		"exec",
-		"--dangerously-bypass-approvals-and-sandbox",
-		prompt,
-	}
-
-	cmd := exec.CommandContext(ctx, "codex", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("codex CLI: %s: %w", strings.TrimSpace(string(output)), err)
+		return "", fmt.Errorf("%s CLI: %s: %w", binary, strings.TrimSpace(string(output)), err)
 	}
 
 	result := strings.TrimSpace(string(output))

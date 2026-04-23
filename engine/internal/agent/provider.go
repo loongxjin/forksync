@@ -150,6 +150,9 @@ func extractSessionID(output string) string {
 	return ""
 }
 
+// maxSummaryLength is the maximum character length for agent summary output.
+const maxSummaryLength = 500
+
 // truncateOutput limits output to maxLen characters for summaries.
 func truncateOutput(output string, maxLen int) string {
 	if len(output) <= maxLen {

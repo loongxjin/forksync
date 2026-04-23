@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 
 	"github.com/spf13/viper"
@@ -187,6 +188,48 @@ func ValidConfigKeys() []string {
 	return keys
 }
 
+// configFieldPaths maps each config key to the struct field index path within Config.
+// For example, "agent.preferred" -> {1, 0} means Config.Agent.Preferred.
+var configFieldPaths = map[string][]int{
+	// sync
+	"sync.default_interval":  {0, 0},
+	"sync.sync_on_startup":   {0, 1},
+	"sync.auto_launch":     {0, 2},
+	"sync.auto_summary":    {0, 3},
+	"sync.summary_agent":   {0, 4},
+	"sync.summary_language": {0, 5},
+	"sync.summary_timeout": {0, 6},
+	// agent
+	"agent.preferred":        {1, 0},
+	"agent.priority":         {1, 1},
+	"agent.timeout":          {1, 2},
+	"agent.conflict_strategy": {1, 3},
+	"agent.resolve_strategy":  {1, 4},
+	"agent.confirm_before_commit": {1, 5},
+	"agent.session_ttl":      {1, 6},
+	// github
+	"github.token": {2, 0},
+	// notification
+	"notification.enabled": {3, 0},
+	// proxy
+	"proxy.enabled": {4, 0},
+	"proxy.url":     {4, 1},
+}
+
+// configField returns the reflect.Value for the config key's target field.
+func configField(cfg *Config, key string) (reflect.Value, error) {
+	path, ok := configFieldPaths[key]
+	if !ok {
+		return reflect.Value{}, fmt.Errorf("unknown config key: %q", key)
+	}
+
+	v := reflect.ValueOf(cfg).Elem()
+	for _, idx := range path {
+		v = v.Field(idx)
+	}
+	return v, nil
+}
+
 // Get returns the value of a config key using dot-notation (e.g. "agent.preferred").
 func (m *Manager) Get(key string) (interface{}, error) {
 	if _, ok := validConfigKeys[key]; !ok {
@@ -198,57 +241,18 @@ func (m *Manager) Get(key string) (interface{}, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 
-	switch key {
-	// sync
-	case "sync.default_interval":
-		return cfg.Sync.DefaultInterval, nil
-	case "sync.sync_on_startup":
-		return cfg.Sync.SyncOnStartup, nil
-	case "sync.auto_launch":
-		return cfg.Sync.AutoLaunch, nil
-	case "sync.auto_summary":
-		return cfg.Sync.AutoSummary, nil
-	case "sync.summary_agent":
-		return cfg.Sync.SummaryAgent, nil
-	case "sync.summary_language":
-		return cfg.Sync.SummaryLanguage, nil
-	case "sync.summary_timeout":
-		return cfg.Sync.SummaryTimeout, nil
-	// agent
-	case "agent.preferred":
-		return cfg.Agent.Preferred, nil
-	case "agent.priority":
-		return cfg.Agent.Priority, nil
-	case "agent.timeout":
-		return cfg.Agent.Timeout, nil
-	case "agent.conflict_strategy":
-		return cfg.Agent.ConflictStrategy, nil
-	case "agent.resolve_strategy":
-		return cfg.Agent.ResolveStrategy, nil
-	case "agent.confirm_before_commit":
-		return cfg.Agent.ConfirmBeforeCommit, nil
-	case "agent.session_ttl":
-		return cfg.Agent.SessionTTL, nil
-	// github
-	case "github.token":
-		return cfg.GitHub.Token, nil
-	// notification
-	case "notification.enabled":
-		return cfg.Notification.Enabled, nil
-	// proxy
-	case "proxy.enabled":
-		return cfg.Proxy.Enabled, nil
-	case "proxy.url":
-		return cfg.Proxy.URL, nil
-	default:
-		return nil, fmt.Errorf("unknown config key: %q", key)
+	field, err := configField(cfg, key)
+	if err != nil {
+		return nil, err
 	}
+	return field.Interface(), nil
 }
 
 // Set updates a single config key using dot-notation and saves the full config.
 // For "[]string" type keys, value should be a JSON-encoded string array like `["a","b"]`.
 func (m *Manager) Set(key string, value string) error {
-	if _, ok := validConfigKeys[key]; !ok {
+	keyType, ok := validConfigKeys[key]
+	if !ok {
 		return fmt.Errorf("unknown config key: %q. Valid keys: %v", key, ValidConfigKeys())
 	}
 
@@ -257,78 +261,28 @@ func (m *Manager) Set(key string, value string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	switch key {
-	// sync
-	case "sync.default_interval":
-		cfg.Sync.DefaultInterval = value
-	case "sync.sync_on_startup":
+	field, err := configField(cfg, key)
+	if err != nil {
+		return err
+	}
+
+	switch keyType {
+	case "bool":
 		v, err := strconv.ParseBool(value)
 		if err != nil {
 			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
 		}
-		cfg.Sync.SyncOnStartup = v
-	case "sync.auto_launch":
-		v, err := strconv.ParseBool(value)
-		if err != nil {
-			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
-		}
-		cfg.Sync.AutoLaunch = v
-	case "sync.auto_summary":
-		v, err := strconv.ParseBool(value)
-		if err != nil {
-			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
-		}
-		cfg.Sync.AutoSummary = v
-	case "sync.summary_agent":
-		cfg.Sync.SummaryAgent = value
-	case "sync.summary_language":
-		cfg.Sync.SummaryLanguage = value
-	case "sync.summary_timeout":
-		cfg.Sync.SummaryTimeout = value
-	// agent
-	case "agent.preferred":
-		cfg.Agent.Preferred = value
-	case "agent.priority":
+		field.SetBool(v)
+	case "[]string":
 		var arr []string
 		if err := json.Unmarshal([]byte(value), &arr); err != nil {
 			return fmt.Errorf("invalid JSON array %q for %s: %w", value, key, err)
 		}
-		cfg.Agent.Priority = arr
-	case "agent.timeout":
-		cfg.Agent.Timeout = value
-	case "agent.conflict_strategy":
-		cfg.Agent.ConflictStrategy = value
-	case "agent.resolve_strategy":
-		cfg.Agent.ResolveStrategy = value
-	case "agent.confirm_before_commit":
-		v, err := strconv.ParseBool(value)
-		if err != nil {
-			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
-		}
-		cfg.Agent.ConfirmBeforeCommit = v
-	case "agent.session_ttl":
-		cfg.Agent.SessionTTL = value
-	// github
-	case "github.token":
-		cfg.GitHub.Token = value
-	// notification
-	case "notification.enabled":
-		v, err := strconv.ParseBool(value)
-		if err != nil {
-			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
-		}
-		cfg.Notification.Enabled = v
-	// proxy
-	case "proxy.enabled":
-		v, err := strconv.ParseBool(value)
-		if err != nil {
-			return fmt.Errorf("invalid bool value %q for %s: %w", value, key, err)
-		}
-		cfg.Proxy.Enabled = v
-	case "proxy.url":
-		cfg.Proxy.URL = value
+		field.Set(reflect.ValueOf(arr))
+	case "string":
+		field.SetString(value)
 	default:
-		return fmt.Errorf("unknown config key: %q", key)
+		return fmt.Errorf("unsupported config type %q for key %q", keyType, key)
 	}
 
 	return m.Save(cfg)

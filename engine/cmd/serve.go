@@ -81,12 +81,14 @@ func runServe(cmd *cobra.Command, args []string) error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
+	// Determine interval string for output
+	intervalStr := "30m"
+	if cfg != nil && cfg.Sync.DefaultInterval != "" {
+		intervalStr = cfg.Sync.DefaultInterval
+	}
+
 	// Output startup status
 	if isJSON() {
-		intervalStr := "30m"
-		if cfg != nil && cfg.Sync.DefaultInterval != "" {
-			intervalStr = cfg.Sync.DefaultInterval
-		}
 		status := ServeStatus{
 			Running:  true,
 			Interval: intervalStr,
@@ -98,10 +100,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(os.Stderr, "error encoding status: %v\n", err)
 		}
 	} else {
-		intervalStr := "30m"
-		if cfg != nil && cfg.Sync.DefaultInterval != "" {
-			intervalStr = cfg.Sync.DefaultInterval
-		}
 		outputText("🚀 ForkSync service started (interval: %s)", intervalStr)
 		outputText("Press Ctrl+C to stop")
 	}

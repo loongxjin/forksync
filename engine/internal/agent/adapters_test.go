@@ -95,7 +95,7 @@ func TestClaudeAdapter_BuildArgs(t *testing.T) {
 }
 
 func TestOpenCodeAdapter_BuildArgs(t *testing.T) {
-	a := &OpenCodeAdapter{binary: "opencode"}
+	a := NewOpenCodeAdapter()
 
 	tests := []struct {
 		name      string
@@ -133,7 +133,7 @@ func TestOpenCodeAdapter_BuildArgs(t *testing.T) {
 }
 
 func TestDroidAdapter_BuildArgs(t *testing.T) {
-	a := &DroidAdapter{binary: "droid"}
+	a := NewDroidAdapter()
 
 	tests := []struct {
 		name      string
@@ -171,31 +171,31 @@ func TestDroidAdapter_BuildArgs(t *testing.T) {
 }
 
 func TestCodexAdapter_BuildArgs(t *testing.T) {
-	a := &CodexAdapter{binary: "codex"}
+	a := &CodexAdapter{baseAdapter{binary: "codex", name: "codex"}}
 
 	tests := []struct {
-		name     string
-		resume   bool
-		prompt   string
-		wantArgs []string
+		name      string
+		sessionID string
+		prompt    string
+		wantArgs  []string
 	}{
 		{
-			name:     "new session",
-			resume:   false,
-			prompt:   "resolve conflicts",
-			wantArgs: []string{"--dangerously-bypass-approvals-and-sandbox", "resolve conflicts"},
+			name:      "new session",
+			sessionID: "",
+			prompt:    "resolve conflicts",
+			wantArgs:  []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "resolve conflicts"},
 		},
 		{
-			name:     "resume session",
-			resume:   true,
-			prompt:   "resolve more",
-			wantArgs: []string{"resume", "--last", "--dangerously-bypass-approvals-and-sandbox", "resolve more"},
+			name:      "resume session",
+			sessionID: "sess-789",
+			prompt:    "resolve more",
+			wantArgs:  []string{"exec", "resume", "--last", "--dangerously-bypass-approvals-and-sandbox", "resolve more"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args := a.buildArgs(tt.resume, tt.prompt)
+			args := a.buildArgs(tt.sessionID, tt.prompt)
 			if len(args) != len(tt.wantArgs) {
 				t.Fatalf("args = %v; want %v", args, tt.wantArgs)
 			}

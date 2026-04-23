@@ -34,6 +34,11 @@ var (
 	signalsToWatch = []os.Signal{os.Interrupt, syscall.SIGTERM}
 )
 
+const (
+	// defaultResolveTimeout is the fallback agent resolution timeout.
+	defaultResolveTimeout = 10 * time.Minute
+)
+
 var resolveCmd = &cobra.Command{
 	Use:   "resolve <repo-name>",
 	Short: "Resolve conflicts using an AI agent",
@@ -246,7 +251,7 @@ func resolveAgentProvider(cfg *config.Config) (agent.AgentProvider, error) {
 
 // resolveTimeout returns the agent resolution timeout from config or the default.
 func resolveTimeout(cfg *config.Config) time.Duration {
-	timeout := 10 * time.Minute
+	timeout := defaultResolveTimeout
 	if cfg != nil && cfg.Agent.Timeout != "" {
 		if d, err := time.ParseDuration(cfg.Agent.Timeout); err == nil {
 			timeout = d
