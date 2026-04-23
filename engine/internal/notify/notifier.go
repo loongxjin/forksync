@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/loongxjin/forksync/engine/internal/logger"
 )
 
 // Notifier sends system notifications.
@@ -68,13 +70,19 @@ func (n *Notifier) send(title, message string) {
 				"[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('ForkSync').Show($toast)",
 			title, message,
 		)
-		exec.Command("powershell", "-NoProfile", "-Command", script).Run()
+		if err := exec.Command("powershell", "-NoProfile", "-Command", script).Run(); err != nil {
+			logger.Debug("notify failed", "platform", "windows", "error", err)
+		}
 	case "darwin":
 		// macOS: use osascript
-		exec.Command("osascript", "-e", fmt.Sprintf(`display notification %q with title %q`, message, title)).Run()
+		if err := exec.Command("osascript", "-e", fmt.Sprintf(`display notification %q with title %q`, message, title)).Run(); err != nil {
+			logger.Debug("notify failed", "platform", "darwin", "error", err)
+		}
 	case "linux":
 		// Linux: use notify-send
-		exec.Command("notify-send", escapeNotifySend(title), escapeNotifySend(message)).Run()
+		if err := exec.Command("notify-send", escapeNotifySend(title), escapeNotifySend(message)).Run(); err != nil {
+			logger.Debug("notify failed", "platform", "linux", "error", err)
+		}
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
@@ -34,7 +33,7 @@ type Summarizer struct {
 	config        *config.Config
 	logger        *log.Logger
 	closeOnce     sync.Once
-	closed        atomic.Bool
+	closed        bool
 	wg            sync.WaitGroup // tracks in-flight tasks
 }
 
@@ -72,7 +71,9 @@ func (s *Summarizer) Start() {
 // Enqueue adds a summarization task to the queue.
 // Non-blocking: if the queue is full or the Summarizer is stopped, the task is dropped.
 func (s *Summarizer) Enqueue(task Task) {
-	if s.closed.Load() {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
 		s.logger.Printf("[summarizer] stopped, dropping summary task for %s (history #%d)", task.RepoName, task.HistoryID)
 		_ = s.historyStore.UpdateSummary(task.HistoryID, "", string(types.SummaryStatusFailed))
 		return
@@ -80,8 +81,10 @@ func (s *Summarizer) Enqueue(task Task) {
 	select {
 	case s.queue <- task:
 		s.wg.Add(1)
+		s.mu.Unlock()
 		s.logger.Printf("[summarizer] enqueued summary task for %s (history #%d)", task.RepoName, task.HistoryID)
 	default:
+		s.mu.Unlock()
 		s.logger.Printf("[summarizer] queue full, dropping summary task for %s", task.RepoName)
 		// Mark as failed since status was already set to pending at record time
 		_ = s.historyStore.UpdateSummary(task.HistoryID, "", string(types.SummaryStatusFailed))
@@ -104,7 +107,10 @@ func (s *Summarizer) processTask(task Task) {
 	_ = s.historyStore.UpdateSummary(task.HistoryID, "", string(types.SummaryStatusGenerating))
 
 	// Determine which agent to use
-	agentName := s.config.Sync.SummaryAgent
+	agentName := ""
+	if s.config != nil {
+		agentName = s.config.Sync.SummaryAgent
+	}
 	if agentName == "" {
 		// Auto-select: use preferred or first available
 		if prov, err := s.agentRegistry.GetPreferred(); err == nil {
@@ -166,20 +172,18 @@ func (s *Summarizer) WaitIdle(ctx context.Context) {
 // Safe to call multiple times.
 func (s *Summarizer) Stop() {
 	s.closeOnce.Do(func() {
-		s.closed.Store(true)
+		s.mu.Lock()
+		s.closed = true
 		close(s.queue)
+		s.mu.Unlock()
 	})
 }
 
 // StopAndWait stops the summarizer and waits for in-flight tasks to complete.
 func (s *Summarizer) StopAndWait(ctx context.Context) {
 	s.Stop()
-	// Drain remaining tasks from the queue so wg.Done() is called for each.
-	for task := range s.queue {
-		s.processTask(task)
-		s.wg.Done()
-	}
-	// Wait for any task still being processed by the worker.
+	// The worker goroutine will automatically drain remaining tasks from the
+	// closed channel and call wg.Done() for each. We just wait for it to finish.
 	done := make(chan struct{})
 	go func() {
 		s.wg.Wait()

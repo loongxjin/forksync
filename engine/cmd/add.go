@@ -9,6 +9,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/github"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
@@ -47,7 +48,10 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get origin URL
-	remotes, _ := gitOps.GetRemotes(cmd.Context(), repoPath)
+	remotes, err := gitOps.GetRemotes(cmd.Context(), repoPath)
+	if err != nil {
+		logger.Warn("add: failed to get remotes", "repo", repoPath, "error", err)
+	}
 	originURL := ""
 	for _, r := range remotes {
 		if r.Name == "origin" {
@@ -63,7 +67,10 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get current branch
-	statusResult, _ := gitOps.Status(cmd.Context(), types.Repo{Path: repoPath, Upstream: resolvedUpstream})
+	statusResult, err := gitOps.Status(cmd.Context(), types.Repo{Path: repoPath, Upstream: resolvedUpstream})
+	if err != nil {
+		logger.Warn("add: failed to get status", "repo", repoPath, "error", err)
+	}
 	branch := "main"
 	if statusResult != nil && statusResult.Branch != "" {
 		branch = statusResult.Branch
@@ -103,7 +110,10 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get the saved repo (with auto-generated ID)
-	saved, _ := store.GetByName(repoName)
+	saved, ok := store.GetByName(repoName)
+	if !ok {
+		return fmt.Errorf("add: failed to retrieve saved repo %q", repoName)
+	}
 
 	if isJSON() {
 		outputJSON(types.AddData{Repo: saved}, nil)

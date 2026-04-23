@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -26,14 +27,29 @@ func Init(dir string) error {
 	}
 
 	mu.Lock()
+	defer mu.Unlock()
+	if rotateWriter != nil {
+		_ = rotateWriter.Close()
+	}
 	rotateWriter = w
 
+	level := slog.LevelDebug
+	if env := os.Getenv("FORKSYNC_LOG_LEVEL"); env != "" {
+		switch strings.ToLower(env) {
+		case "info":
+			level = slog.LevelInfo
+		case "warn", "warning":
+			level = slog.LevelWarn
+		case "error":
+			level = slog.LevelError
+		}
+	}
+
 	handler := slog.NewTextHandler(w, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: level,
 	})
 	defaultLogger = slog.New(handler)
 	slog.SetDefault(defaultLogger)
-	mu.Unlock()
 	return nil
 }
 
@@ -150,11 +166,13 @@ func (w *dailyRotateWriter) rotateIfNeeded() error {
 	}
 
 	if w.file != nil {
-		w.file.Close()
+		if err := w.file.Close(); err != nil {
+			return fmt.Errorf("close old log file: %w", err)
+		}
 	}
 
 	path := filepath.Join(w.dir, fmt.Sprintf("sync-%s.log", today))
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return fmt.Errorf("open log file: %w", err)
 	}

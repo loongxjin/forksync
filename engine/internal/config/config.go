@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 
+	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
@@ -121,12 +122,15 @@ func (m *Manager) Load() (*Config, error) {
 	// Backward compatibility: if conflict_strategy contains a resolve strategy
 	// value (preserve_ours, preserve_theirs, balanced), migrate it to the new
 	// two-field model: conflict_strategy=agent_resolve + resolve_strategy=<value>.
-	resolveStrategies := map[string]bool{"preserve_ours": true, "preserve_theirs": true, "balanced": true}
+	resolveStrategies := map[string]bool{types.ResolveStrategyPreserveOurs: true, types.ResolveStrategyPreserveTheirs: true, types.ResolveStrategyBalanced: true}
 	if resolveStrategies[cfg.Agent.ConflictStrategy] {
 		cfg.Agent.ResolveStrategy = cfg.Agent.ConflictStrategy
-		cfg.Agent.ConflictStrategy = "agent_resolve"
+		cfg.Agent.ConflictStrategy = types.StrategyAgentResolve
 		// Persist migration
-		_ = m.Save(&cfg)
+		if err := m.Save(&cfg); err != nil {
+			// Non-fatal: migration was applied in memory; save failure means
+			// it will be re-applied on next load.
+		}
 	}
 
 	return &cfg, nil
@@ -143,7 +147,7 @@ func (m *Manager) Save(cfg *Config) error {
 		return err
 	}
 
-	return os.WriteFile(configPath, data, 0644)
+	return os.WriteFile(configPath, data, 0600)
 }
 
 // validConfigKeys defines all supported dot-notation config keys and their types.
@@ -151,11 +155,11 @@ var validConfigKeys = map[string]string{
 	// sync
 	"sync.default_interval": "string",
 	"sync.sync_on_startup":  "bool",
-	"sync.auto_launch":     "bool",
-	"sync.auto_summary":    "bool",
-	"sync.summary_agent":   "string",
+	"sync.auto_launch":      "bool",
+	"sync.auto_summary":     "bool",
+	"sync.summary_agent":    "string",
 	"sync.summary_language": "string",
-	"sync.summary_timeout": "string",
+	"sync.summary_timeout":  "string",
 	// agent
 	"agent.preferred":             "string",
 	"agent.priority":              "[]string",
@@ -167,7 +171,7 @@ var validConfigKeys = map[string]string{
 	// github
 	"github.token": "string",
 	// notification
-	"notification.enabled":        "bool",
+	"notification.enabled": "bool",
 	// proxy
 	"proxy.enabled": "bool",
 	"proxy.url":     "string",
@@ -192,21 +196,21 @@ func ValidConfigKeys() []string {
 // For example, "agent.preferred" -> {1, 0} means Config.Agent.Preferred.
 var configFieldPaths = map[string][]int{
 	// sync
-	"sync.default_interval":  {0, 0},
-	"sync.sync_on_startup":   {0, 1},
-	"sync.auto_launch":     {0, 2},
-	"sync.auto_summary":    {0, 3},
-	"sync.summary_agent":   {0, 4},
+	"sync.default_interval": {0, 0},
+	"sync.sync_on_startup":  {0, 1},
+	"sync.auto_launch":      {0, 2},
+	"sync.auto_summary":     {0, 3},
+	"sync.summary_agent":    {0, 4},
 	"sync.summary_language": {0, 5},
-	"sync.summary_timeout": {0, 6},
+	"sync.summary_timeout":  {0, 6},
 	// agent
-	"agent.preferred":        {1, 0},
-	"agent.priority":         {1, 1},
-	"agent.timeout":          {1, 2},
-	"agent.conflict_strategy": {1, 3},
-	"agent.resolve_strategy":  {1, 4},
+	"agent.preferred":             {1, 0},
+	"agent.priority":              {1, 1},
+	"agent.timeout":               {1, 2},
+	"agent.conflict_strategy":     {1, 3},
+	"agent.resolve_strategy":      {1, 4},
 	"agent.confirm_before_commit": {1, 5},
-	"agent.session_ttl":      {1, 6},
+	"agent.session_ttl":           {1, 6},
 	// github
 	"github.token": {2, 0},
 	// notification

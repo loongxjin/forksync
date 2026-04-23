@@ -16,7 +16,7 @@ import (
 	git "github.com/go-git/go-git/v5"
 	gitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
+	gitTransport "github.com/go-git/go-git/v5/plumbing/transport"
 )
 
 // errStop is a sentinel error used to break out of iterator ForEach loops.
@@ -76,20 +76,6 @@ func (o *Operations) IsGitRepo(_ context.Context, path string) bool {
 
 // Fetch fetches from the specified remote for the given repo.
 func (o *Operations) Fetch(ctx context.Context, repo types.Repo) error {
-	// Set proxy env for go-git (it uses Go's http client which respects proxy env)
-	if o.proxyURL != "" {
-		o.mu.Lock()
-		os.Setenv("HTTP_PROXY", o.proxyURL)
-		os.Setenv("HTTPS_PROXY", o.proxyURL)
-		o.mu.Unlock()
-		defer func() {
-			o.mu.Lock()
-			os.Unsetenv("HTTP_PROXY")
-			os.Unsetenv("HTTPS_PROXY")
-			o.mu.Unlock()
-		}()
-	}
-
 	// Try go-git first
 	err := o.fetchGoGit(ctx, repo)
 	if err == nil {
@@ -97,6 +83,14 @@ func (o *Operations) Fetch(ctx context.Context, repo types.Repo) error {
 	}
 	// Fallback to CLI
 	return o.fetchCLI(ctx, repo)
+}
+
+// proxyOptions returns transport.ProxyOptions if a proxy is configured.
+func (o *Operations) proxyOptions() gitTransport.ProxyOptions {
+	if o.proxyURL == "" {
+		return gitTransport.ProxyOptions{}
+	}
+	return gitTransport.ProxyOptions{URL: o.proxyURL}
 }
 
 func (o *Operations) fetchGoGit(ctx context.Context, repo types.Repo) error {
@@ -127,7 +121,9 @@ func (o *Operations) fetchGoGit(ctx context.Context, repo types.Repo) error {
 		}
 	}
 
-	err = remote.FetchContext(ctx, &git.FetchOptions{})
+	err = remote.FetchContext(ctx, &git.FetchOptions{
+		ProxyOptions: o.proxyOptions(),
+	})
 	if err != nil && err != git.NoErrAlreadyUpToDate {
 		return fmt.Errorf("fetch: %w", err)
 	}
@@ -197,7 +193,7 @@ func (o *Operations) statusGoGit(_ context.Context, repo types.Repo) (*StatusRes
 		return &StatusResult{AheadBy: 0, BehindBy: 0, Branch: branch}, nil
 	}
 
-	ahead, behind, err := o.countDivergence(r, head.Hash(), remoteRef.Hash())
+	ahead, behind, err := o.countDivergence(repo.Path, head.Hash().String(), remoteRef.Hash().String())
 	if err != nil {
 		return nil, err
 	}
@@ -205,65 +201,22 @@ func (o *Operations) statusGoGit(_ context.Context, repo types.Repo) (*StatusRes
 	return &StatusResult{AheadBy: ahead, BehindBy: behind, Branch: branch}, nil
 }
 
-func (o *Operations) countDivergence(r *git.Repository, local, remote plumbing.Hash) (ahead, behind int, err error) {
-	// Build set of remote ancestors with bounded iteration
-	remoteAncestors := make(map[plumbing.Hash]struct{})
-	remoteIter, err := r.Log(&git.LogOptions{From: remote})
+func (o *Operations) countDivergence(repoPath, local, remote string) (ahead, behind int, err error) {
+	output, err := o.runGit(context.Background(), repoPath,
+		"rev-list", "--left-right", "--count", local+"..."+remote)
 	if err != nil {
-		return 0, 0, fmt.Errorf("remote log: %w", err)
+		return 0, 0, fmt.Errorf("count divergence: %w", err)
 	}
-	defer remoteIter.Close()
-	_ = remoteIter.ForEach(func(c *object.Commit) error {
-		remoteAncestors[c.Hash] = struct{}{}
-		return nil
-	})
-
-	// Count ahead: commits reachable from local but not remote
-	localIter, err := r.Log(&git.LogOptions{From: local})
-	if err != nil {
-		return 0, 0, fmt.Errorf("local log: %w", err)
+	parts := strings.Fields(strings.TrimSpace(string(output)))
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("unexpected rev-list output: %q", output)
 	}
-	defer localIter.Close()
-	err = localIter.ForEach(func(c *object.Commit) error {
-		if _, ok := remoteAncestors[c.Hash]; c.Hash == remote || ok {
-			return errStop
-		}
-		ahead++
-		return nil
-	})
-	if err != nil && !errors.Is(err, errStop) {
-		return 0, 0, fmt.Errorf("count ahead: %w", err)
+	if _, err := fmt.Sscanf(parts[0], "%d", &ahead); err != nil {
+		return 0, 0, fmt.Errorf("parse ahead count from %q: %w", parts[0], err)
 	}
-
-	// Build set of local ancestors
-	localAncestors := make(map[plumbing.Hash]struct{})
-	localIter2, err := r.Log(&git.LogOptions{From: local})
-	if err != nil {
-		return 0, 0, fmt.Errorf("local log 2: %w", err)
+	if _, err := fmt.Sscanf(parts[1], "%d", &behind); err != nil {
+		return 0, 0, fmt.Errorf("parse behind count from %q: %w", parts[1], err)
 	}
-	defer localIter2.Close()
-	_ = localIter2.ForEach(func(c *object.Commit) error {
-		localAncestors[c.Hash] = struct{}{}
-		return nil
-	})
-
-	// Count behind: commits reachable from remote but not local
-	remoteIter2, err := r.Log(&git.LogOptions{From: remote})
-	if err != nil {
-		return 0, 0, fmt.Errorf("remote log 2: %w", err)
-	}
-	defer remoteIter2.Close()
-	err = remoteIter2.ForEach(func(c *object.Commit) error {
-		if _, ok := localAncestors[c.Hash]; c.Hash == local || ok {
-			return errStop
-		}
-		behind++
-		return nil
-	})
-	if err != nil && !errors.Is(err, errStop) {
-		return 0, 0, fmt.Errorf("count behind: %w", err)
-	}
-
 	return ahead, behind, nil
 }
 
@@ -301,7 +254,9 @@ func (o *Operations) revListCount(ctx context.Context, dir, exclude, include str
 		return 0, err
 	}
 	var count int
-	fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &count)
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(output)), "%d", &count); err != nil {
+		return 0, fmt.Errorf("parse rev-list output %q: %w", output, err)
+	}
 	return count, nil
 }
 

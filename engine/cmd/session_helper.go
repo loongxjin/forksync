@@ -7,6 +7,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/logger"
+	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
 // newSessionManager creates a session.Manager if agent auto-resolve is
@@ -18,7 +19,7 @@ func newSessionManager(cfg *config.Config, cfgMgr *config.Manager) *session.Mana
 	}
 
 	// Only create session manager when conflict strategy is agent_resolve
-	if cfg.Agent.ConflictStrategy != "agent_resolve" {
+	if cfg.Agent.ConflictStrategy != types.StrategyAgentResolve {
 		return nil
 	}
 

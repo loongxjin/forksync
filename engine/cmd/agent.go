@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
@@ -106,11 +105,8 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 }
 
 func runAgentSessions(cmd *cobra.Command, args []string) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("get home directory: %w", err)
-	}
-	sessionDir := filepath.Join(home, ".forksync", "sessions")
+	_, cfgMgr := getSharedConfig()
+	sessionDir := filepath.Join(cfgMgr.ConfigDir(), "sessions")
 
 	store := session.NewSessionStore(sessionDir)
 	mgr := session.NewManager(store, nil) // provider not needed for listing
@@ -153,11 +149,8 @@ func runAgentSessions(cmd *cobra.Command, args []string) error {
 }
 
 func runAgentCleanup(cmd *cobra.Command, args []string) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("get home directory: %w", err)
-	}
-	sessionDir := filepath.Join(home, ".forksync", "sessions")
+	_, cfgMgr := getSharedConfig()
+	sessionDir := filepath.Join(cfgMgr.ConfigDir(), "sessions")
 
 	store := session.NewSessionStore(sessionDir)
 	mgr := session.NewManager(store, nil)

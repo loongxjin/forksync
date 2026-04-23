@@ -5,18 +5,10 @@ import (
 	"testing"
 )
 
-func TestNewDetector(t *testing.T) {
-	d := NewDetector()
-	if d == nil {
-		t.Fatal("NewDetector should return non-nil")
-	}
-}
-
 func TestGetConflictFiles(t *testing.T) {
-	d := NewDetector()
 	ctx := context.Background()
 
-	files, err := d.GetConflictFiles(ctx, "/tmp/nonexistent", []string{"a.go", "b.go"})
+	files, err := GetConflictFiles(ctx, "/tmp/nonexistent", []string{"a.go", "b.go"})
 	if err != nil {
 		t.Fatalf("GetConflictFiles: %v", err)
 	}
@@ -32,10 +24,9 @@ func TestGetConflictFiles(t *testing.T) {
 }
 
 func TestGetConflictFiles_Empty(t *testing.T) {
-	d := NewDetector()
 	ctx := context.Background()
 
-	files, err := d.GetConflictFiles(ctx, "/tmp", []string{})
+	files, err := GetConflictFiles(ctx, "/tmp", []string{})
 	if err != nil {
 		t.Fatalf("GetConflictFiles: %v", err)
 	}
@@ -54,7 +45,8 @@ func TestHasConflictMarkers(t *testing.T) {
 		{"only open marker", "<<<<<<< HEAD\nfoo", false},
 		{"no markers", "hello world", false},
 		{"empty", "", false},
-		{"equals and close only", "=======\n>>>>>>> upstream", true},
+		{"equals and close only", "=======\n>>>>>>> upstream", false},
+		{"markdown false positive", "=======\n\n>>>>>>> quote", false},
 	}
 
 	for _, tt := range tests {

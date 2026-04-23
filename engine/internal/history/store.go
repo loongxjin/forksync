@@ -5,6 +5,7 @@ package history
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,10 @@ import (
 
 	_ "modernc.org/sqlite"
 )
+
+// sqliteTimeFormat is the datetime format used by SQLite for storing and
+// querying timestamps in the sync_history table.
+const sqliteTimeFormat = "2006-01-02 15:04:05"
 
 // Record represents a single sync history entry.
 type Record struct {
@@ -47,7 +52,7 @@ func NewStore(configDir string) (*Store, error) {
 	}
 
 	dbPath := filepath.Join(dbDir, "forksync.db")
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=5000&_journal_mode=WAL")
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -150,13 +155,15 @@ func (s *Store) Record(r Record) (int64, error) {
 	return id, nil
 }
 
+const syncHistoryColumns = `id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at`
+
 // Recent returns the most recent N sync history records, ordered by created_at DESC.
 func (s *Store) Recent(n int) ([]Record, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
+		SELECT `+syncHistoryColumns+`
 		FROM sync_history ORDER BY created_at DESC LIMIT ?`, n)
 	if err != nil {
 		return nil, err
@@ -172,7 +179,7 @@ func (s *Store) ByRepo(repoID string, n int) ([]Record, error) {
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
+		SELECT `+syncHistoryColumns+`
 		FROM sync_history WHERE repo_id = ? ORDER BY created_at DESC LIMIT ?`, repoID, n)
 	if err != nil {
 		return nil, err
@@ -211,22 +218,10 @@ func (s *Store) GetByID(id int64) (*Record, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	rows, err := s.db.Query(`
-		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
+	row := s.db.QueryRow(`
+		SELECT `+syncHistoryColumns+`
 		FROM sync_history WHERE id = ?`, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	records, err := scanRecords(rows)
-	if err != nil {
-		return nil, err
-	}
-	if len(records) == 0 {
-		return nil, fmt.Errorf("record not found: %d", id)
-	}
-	return &records[0], nil
+	return scanRecord(row)
 }
 
 // LatestByRepo returns the most recent history record for a specific repo.
@@ -235,7 +230,7 @@ func (s *Store) LatestByRepo(repoID string) (*Record, error) {
 	defer s.mu.RUnlock()
 
 	rows, err := s.db.Query(`
-		SELECT id, repo_id, repo_name, status, commits_pulled, conflict_files, agent_used, conflicts_found, auto_resolved, error_message, COALESCE(summary, ''), COALESCE(summary_status, ''), COALESCE(old_head, ''), created_at
+		SELECT `+syncHistoryColumns+`
 		FROM sync_history WHERE repo_id = ? ORDER BY created_at DESC LIMIT 1`, repoID)
 	if err != nil {
 		return nil, err
@@ -269,7 +264,7 @@ func (s *Store) Summary() (totalSyncs int, conflicts int, errors int, lastSync t
 		return
 	}
 	if lastSyncStr != "" {
-		lastSync, _ = time.Parse(time.RFC3339, lastSyncStr)
+		lastSync, _ = time.Parse(sqliteTimeFormat, lastSyncStr)
 	}
 	return
 }
@@ -311,7 +306,7 @@ func (s *Store) ClearBefore(before time.Time) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	res, err := s.db.Exec(`DELETE FROM sync_history WHERE created_at < ?`, before.Format(time.RFC3339))
+	res, err := s.db.Exec(`DELETE FROM sync_history WHERE created_at < ?`, before.Format(sqliteTimeFormat))
 	if err != nil {
 		return 0, err
 	}
@@ -344,7 +339,7 @@ func scanRecords(rows *sql.Rows) ([]Record, error) {
 			r.ConflictFiles = []string{}
 		}
 
-		parsed, err := time.Parse("2006-01-02T15:04:05Z07:00", createdAtStr)
+		parsed, err := time.Parse(sqliteTimeFormat, createdAtStr)
 		if err != nil {
 			parsed, err = time.Parse(time.RFC3339, createdAtStr)
 			if err != nil {
@@ -356,4 +351,34 @@ func scanRecords(rows *sql.Rows) ([]Record, error) {
 		records = append(records, r)
 	}
 	return records, rows.Err()
+}
+
+func scanRecord(row *sql.Row) (*Record, error) {
+	var r Record
+	var conflictFilesJSON string
+	var createdAtStr string
+
+	if err := row.Scan(&r.ID, &r.RepoID, &r.RepoName, &r.Status, &r.CommitsPulled,
+		&conflictFilesJSON, &r.AgentUsed, &r.ConflictsFound, &r.AutoResolved,
+		&r.ErrorMessage, &r.Summary, &r.SummaryStatus, &r.OldHEAD, &createdAtStr); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("record not found")
+		}
+		return nil, err
+	}
+
+	if err := json.Unmarshal([]byte(conflictFilesJSON), &r.ConflictFiles); err != nil {
+		r.ConflictFiles = []string{}
+	}
+
+	parsed, err := time.Parse(sqliteTimeFormat, createdAtStr)
+	if err != nil {
+		parsed, err = time.Parse(time.RFC3339, createdAtStr)
+		if err != nil {
+			parsed = time.Time{}
+		}
+	}
+	r.CreatedAt = parsed
+
+	return &r, nil
 }

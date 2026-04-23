@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
 // AgentProvider defines the interface for interacting with an AI coding agent CLI.
@@ -92,13 +95,13 @@ func BuildConflictPrompt(files []string, strategy string) string {
 
 	sb.WriteString("\n## 合并策略\n\n")
 	switch strategy {
-	case "preserve_ours":
+	case types.ResolveStrategyPreserveOurs:
 		sb.WriteString("保留我们的自定义修改，接受上游的非冲突变更。\n")
 		sb.WriteString("当双方的修改矛盾不可调和，优先保留本地（ours）的版本。\n")
-	case "preserve_theirs":
+	case types.ResolveStrategyPreserveTheirs:
 		sb.WriteString("优先接受上游的变更，仅在必要处保留本地修改。\n")
 		sb.WriteString("当双方的修改矛盾不可调和，优先采用上游（theirs）的版本。\n")
-	case "balanced":
+	case types.ResolveStrategyBalanced:
 		sb.WriteString("智能合并，尽量同时保留双方的修改。\n")
 		sb.WriteString("只有当双方修改了完全相同的行且无法自动整合时才需要取舍。\n")
 	default:
@@ -153,10 +156,11 @@ func extractSessionID(output string) string {
 // maxSummaryLength is the maximum character length for agent summary output.
 const maxSummaryLength = 500
 
-// truncateOutput limits output to maxLen characters for summaries.
+// truncateOutput limits output to maxLen runes for summaries.
 func truncateOutput(output string, maxLen int) string {
-	if len(output) <= maxLen {
+	if utf8.RuneCountInString(output) <= maxLen {
 		return output
 	}
-	return output[:maxLen] + "..."
+	runes := []rune(output)
+	return string(runes[:maxLen]) + "..."
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
@@ -49,13 +50,13 @@ func (m *Manager) SetTTL(d time.Duration) {
 // If an active session exists (in memory or on disk), it is reused.
 // If the session is expired, a new one is created.
 func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*agent.Session, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	// 1. Check in-memory cache
+	m.mu.Lock()
 	if sess, ok := m.active[repoID]; ok {
+		m.mu.Unlock()
 		return sess, nil
 	}
+	m.mu.Unlock()
 
 	// 2. Check disk store
 	rec, err := m.store.Load(repoID)
@@ -68,15 +69,19 @@ func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*ag
 				RepoPath:  rec.RepoPath,
 				StartedAt: rec.CreatedAt,
 			}
+			m.mu.Lock()
 			m.active[repoID] = sess
+			m.mu.Unlock()
 			return sess, nil
 		}
 		// Expired — mark it
-		_ = m.store.UpdateStatus(repoID, string(types.SessionStatusExpired))
+		if err := m.store.UpdateStatus(repoID, string(types.SessionStatusExpired)); err != nil {
+			logger.Warn("session: failed to mark expired", "repo", repoID, "error", err)
+		}
 	}
 
 	// 3. Create new session
-	return m.createSession(ctx, repoID, repoPath)
+	return m.createSessionLocked(ctx, repoID, repoPath)
 }
 
 // ResolveConflicts is the main entry point for conflict resolution.
@@ -108,14 +113,18 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 		m.invalidateSession(repoID)
 		sess, retryErr := m.createSessionLocked(ctx, repoID, repoPath)
 		if retryErr != nil {
-			_ = m.store.UpdateStatus(repoID, string(types.SessionStatusFailed))
+			if updateErr := m.store.UpdateStatus(repoID, string(types.SessionStatusFailed)); updateErr != nil {
+				logger.Warn("session: failed to mark failed after retry", "repo", repoID, "error", updateErr)
+			}
 			return nil, fmt.Errorf("resume failed (%v); recreate session also failed: %w", err, retryErr)
 		}
 		// Retry with merged prompt (this is a new session too)
 		prompt = agent.BuildInitialConflictPrompt(conflictFiles, strategy)
 		result, err = m.provider.ResolveConflicts(ctx, sess, prompt)
 		if err != nil {
-			_ = m.store.UpdateStatus(repoID, string(types.SessionStatusFailed))
+			if updateErr := m.store.UpdateStatus(repoID, string(types.SessionStatusFailed)); updateErr != nil {
+				logger.Warn("session: failed to mark failed after retry", "repo", repoID, "error", updateErr)
+			}
 			return result, err
 		}
 	}
@@ -129,13 +138,17 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 	}
 
 	// Update session's last used time
-	_ = m.store.UpdateLastUsed(repoID)
+	if err := m.store.UpdateLastUsed(repoID); err != nil {
+		logger.Warn("session: failed to update last used", "repo", repoID, "error", err)
+	}
 
 	// Update session ID if agent returned a new one
 	if result.SessionID != "" && result.SessionID != sess.ID {
 		if rec, loadErr := m.store.Load(repoID); loadErr == nil {
 			rec.SessionID = result.SessionID
-			_ = m.store.Save(rec)
+			if saveErr := m.store.Save(rec); saveErr != nil {
+				logger.Warn("session: failed to save updated session ID", "repo", repoID, "error", saveErr)
+			}
 		}
 		sess.ID = result.SessionID
 		m.mu.Lock()
@@ -157,22 +170,16 @@ func (m *Manager) invalidateSession(repoID string) {
 
 // createSessionLocked creates a new session after acquiring the mutex.
 // Safe to call when the caller does not already hold m.mu.
+// The external CLI call is performed without holding the lock.
 func (m *Manager) createSessionLocked(ctx context.Context, repoID, repoPath string) (*agent.Session, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.createSession(ctx, repoID, repoPath)
-}
+	if sess, ok := m.active[repoID]; ok {
+		m.mu.Unlock()
+		return sess, nil
+	}
+	m.mu.Unlock()
 
-// CreateSessionForRepo creates a new agent session for a repository.
-// This is the primary method used when no session exists yet.
-func (m *Manager) CreateSessionForRepo(ctx context.Context, repoID, repoPath string) (*agent.Session, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.createSession(ctx, repoID, repoPath)
-}
-
-// createSession is the internal implementation (caller must hold m.mu).
-func (m *Manager) createSession(ctx context.Context, repoID, repoPath string) (*agent.Session, error) {
+	// External CLI call without holding the lock
 	sess, err := m.provider.StartSession(ctx, agent.SessionOptions{
 		RepoPath: repoPath,
 	})
@@ -194,8 +201,16 @@ func (m *Manager) createSession(ctx context.Context, repoID, repoPath string) (*
 		return nil, fmt.Errorf("save session record: %w", err)
 	}
 
+	m.mu.Lock()
 	m.active[repoID] = sess
+	m.mu.Unlock()
 	return sess, nil
+}
+
+// CreateSessionForRepo creates a new agent session for a repository.
+// This is the primary method used when no session exists yet.
+func (m *Manager) CreateSessionForRepo(ctx context.Context, repoID, repoPath string) (*agent.Session, error) {
+	return m.createSessionLocked(ctx, repoID, repoPath)
 }
 
 // CloseAll terminates all active sessions and clears the in-memory cache.

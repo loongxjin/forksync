@@ -79,7 +79,10 @@ func (s *JSONStore) Load() error {
 
 	// Persist migration if any repos were updated
 	if migrated {
-		_ = s.saveUnsafe()
+		if err := s.saveUnsafe(); err != nil {
+			// Non-fatal: migration was applied in memory; save failure means
+			// it will be re-applied on next load.
+		}
 	}
 
 	return nil
@@ -217,7 +220,7 @@ func (s *JSONStore) saveUnsafe() error {
 		return err
 	}
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return err
 	}
 	// Windows requires removing the target before rename

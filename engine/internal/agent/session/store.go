@@ -54,7 +54,7 @@ func (s *SessionStore) Save(rec *SessionRecord) error {
 	}
 
 	path := s.filePath(rec.RepoID)
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("write session file: %w", err)
 	}
 
@@ -65,7 +65,11 @@ func (s *SessionStore) Save(rec *SessionRecord) error {
 func (s *SessionStore) Load(repoID string) (*SessionRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.loadLocked(repoID)
+}
 
+// loadLocked is the internal implementation of Load (caller must hold s.mu).
+func (s *SessionStore) loadLocked(repoID string) (*SessionRecord, error) {
 	path := s.filePath(repoID)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -97,22 +101,42 @@ func (s *SessionStore) Delete(repoID string) error {
 
 // UpdateStatus changes the status field of a session record.
 func (s *SessionStore) UpdateStatus(repoID, status string) error {
-	rec, err := s.Load(repoID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, err := s.loadLocked(repoID)
 	if err != nil {
 		return err
 	}
 	rec.Status = status
-	return s.Save(rec)
+	return s.saveLocked(rec)
 }
 
 // UpdateLastUsed updates the LastUsedAt timestamp.
 func (s *SessionStore) UpdateLastUsed(repoID string) error {
-	rec, err := s.Load(repoID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec, err := s.loadLocked(repoID)
 	if err != nil {
 		return err
 	}
 	rec.LastUsedAt = time.Now()
-	return s.Save(rec)
+	return s.saveLocked(rec)
+}
+
+// saveLocked is the internal implementation of Save (caller must hold s.mu).
+func (s *SessionStore) saveLocked(rec *SessionRecord) error {
+	if err := s.Init(); err != nil {
+		return fmt.Errorf("init session dir: %w", err)
+	}
+	data, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal session record: %w", err)
+	}
+	path := s.filePath(rec.RepoID)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write session file: %w", err)
+	}
+	return nil
 }
 
 // ListAll returns all session records in the store.

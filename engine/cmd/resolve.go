@@ -128,7 +128,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	timeout := resolveTimeout(cfg)
 
 	// Determine resolve sub-strategy for the agent prompt
-	resolveStrategy := "preserve_ours"
+	resolveStrategy := types.ResolveStrategyPreserveOurs
 	if cfg != nil && cfg.Agent.ResolveStrategy != "" {
 		resolveStrategy = cfg.Agent.ResolveStrategy
 	}
@@ -163,15 +163,15 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, signalsToWatch...)
 	defer signal.Stop(sigCh)
-	go func() {
+	go func(repo types.Repo) {
 		if _, ok := <-sigCh; ok && !resolved.Load() {
-			r.Status = types.RepoStatusConflict
-			r.ErrorMessage = "agent process was terminated, conflict resolution incomplete"
-			if updateErr := store.Update(r); updateErr != nil {
-				logger.Error("resolve: failed to roll back repo on signal", "repo", r.Name, "error", updateErr)
+			repo.Status = types.RepoStatusConflict
+			repo.ErrorMessage = "agent process was terminated, conflict resolution incomplete"
+			if updateErr := store.Update(repo); updateErr != nil {
+				logger.Error("resolve: failed to roll back repo on signal", "repo", repo.Name, "error", updateErr)
 			}
 		}
-	}()
+	}(r)
 
 	// Set timeout context
 	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)

@@ -10,7 +10,7 @@ import (
 type ApiResponse[T any] struct {
 	Success bool   `json:"success"`
 	Data    T      `json:"data"`
-	Error   string `json:"error"`
+	Error   string `json:"error,omitempty"`
 }
 
 // RepoStatus 仓库状态枚举
@@ -21,8 +21,8 @@ const (
 	RepoStatusSyncNeeded   RepoStatus = "sync_needed" // 上游有更新，需要同步
 	RepoStatusSyncing      RepoStatus = "syncing"
 	RepoStatusConflict     RepoStatus = "conflict"
-	RepoStatusResolving    RepoStatus = "resolving"  // agent 正在解决冲突
-	RepoStatusResolved     RepoStatus = "resolved"   // agent 解决完成，等待用户确认
+	RepoStatusResolving    RepoStatus = "resolving" // agent 正在解决冲突
+	RepoStatusResolved     RepoStatus = "resolved"  // agent 解决完成，等待用户确认
 	RepoStatusError        RepoStatus = "error"
 	RepoStatusUnconfigured RepoStatus = "unconfigured"
 )
@@ -31,9 +31,9 @@ const (
 type SessionStatus string
 
 const (
-	SessionStatusActive   SessionStatus = "active"
-	SessionStatusExpired  SessionStatus = "expired"
-	SessionStatusFailed   SessionStatus = "failed"
+	SessionStatusActive  SessionStatus = "active"
+	SessionStatusExpired SessionStatus = "expired"
+	SessionStatusFailed  SessionStatus = "failed"
 )
 
 // SummaryStatus 同步摘要生成状态枚举
@@ -44,6 +44,18 @@ const (
 	SummaryStatusGenerating SummaryStatus = "generating"
 	SummaryStatusDone       SummaryStatus = "done"
 	SummaryStatusFailed     SummaryStatus = "failed"
+)
+
+// ConflictStrategy constants
+const (
+	StrategyAgentResolve = "agent_resolve"
+)
+
+// ResolveStrategy constants
+const (
+	ResolveStrategyPreserveOurs   = "preserve_ours"
+	ResolveStrategyPreserveTheirs = "preserve_theirs"
+	ResolveStrategyBalanced       = "balanced"
 )
 
 // Time 可序列化的 time.Time
@@ -83,23 +95,23 @@ type PostSyncCommand struct {
 
 // Repo represents a managed repository
 type Repo struct {
-	ID                string            `json:"id"`
-	Name              string            `json:"name"`
-	Path              string            `json:"path"`
-	Origin            string            `json:"origin"`
-	Upstream          string            `json:"upstream"`
-	Branch            string            `json:"branch"`
-	BranchMapping     *BranchMapping     `json:"branchMapping,omitempty"`
-	AutoSync          bool              `json:"autoSync"`
-	SyncInterval      string            `json:"syncInterval"`
-	ConflictStrategy  string            `json:"conflictStrategy"`
-	PostSyncCommands  []PostSyncCommand `json:"postSyncCommands,omitempty"`
-	CreatedAt         time.Time         `json:"createdAt"`
-	LastSync          *Time             `json:"lastSync"`
-	Status            RepoStatus        `json:"status"`
-	AheadBy           int               `json:"aheadBy"`
-	BehindBy          int               `json:"behindBy"`
-	ErrorMessage      string            `json:"errorMessage,omitempty"`
+	ID               string            `json:"id"`
+	Name             string            `json:"name"`
+	Path             string            `json:"path"`
+	Origin           string            `json:"origin"`
+	Upstream         string            `json:"upstream"`
+	Branch           string            `json:"branch"`
+	BranchMapping    *BranchMapping    `json:"branchMapping,omitempty"`
+	AutoSync         bool              `json:"autoSync"`
+	SyncInterval     string            `json:"syncInterval"`
+	ConflictStrategy string            `json:"conflictStrategy"`
+	PostSyncCommands []PostSyncCommand `json:"postSyncCommands,omitempty"`
+	CreatedAt        time.Time         `json:"createdAt"`
+	LastSync         *Time             `json:"lastSync"`
+	Status           RepoStatus        `json:"status"`
+	AheadBy          int               `json:"aheadBy"`
+	BehindBy         int               `json:"behindBy"`
+	ErrorMessage     string            `json:"errorMessage,omitempty"`
 }
 
 // GetRemoteBranchForLocal returns the remote branch name for a given local branch.
@@ -133,18 +145,18 @@ type ScannedRepo struct {
 
 // SyncResult 同步结果
 type SyncResult struct {
-	RepoID           string            `json:"repoId"`
-	RepoName         string            `json:"repoName"`
-	Status           RepoStatus        `json:"status"`
-	CommitsPulled    int               `json:"commitsPulled"`
-	ConflictFiles    []string          `json:"conflictFiles,omitempty"`
-	ErrorMessage     string            `json:"errorMessage,omitempty"`
-	AgentUsed        string            `json:"agentUsed,omitempty"`
-	ConflictsFound   int               `json:"conflictsFound,omitempty"`
-	AutoResolved     int               `json:"autoResolved,omitempty"`
-	PendingConfirm   []string            `json:"pendingConfirm,omitempty"`
-	PostSyncResults  []PostSyncResult    `json:"postSyncResults,omitempty"`
-	AgentResult      *AgentResolveResult `json:"agentResult,omitempty"`
+	RepoID          string              `json:"repoId"`
+	RepoName        string              `json:"repoName"`
+	Status          RepoStatus          `json:"status"`
+	CommitsPulled   int                 `json:"commitsPulled"`
+	ConflictFiles   []string            `json:"conflictFiles,omitempty"`
+	ErrorMessage    string              `json:"errorMessage,omitempty"`
+	AgentUsed       string              `json:"agentUsed,omitempty"`
+	ConflictsFound  int                 `json:"conflictsFound,omitempty"`
+	AutoResolved    int                 `json:"autoResolved,omitempty"`
+	PendingConfirm  []string            `json:"pendingConfirm,omitempty"`
+	PostSyncResults []PostSyncResult    `json:"postSyncResults,omitempty"`
+	AgentResult     *AgentResolveResult `json:"agentResult,omitempty"`
 }
 
 // PostSyncResult represents the result of running a single post-sync command.
@@ -242,12 +254,12 @@ type AcceptData struct {
 	Resolved           bool     `json:"resolved"`
 	RemainingConflicts []string `json:"remainingConflicts,omitempty"`
 }
+
 // RejectData reject 响应
 type RejectData struct {
 	RepoID     string `json:"repoId"`
 	RolledBack bool   `json:"rolledBack"`
 }
-
 
 // AgentListData agent list 响应
 type AgentListData struct {

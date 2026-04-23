@@ -8,6 +8,7 @@ import (
 
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/github"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -49,7 +50,8 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	err = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil // skip errors
+			logger.Warn("scan: skip path", "path", path, "error", err)
+			return nil // skip but log
 		}
 
 		// Skip hidden directories and common non-project dirs

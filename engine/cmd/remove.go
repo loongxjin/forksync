@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/loongxjin/forksync/engine/internal/history"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/spf13/cobra"
 )
@@ -40,7 +41,9 @@ func runRemove(cmd *cobra.Command, args []string) error {
 
 	// Clean up associated sync history records
 	if hStore, err := history.NewStore(cfgMgr.ConfigDir()); err == nil {
-		hStore.ClearByRepo(r.ID)
+		if _, clearErr := hStore.ClearByRepo(r.ID); clearErr != nil {
+			logger.Warn("remove: failed to clear history", "repo", r.Name, "error", clearErr)
+		}
 		hStore.Close()
 	}
 

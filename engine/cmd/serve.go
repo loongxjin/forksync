@@ -44,8 +44,11 @@ func runServe(cmd *cobra.Command, args []string) error {
 	cfg, cfgMgr := getSharedConfig()
 
 	// Override interval from flag if provided
+	// Make a copy to avoid mutating the shared config pointer.
 	if serveInterval != "" && cfg != nil {
-		cfg.Sync.DefaultInterval = serveInterval
+		cfgCopy := *cfg
+		cfgCopy.Sync.DefaultInterval = serveInterval
+		cfg = &cfgCopy
 	}
 
 	store := repo.NewJSONStore(cfgMgr.ConfigDir())
@@ -80,6 +83,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
 
 	// Determine interval string for output
 	intervalStr := "30m"

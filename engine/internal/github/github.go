@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -57,9 +58,9 @@ type ForkResult struct {
 
 // DetectFork checks if a repository is a fork and returns the upstream URL.
 func (c *Client) DetectFork(ctx context.Context, owner, repo string) (*ForkResult, error) {
-	url := fmt.Sprintf("%s/repos/%s/%s", c.baseURL, owner, repo)
+	endpoint := fmt.Sprintf("%s/repos/%s/%s", c.baseURL, url.PathEscape(owner), url.PathEscape(repo))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -136,5 +137,20 @@ func ParseRepoURL(remoteURL string) (owner, repo string, err error) {
 
 // IsGitHubURL checks if a remote URL points to GitHub.
 func IsGitHubURL(remoteURL string) bool {
-	return strings.Contains(remoteURL, "github.com")
+	host := extractHost(remoteURL)
+	return host == "github.com" || strings.HasSuffix(host, ".github.com")
+}
+
+func extractHost(remoteURL string) string {
+	if strings.HasPrefix(remoteURL, "git@") {
+		// SSH: git@host:path
+		rest := strings.TrimPrefix(remoteURL, "git@")
+		host, _, _ := strings.Cut(rest, ":")
+		return host
+	}
+	// HTTP(S)
+	trimmed := strings.TrimPrefix(remoteURL, "https://")
+	trimmed = strings.TrimPrefix(trimmed, "http://")
+	host, _, _ := strings.Cut(trimmed, "/")
+	return host
 }

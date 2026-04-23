@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
-	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
@@ -23,21 +23,23 @@ import (
 )
 
 const (
-	defaultTimeout        = 5 * time.Minute
+	defaultTimeout         = 5 * time.Minute
 	postSyncCommandTimeout = 60 * time.Second
+	defaultBranch          = "main"
+	defaultMaxConcurrency  = 8
 )
 
 // Syncer handles repository synchronization.
 type Syncer struct {
-	gitOps        *git.Operations
-	store         repo.Store
-	cfg           *config.Config
-	notifier      *notify.Notifier
-	sessionMgr    *session.Manager
-	historyStore  *history.Store
-	summarizer    *summarizer.Summarizer
-	mu            sync.Mutex
-	active        map[string]bool // tracks repos currently syncing
+	gitOps       *git.Operations
+	store        repo.Store
+	cfg          *config.Config
+	notifier     *notify.Notifier
+	sessionMgr   *session.Manager
+	historyStore *history.Store
+	summarizer   *summarizer.Summarizer
+	mu           sync.Mutex
+	active       map[string]bool // tracks repos currently syncing
 }
 
 // NewSyncer creates a new Syncer.
@@ -51,21 +53,29 @@ func NewSyncer(store repo.Store) *Syncer {
 
 // SetNotifier sets the notification handler.
 func (s *Syncer) SetNotifier(n *notify.Notifier) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.notifier = n
 }
 
 // SetSessionManager sets the agent session manager for auto-conflict resolution.
 func (s *Syncer) SetSessionManager(mgr *session.Manager) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.sessionMgr = mgr
 }
 
 // SetHistoryStore sets the sync history store for recording sync results.
 func (s *Syncer) SetHistoryStore(h *history.Store) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.historyStore = h
 }
 
 // SetSummarizer sets the AI summarizer for generating sync summaries.
 func (s *Syncer) SetSummarizer(sm *summarizer.Summarizer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.summarizer = sm
 }
 
@@ -88,13 +98,13 @@ type Result struct {
 	CommitsPulled   int
 	ConflictFiles   []string
 	ErrorMessage    string
-	AgentUsed       string                  // agent name if auto-resolve was attempted
-	ConflictsFound  int                     // number of conflicts detected
-	AutoResolved    int                     // number of files auto-resolved by agent
-	PendingConfirm  []string                // files pending user confirmation
+	AgentUsed       string                    // agent name if auto-resolve was attempted
+	ConflictsFound  int                       // number of conflicts detected
+	AutoResolved    int                       // number of files auto-resolved by agent
+	PendingConfirm  []string                  // files pending user confirmation
 	AgentResult     *types.AgentResolveResult // agent resolution result when pending confirmation
 	PostSyncResults []types.PostSyncResult
-	HistoryID       int64                   // ID of the created history record
+	HistoryID       int64 // ID of the created history record
 }
 
 // ToSyncResult converts Result to types.SyncResult for JSON output.
@@ -126,7 +136,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		}
 	}
 	if branch == "" {
-		branch = "main"
+		branch = defaultBranch
 	}
 	upstreamRef := fmt.Sprintf("%s/%s", remoteName, r.GetRemoteBranchForLocal(branch))
 
@@ -246,9 +256,9 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		return result
 	}
 
-		if mergeResult.HasConflicts {
-			return s.handleMergeConflicts(ctx, r, result, mergeResult)
-		}
+	if mergeResult.HasConflicts {
+		return s.handleMergeConflicts(ctx, r, result, mergeResult)
+	}
 
 	// Success
 	result.Status = string(types.RepoStatusUpToDate)
@@ -274,7 +284,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	if strategy == "" && s.cfg != nil {
 		strategy = s.cfg.Agent.ConflictStrategy
 	}
-	if strategy == "agent_resolve" && s.sessionMgr != nil {
+	if strategy == types.StrategyAgentResolve && s.sessionMgr != nil {
 		resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)
 		if resolved {
 			result.Status = string(types.RepoStatusUpToDate)
@@ -332,7 +342,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		resolveStrategy = s.cfg.Agent.ResolveStrategy
 	}
 	if resolveStrategy == "" {
-		resolveStrategy = "preserve_ours"
+		resolveStrategy = types.ResolveStrategyPreserveOurs
 	}
 
 	// Resolve conflicts via agent
@@ -390,7 +400,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	// Check staged changes
 	if checkErr := s.gitOps.CheckStaged(ctx, r.Path); checkErr != nil {
 		// Log but don't fail — whitespace issues are non-critical
-		_ = checkErr
+		logger.Debug("sync: staged changes check found issues", "repo", r.Name, "error", checkErr)
 	}
 
 	// Check if auto-confirm is enabled
@@ -458,7 +468,7 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 
 	results := make([]*Result, len(targetRepos))
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 8) // limit concurrency to avoid overwhelming network/disk
+	sem := make(chan struct{}, defaultMaxConcurrency) // limit concurrency to avoid overwhelming network/disk
 
 	for i, r := range targetRepos {
 		wg.Add(1)
@@ -466,7 +476,9 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 		go func(idx int, repo types.Repo) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[idx] = s.SyncRepo(ctx, repo)
+			repoCtx, cancel := context.WithTimeout(ctx, defaultTimeout)
+			defer cancel()
+			results[idx] = s.SyncRepo(repoCtx, repo)
 		}(i, r)
 	}
 	wg.Wait()
@@ -483,6 +495,7 @@ func (s *Syncer) runPostSyncCommands(ctx context.Context, r types.Repo) []types.
 
 	var results []types.PostSyncResult
 	for _, cmd := range r.PostSyncCommands {
+		logger.Info("sync: executing post-sync command", "repo", r.Name, "command", cmd.Name, "cmd", cmd.Cmd)
 		cmdCtx, cancel := context.WithTimeout(ctx, postSyncCommandTimeout)
 		sh, flag := shell()
 		c := exec.CommandContext(cmdCtx, sh, flag, cmd.Cmd)
@@ -653,8 +666,6 @@ func (s *Syncer) finalizeResult(result *Result) {
 	s.recordHistory(result)
 	s.logResult(result)
 }
-
-
 
 // shell returns the system shell for executing commands.
 // Uses "cmd" on Windows, "sh" on all other platforms.

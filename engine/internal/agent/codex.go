@@ -30,9 +30,14 @@ func (a *CodexAdapter) ResolveConflicts(ctx context.Context, session *Session, p
 // buildArgs constructs the CLI arguments for a Codex invocation.
 // Uses "codex exec" for non-interactive execution.
 // sessionID is non-empty when resuming an existing session.
+//
+// TODO: Codex CLI currently only supports "resume --last" which resumes the
+// most recent session, not a specific session ID. This can be unreliable when
+// multiple sessions are active simultaneously.
 func (a *CodexAdapter) buildArgs(sessionID, prompt string) []string {
 	args := []string{"exec"}
 	if sessionID != "" {
+		_ = sessionID // reserved for future use when Codex CLI supports targeting a specific session
 		args = append(args, "resume", "--last")
 	}
 	args = append(args, "--dangerously-bypass-approvals-and-sandbox", prompt)
