@@ -45,7 +45,7 @@ func runHistory(cmd *cobra.Command, args []string) error {
 		return runHistoryCleanup(cmd, args, store, cfgMgr)
 	}
 
-	var records []history.Record
+	var dbRecords []history.Record
 
 	if len(args) > 0 {
 		// Look up repo by name to get ID
@@ -57,18 +57,18 @@ func runHistory(cmd *cobra.Command, args []string) error {
 		if !ok {
 			return fmt.Errorf("repository %q not found", args[0])
 		}
-		records, err = store.ByRepo(r.ID, historyLimit)
+		dbRecords, err = store.ByRepo(r.ID, historyLimit)
 	} else {
-		records, err = store.Recent(historyLimit)
+		dbRecords, err = store.Recent(historyLimit)
 	}
 	if err != nil {
 		return fmt.Errorf("query history: %w", err)
 	}
 
 	if isJSON() {
-		result := make([]types.SyncHistoryRecord, 0, len(records))
-		for _, r := range records {
-			result = append(result, types.SyncHistoryRecord{
+		records := make([]types.SyncHistoryRecord, 0, len(dbRecords))
+		for _, r := range dbRecords {
+			records = append(records, types.SyncHistoryRecord{
 				ID:             r.ID,
 				RepoID:         r.RepoID,
 				RepoName:       r.RepoName,
@@ -84,15 +84,15 @@ func runHistory(cmd *cobra.Command, args []string) error {
 				CreatedAt:      r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			})
 		}
-		outputJSON(types.HistoryData{Records: result}, nil)
+		outputJSON(types.HistoryData{Records: records}, nil)
 	} else {
-		if len(records) == 0 {
+		if len(dbRecords) == 0 {
 			outputText("No sync history found.")
 			return nil
 		}
-		for _, r := range records {
+		for _, rec := range dbRecords {
 			icon := "✅"
-			switch r.Status {
+			switch rec.Status {
 			case string(types.RepoStatusConflict):
 				icon = "⚠️"
 			case string(types.RepoStatusError):
@@ -100,21 +100,21 @@ func runHistory(cmd *cobra.Command, args []string) error {
 			case string(types.RepoStatusUpToDate):
 				icon = "—"
 			}
-			outputText("%s %s  %s  (%d commits)", icon, r.CreatedAt.Format("2006-01-02 15:04"), r.RepoName, r.CommitsPulled)
-			if r.ErrorMessage != "" {
-				outputText("   Error: %s", r.ErrorMessage)
+			outputText("%s %s  %s  (%d commits)", icon, rec.CreatedAt.Format("2006-01-02 15:04"), rec.RepoName, rec.CommitsPulled)
+			if rec.ErrorMessage != "" {
+				outputText("   Error: %s", rec.ErrorMessage)
 			}
-			if len(r.ConflictFiles) > 0 {
-				outputText("   Conflicts: %d files", len(r.ConflictFiles))
+			if len(rec.ConflictFiles) > 0 {
+				outputText("   Conflicts: %d files", len(rec.ConflictFiles))
 			}
-			if r.AgentUsed != "" {
-				outputText("   Agent: %s (resolved %d)", r.AgentUsed, r.AutoResolved)
+			if rec.AgentUsed != "" {
+				outputText("   Agent: %s (resolved %d)", rec.AgentUsed, rec.AutoResolved)
 			}
-			if r.Summary != "" {
-				outputText("   📝 %s", r.Summary)
-			} else if r.SummaryStatus == string(types.SummaryStatusGenerating) {
+			if rec.Summary != "" {
+				outputText("   📝 %s", rec.Summary)
+			} else if rec.SummaryStatus == string(types.SummaryStatusGenerating) {
 				outputText("   🤖 AI summary generating...")
-			} else if r.SummaryStatus == string(types.SummaryStatusFailed) {
+			} else if rec.SummaryStatus == string(types.SummaryStatusFailed) {
 				outputText("   ❌ AI summary generation failed")
 			}
 		}

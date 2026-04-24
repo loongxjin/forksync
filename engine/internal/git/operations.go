@@ -337,11 +337,11 @@ func (o *Operations) GetFileContent(ctx context.Context, repoPath, ref, filePath
 // GetConflictedContent reads the current conflicted content of a file.
 func (o *Operations) GetConflictedContent(_ context.Context, repoPath, filePath string) (string, error) {
 	fullPath := filepath.Join(repoPath, filePath)
-	data, err := os.ReadFile(fullPath)
+	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		return "", fmt.Errorf("read conflicted file: %w", err)
 	}
-	return string(data), nil
+	return string(content), nil
 }
 
 // IsMergingState checks if the repository has an in-progress merge (unmerged files).

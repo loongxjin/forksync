@@ -67,9 +67,9 @@ func runScan(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 
-		result := processScannedRepo(cmd.Context(), path, gitOps, ghClient)
-		if result != nil {
-			scannedRepos = append(scannedRepos, *result)
+		scanned := processScannedRepo(cmd.Context(), path, gitOps, ghClient)
+		if scanned != nil {
+			scannedRepos = append(scannedRepos, *scanned)
 		}
 
 		// Don't recurse into .git subdirectories

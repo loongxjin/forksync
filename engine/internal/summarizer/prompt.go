@@ -5,6 +5,12 @@ import (
 	"strings"
 )
 
+const (
+	defaultSummaryMinSentences = 3
+	defaultSummaryMaxSentences = 5
+	shortHashLength            = 8
+)
+
 // CommitInfo represents a single git commit for summarization.
 type CommitInfo struct {
 	Hash    string
@@ -16,14 +22,16 @@ type CommitInfo struct {
 func BuildPrompt(commits []CommitInfo, lang string) string {
 	var sb strings.Builder
 
+	sentenceRange := fmt.Sprintf("%d-%d", defaultSummaryMinSentences, defaultSummaryMaxSentences)
+
 	if lang == "zh" {
-		sb.WriteString("请根据以下 git commits 列表，生成一段简洁的同步内容总结（3-5句话）。\n")
+		sb.WriteString(fmt.Sprintf("请根据以下 git commits 列表，生成一段简洁的同步内容总结（%s句话）。\n", sentenceRange))
 		sb.WriteString("总结要点：\n")
 		sb.WriteString("- 添加了什么新功能\n")
 		sb.WriteString("- 修复了什么问题\n")
 		sb.WriteString("- 有哪些重要的变更\n\n")
 	} else {
-		sb.WriteString("Based on the following git commits, generate a concise summary of the sync changes (3-5 sentences).\n")
+		sb.WriteString(fmt.Sprintf("Based on the following git commits, generate a concise summary of the sync changes (%s sentences).\n", sentenceRange))
 		sb.WriteString("Focus on:\n")
 		sb.WriteString("- What new features were added\n")
 		sb.WriteString("- What bugs were fixed\n")
@@ -44,10 +52,10 @@ func BuildPrompt(commits []CommitInfo, lang string) string {
 	return sb.String()
 }
 
-// shortHash returns the first 8 characters of a git hash.
+// shortHash returns the first shortHashLength characters of a git hash.
 func shortHash(hash string) string {
-	if len(hash) > 8 {
-		return hash[:8]
+	if len(hash) > shortHashLength {
+		return hash[:shortHashLength]
 	}
 	return hash
 }

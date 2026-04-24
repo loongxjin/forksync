@@ -68,7 +68,7 @@ func (a *ClaudeAdapter) ResolveConflicts(ctx context.Context, session *Session, 
 	return &AgentResult{
 		Success:   true,
 		SessionID: session.ID,
-		Summary:   truncateOutput(result.Text, 500),
+		Summary:   truncateOutput(result.Text, maxSummaryLength),
 	}, nil
 }
 

@@ -73,7 +73,7 @@ func generateSummary(
 	}
 
 	// Determine language from config (default zh)
-	lang := "zh"
+	lang := types.DefaultSummaryLanguage
 	if cfg != nil && cfg.Sync.SummaryLanguage != "" {
 		lang = cfg.Sync.SummaryLanguage
 	}

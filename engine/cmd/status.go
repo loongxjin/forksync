@@ -3,7 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"sync"
+	stdsync "sync"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/git"
@@ -44,8 +44,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Update ahead/behind for each repo concurrently and refresh stale conflict statuses
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 8)
+	var wg stdsync.WaitGroup
+	sem := make(chan struct{}, types.DefaultMaxConcurrency)
 	for i := range repos {
 		if repos[i].Status == types.RepoStatusSyncing {
 			continue

@@ -37,6 +37,9 @@ var (
 const (
 	// defaultResolveTimeout is the fallback agent resolution timeout.
 	defaultResolveTimeout = 10 * time.Minute
+
+	// defaultDiffPreviewMaxLines is the maximum number of diff lines shown to the user.
+	defaultDiffPreviewMaxLines = 100
 )
 
 var resolveCmd = &cobra.Command{
@@ -343,15 +346,15 @@ func showResolutionDiff(r types.Repo, diff string, result *agent.AgentResult, pr
 	if diff != "" {
 		outputText("Diff:")
 		lines := strings.Split(diff, "\n")
-		maxLines := 100
+		maxLines := defaultDiffPreviewMaxLines
 		if len(lines) < maxLines {
 			maxLines = len(lines)
 		}
 		for i := 0; i < maxLines; i++ {
 			outputText("  %s", lines[i])
 		}
-		if len(lines) > 100 {
-			outputText("  ... (%d more lines)", len(lines)-100)
+		if len(lines) > defaultDiffPreviewMaxLines {
+			outputText("  ... (%d more lines)", len(lines)-defaultDiffPreviewMaxLines)
 		}
 	}
 	outputText("")

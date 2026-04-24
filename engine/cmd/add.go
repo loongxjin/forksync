@@ -71,7 +71,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		logger.Warn("add: failed to get status", "repo", repoPath, "error", err)
 	}
-	branch := "main"
+	branch := types.DefaultBranch
 	if statusResult != nil && statusResult.Branch != "" {
 		branch = statusResult.Branch
 	}

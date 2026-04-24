@@ -25,8 +25,6 @@ import (
 const (
 	defaultTimeout         = 5 * time.Minute
 	postSyncCommandTimeout = 60 * time.Second
-	defaultBranch          = "main"
-	defaultMaxConcurrency  = 8
 )
 
 // Syncer handles repository synchronization.
@@ -136,7 +134,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		}
 	}
 	if branch == "" {
-		branch = defaultBranch
+	branch = types.DefaultBranch
 	}
 	upstreamRef := fmt.Sprintf("%s/%s", remoteName, r.GetRemoteBranchForLocal(branch))
 
@@ -468,7 +466,7 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 
 	results := make([]*Result, len(targetRepos))
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, defaultMaxConcurrency) // limit concurrency to avoid overwhelming network/disk
+	sem := make(chan struct{}, types.DefaultMaxConcurrency) // limit concurrency to avoid overwhelming network/disk
 
 	for i, r := range targetRepos {
 		wg.Add(1)

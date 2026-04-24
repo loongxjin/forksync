@@ -37,6 +37,11 @@ var agentCleanupCmd = &cobra.Command{
 	RunE:  runAgentCleanup,
 }
 
+const (
+	// maxSessionIDDisplayLength is the maximum number of characters shown for a session ID.
+	maxSessionIDDisplayLength = 16
+)
+
 func init() {
 	rootCmd.AddCommand(agentCmd)
 	agentCmd.AddCommand(agentListCmd)
@@ -136,8 +141,8 @@ func runAgentSessions(cmd *cobra.Command, args []string) error {
 				statusIcon = "❌"
 			}
 			sid := s.ID
-			if len(sid) > 16 {
-				sid = sid[:16]
+			if len(sid) > maxSessionIDDisplayLength {
+				sid = sid[:maxSessionIDDisplayLength]
 			}
 			outputText("  %s %s (%s)", statusIcon, sid, s.AgentName)
 			outputText("     Repo: %s", s.RepoID)

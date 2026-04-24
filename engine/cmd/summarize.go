@@ -112,7 +112,7 @@ func resolveUpstreamRef(ctx context.Context, r types.Repo) string {
 		}
 	}
 	if branch == "" {
-		branch = "main"
+		branch = types.DefaultBranch
 	}
 	return fmt.Sprintf("%s/%s", remoteName, r.GetRemoteBranchForLocal(branch))
 }
