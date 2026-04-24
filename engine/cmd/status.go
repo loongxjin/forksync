@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	stdsync "sync"
+	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/git"
@@ -23,7 +24,15 @@ func init() {
 	rootCmd.AddCommand(statusCmd)
 }
 
+// statusTimeout is the per-repo timeout for status operations (fetch + rev-list).
+// 30 seconds is generous for a single repo; the overall command may take longer
+// when there are many repos, but each individual operation is bounded.
+const statusTimeout = 30 * time.Second
+
 func runStatus(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithTimeout(cmd.Context(), statusTimeout)
+	defer cancel()
+
 	cfg, cfgMgr := getSharedConfig()
 
 	store := repo.NewJSONStore(cfgMgr.ConfigDir())
@@ -55,7 +64,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		go func(idx int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			refreshRepoStatus(cmd.Context(), repos, idx, gitOps, store)
+			refreshRepoStatus(ctx, repos, idx, gitOps, store)
 		}(i)
 	}
 	wg.Wait()

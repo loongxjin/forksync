@@ -26,8 +26,11 @@ import type {
   ConfigSetData
 } from '../renderer/src/types/engine'
 
-/** Default timeout for engine commands (10 minutes — agent resolve can be slow) */
-const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
+/** Default timeout for quick commands (status, config, history, etc.) */
+const DEFAULT_TIMEOUT_MS = 30 * 1000
+
+/** Timeout for long-running commands (sync, resolve with AI agents) */
+const LONG_TIMEOUT_MS = 10 * 60 * 1000
 
 /** Post-sync command — mirrors Go PostSyncCommand */
 export interface PostSyncCommand {
@@ -70,12 +73,12 @@ export class EngineClient {
 
   /** `forksync sync --all --json` */
   async syncAll(): Promise<ApiResponse<SyncData>> {
-    return this.exec<SyncData>(['sync', '--all'])
+    return this.exec<SyncData>(['sync', '--all'], LONG_TIMEOUT_MS)
   }
 
   /** `forksync sync <name> --json` */
   async syncRepo(name: string): Promise<ApiResponse<SyncData>> {
-    return this.exec<SyncData>(['sync', name])
+    return this.exec<SyncData>(['sync', name], LONG_TIMEOUT_MS)
   }
 
   /** `forksync scan <dir> --json` */
@@ -111,17 +114,17 @@ export class EngineClient {
     if (opts?.noConfirm) {
       args.push('--no-confirm')
     }
-    return this.exec<ResolveData>(args)
+    return this.exec<ResolveData>(args, LONG_TIMEOUT_MS)
   }
 
   /** `forksync resolve <name> --accept --json` */
   async resolveAccept(name: string): Promise<ApiResponse<AcceptData>> {
-    return this.exec<AcceptData>(['resolve', name, '--accept'])
+    return this.exec<AcceptData>(['resolve', name, '--accept'], LONG_TIMEOUT_MS)
   }
 
   /** `forksync resolve <name> --reject --json` */
   async resolveReject(name: string): Promise<ApiResponse<RejectData>> {
-    return this.exec<RejectData>(['resolve', name, '--reject'])
+    return this.exec<RejectData>(['resolve', name, '--reject'], LONG_TIMEOUT_MS)
   }
 
   /** `forksync agent list --json` */
@@ -190,12 +193,12 @@ export class EngineClient {
 
   /** `forksync summarize <repo-name> --json` */
   async summarize(repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> {
-    return this.exec<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName])
+    return this.exec<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName], LONG_TIMEOUT_MS)
   }
 
   /** `forksync summarize <repo-name> --retry --json` */
   async summarizeRetry(repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> {
-    return this.exec<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName, '--retry'])
+    return this.exec<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName, '--retry'], LONG_TIMEOUT_MS)
   }
 
   // -----------------------------------------------------------------------
@@ -205,17 +208,16 @@ export class EngineClient {
   /**
    * Execute a CLI command and parse the JSON response.
    */
-  private async exec<T>(args: string[]): Promise<ApiResponse<T>> {
-    return this.execRaw<T>(args)
+  private async exec<T>(args: string[], timeout: number = DEFAULT_TIMEOUT_MS): Promise<ApiResponse<T>> {
+    return this.execRaw<T>(args, timeout)
   }
 
   /**
    * Low-level exec: spawn the Go binary, collect stdout, parse JSON.
    */
-  private execRaw<T>(args: string[]): Promise<ApiResponse<T>> {
+  private execRaw<T>(args: string[], timeout: number): Promise<ApiResponse<T>> {
     return new Promise((resolve, reject) => {
       const fullArgs = this.buildArgs(args)
-      const timeout = DEFAULT_TIMEOUT_MS
 
       const child: ChildProcess = spawn(this.binaryPath, fullArgs, {
         cwd: app.isPackaged ? undefined : this.engineDir,

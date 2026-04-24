@@ -173,7 +173,7 @@ func (o *Operations) Status(ctx context.Context, repo types.Repo) (*StatusResult
 	return o.statusCLI(ctx, repo)
 }
 
-func (o *Operations) statusGoGit(_ context.Context, repo types.Repo) (*StatusResult, error) {
+func (o *Operations) statusGoGit(ctx context.Context, repo types.Repo) (*StatusResult, error) {
 	r, err := git.PlainOpen(repo.Path)
 	if err != nil {
 		return nil, fmt.Errorf("open repo: %w", err)
@@ -193,7 +193,7 @@ func (o *Operations) statusGoGit(_ context.Context, repo types.Repo) (*StatusRes
 		return &StatusResult{AheadBy: 0, BehindBy: 0, Branch: branch}, nil
 	}
 
-	ahead, behind, err := o.countDivergence(repo.Path, head.Hash().String(), remoteRef.Hash().String())
+	ahead, behind, err := o.countDivergence(ctx, repo.Path, head.Hash().String(), remoteRef.Hash().String())
 	if err != nil {
 		return nil, err
 	}
@@ -201,8 +201,8 @@ func (o *Operations) statusGoGit(_ context.Context, repo types.Repo) (*StatusRes
 	return &StatusResult{AheadBy: ahead, BehindBy: behind, Branch: branch}, nil
 }
 
-func (o *Operations) countDivergence(repoPath, local, remote string) (ahead, behind int, err error) {
-	output, err := o.runGit(context.Background(), repoPath,
+func (o *Operations) countDivergence(ctx context.Context, repoPath, local, remote string) (ahead, behind int, err error) {
+	output, err := o.runGit(ctx, repoPath,
 		"rev-list", "--left-right", "--count", local+"..."+remote)
 	if err != nil {
 		return 0, 0, fmt.Errorf("count divergence: %w", err)
