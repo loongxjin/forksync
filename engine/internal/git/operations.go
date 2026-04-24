@@ -592,23 +592,27 @@ func (o *Operations) StageAll(ctx context.Context, repoPath string) error {
 	return err
 }
 
-// Commit creates a new commit with the given message.
-func (o *Operations) Commit(ctx context.Context, repoPath, message string, noVerify bool) error {
-	args := []string{"commit", "-m", message}
-	if noVerify {
-		args = append(args, "--no-verify")
-	}
-	_, err := o.runGitCombined(ctx, repoPath, args...)
+// Commit creates a new commit with the given message, skipping pre-commit hooks.
+func (o *Operations) Commit(ctx context.Context, repoPath, message string) error {
+	_, err := o.runGitCombined(ctx, repoPath, "commit", "-m", message, "--no-verify")
 	return err
 }
 
-// CommitNoEdit creates a commit using the default merge message.
-func (o *Operations) CommitNoEdit(ctx context.Context, repoPath string, noVerify bool) error {
-	args := []string{"commit", "--no-edit"}
-	if noVerify {
-		args = append(args, "--no-verify")
-	}
-	_, err := o.runGitCombined(ctx, repoPath, args...)
+// CommitWithVerify creates a new commit with the given message, without --no-verify.
+func (o *Operations) CommitWithVerify(ctx context.Context, repoPath, message string) error {
+	_, err := o.runGitCombined(ctx, repoPath, "commit", "-m", message)
+	return err
+}
+
+// CommitNoEdit creates a commit using the default merge message, skipping pre-commit hooks.
+func (o *Operations) CommitNoEdit(ctx context.Context, repoPath string) error {
+	_, err := o.runGitCombined(ctx, repoPath, "commit", "--no-edit", "--no-verify")
+	return err
+}
+
+// CommitNoEditWithVerify creates a commit using the default merge message, without --no-verify.
+func (o *Operations) CommitNoEditWithVerify(ctx context.Context, repoPath string) error {
+	_, err := o.runGitCombined(ctx, repoPath, "commit", "--no-edit")
 	return err
 }
 

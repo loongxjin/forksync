@@ -42,6 +42,23 @@ const (
 	defaultDiffPreviewMaxLines = 100
 )
 
+// resolveContext groups parameters that always appear together during agent resolution.
+type resolveContext struct {
+	repo   types.Repo
+	store  repo.Store
+	cfg    *config.Config
+	cfgMgr *config.Manager
+}
+
+// conflictResolution groups parameters for conflict resolution handlers.
+type conflictResolution struct {
+	repo         types.Repo
+	store        repo.Store
+	agentResult  *agent.AgentResult
+	provider     agent.AgentProvider
+	resolvedFlag *atomic.Bool
+}
+
 var resolveCmd = &cobra.Command{
 	Use:   "resolve <repo-name>",
 	Short: "Resolve conflicts using an AI agent",
@@ -131,16 +148,11 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	timeout := resolveTimeout(cfg)
 
 	// Determine resolve sub-strategy for the agent prompt
-	resolveStrategy := types.ResolveStrategyPreserveOurs
-	if cfg != nil && cfg.Agent.ResolveStrategy != "" {
-		resolveStrategy = cfg.Agent.ResolveStrategy
-	}
+	resolveStrategy := resolveStrategyOrDefault(cfg)
 
 	// Update repo status to resolving
 	r.Status = types.RepoStatusResolving
-	if updateErr := store.Update(r); updateErr != nil {
-		logger.Error("resolve: failed to update repo to resolving", "repo", r.Name, "error", updateErr)
-	}
+	updateRepoWithLog(r, store, "resolving")
 
 	// resolved tracks whether the agent finished successfully.
 	// Used by the defer guard and signal handler to decide whether
@@ -154,9 +166,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		if !resolved.Load() {
 			r.Status = types.RepoStatusConflict
 			r.ErrorMessage = "agent process exited unexpectedly, conflict resolution incomplete"
-			if updateErr := store.Update(r); updateErr != nil {
-				logger.Error("resolve: failed to roll back repo", "repo", r.Name, "error", updateErr)
-			}
+			updateRepoWithLog(r, store, "defer-rollback")
 		}
 	}()
 
@@ -170,9 +180,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		if _, ok := <-sigCh; ok && !resolved.Load() {
 			repo.Status = types.RepoStatusConflict
 			repo.ErrorMessage = "agent process was terminated, conflict resolution incomplete"
-			if updateErr := store.Update(repo); updateErr != nil {
-				logger.Error("resolve: failed to roll back repo on signal", "repo", repo.Name, "error", updateErr)
-			}
+			updateRepoWithLog(repo, store, "signal-rollback")
 		}
 	}(r)
 
@@ -186,16 +194,14 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		resolved.Store(true) // agent finished (with error) — we handle the status
 		r.Status = types.RepoStatusConflict
 		r.ErrorMessage = fmt.Sprintf("agent resolve failed: %v", err)
-		if updateErr := store.Update(r); updateErr != nil {
-			logger.Error("resolve: failed to update repo after agent error", "repo", r.Name, "error", updateErr)
-		}
+		updateRepoWithLog(r, store, "agent-error")
 		return fmt.Errorf("agent resolve: %w", err)
 	}
 
 	// Verify: check for remaining conflict markers
 	trulyUnresolved := verifyAgentResolution(ctx, r, conflict.DetectConflicts(ctx, r.Path))
 	if len(trulyUnresolved) > 0 {
-		return handleUnresolvedConflicts(r, store, trulyUnresolved, result, provider, &resolved)
+		return handleUnresolvedConflicts(conflictResolution{repo: r, store: store, agentResult: result, provider: provider, resolvedFlag: &resolved}, trulyUnresolved)
 	}
 
 	// Get diff for user confirmation
@@ -210,9 +216,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	resolved.Store(true)
 	r.Status = types.RepoStatusResolved
 	r.ErrorMessage = ""
-	if updateErr := store.Update(r); updateErr != nil {
-		logger.Error("resolve: failed to update repo to resolved", "repo", r.Name, "error", updateErr)
-	}
+	updateRepoWithLog(r, store, "resolved")
 
 	// Auto-confirm or wait for user
 	confirmBeforeCommit := true
@@ -221,7 +225,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	}
 
 	if resolveNoConfirm || !confirmBeforeCommit {
-		return completeAgentResolve(ctx, cmd, r, store, result, cfg, cfgMgr)
+		return completeAgentResolve(ctx, cmd, resolveContext{repo: r, store: store, cfg: cfg, cfgMgr: cfgMgr}, result)
 	}
 
 	// Show diff and wait for confirmation
@@ -294,36 +298,34 @@ func verifyAgentResolution(ctx context.Context, r types.Repo, remaining []string
 
 // handleUnresolvedConflicts updates repo status and outputs the result when
 // the agent could not resolve all conflicts.
-func handleUnresolvedConflicts(r types.Repo, store repo.Store, trulyUnresolved []string, result *agent.AgentResult, provider agent.AgentProvider, resolved *atomic.Bool) error {
-	resolved.Store(true)
-	r.Status = types.RepoStatusConflict
-	r.ErrorMessage = fmt.Sprintf("agent left %d unresolved conflicts: %s", len(trulyUnresolved), strings.Join(trulyUnresolved, ", "))
-	if updateErr := store.Update(r); updateErr != nil {
-		logger.Error("resolve: failed to update repo after unresolved conflicts", "repo", r.Name, "error", updateErr)
-	}
+func handleUnresolvedConflicts(cr conflictResolution, trulyUnresolved []string) error {
+	cr.resolvedFlag.Store(true)
+	cr.repo.Status = types.RepoStatusConflict
+	cr.repo.ErrorMessage = fmt.Sprintf("agent left %d unresolved conflicts: %s", len(trulyUnresolved), strings.Join(trulyUnresolved, ", "))
+	updateRepoWithLog(cr.repo, cr.store, "unresolved-conflicts")
 
 	logger.Warn("resolve: agent left unresolved conflicts",
-		"repo", r.Name,
+		"repo", cr.repo.Name,
 		"remaining", trulyUnresolved,
-		"agent", provider.Name(),
-		"summary", result.Summary,
-		"resolved_files", result.ResolvedFiles,
+		"agent", cr.provider.Name(),
+		"summary", cr.agentResult.Summary,
+		"resolved_files", cr.agentResult.ResolvedFiles,
 	)
 
 	if isJSON() {
 		outputJSON(types.ResolveData{
-			RepoID:      r.ID,
+			RepoID:      cr.repo.ID,
 			Conflicts:   toConflictFiles(trulyUnresolved),
-			AgentResult: agentResultToTypes(result),
+			AgentResult: agentResultToTypes(cr.agentResult),
 		}, fmt.Errorf("agent did not resolve all conflicts"))
 	} else {
 		outputText("⚠️  Agent could not resolve all conflicts (%d remaining)", len(trulyUnresolved))
 		outputText("   Unresolved: %s", strings.Join(trulyUnresolved, ", "))
-		if len(result.ResolvedFiles) > 0 {
-			outputText("   Resolved: %s", strings.Join(result.ResolvedFiles, ", "))
+		if len(cr.agentResult.ResolvedFiles) > 0 {
+			outputText("   Resolved: %s", strings.Join(cr.agentResult.ResolvedFiles, ", "))
 		}
-		if result.Summary != "" {
-			outputText("   Agent summary: %s", result.Summary)
+		if cr.agentResult.Summary != "" {
+			outputText("   Agent summary: %s", cr.agentResult.Summary)
 		}
 	}
 	return nil
@@ -362,36 +364,30 @@ func showResolutionDiff(r types.Repo, diff string, result *agent.AgentResult, pr
 }
 
 // completeAgentResolve stages files and completes the merge.
-func completeAgentResolve(ctx context.Context, cmd *cobra.Command, r types.Repo, store repo.Store, result *agent.AgentResult, cfg *config.Config, cfgMgr *config.Manager) error {
+func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveContext, result *agent.AgentResult) error {
 	// Stage all resolved files
 	gitOps := git.NewOperations()
 	for _, f := range result.ResolvedFiles {
-		if err := gitOps.StageFile(ctx, r.Path, f); err != nil {
+		if err := gitOps.StageFile(ctx, rc.repo.Path, f); err != nil {
 			return fmt.Errorf("git add %s: %w", f, err)
 		}
 	}
 
 	// Commit — skip pre-commit hooks since this is an automated merge commit
 	commitMsg := "Merge upstream (agent-resolved conflicts)"
-	if err := gitOps.Commit(ctx, r.Path, commitMsg, true); err != nil {
+	if err := gitOps.Commit(ctx, rc.repo.Path, commitMsg); err != nil {
 		return fmt.Errorf("git commit: %w", err)
 	}
 
 	// Update status
-	r.Status = types.RepoStatusUpToDate
-	r.ErrorMessage = ""
-	if updateErr := store.Update(r); updateErr != nil {
-		logger.Error("resolve: failed to update repo after complete", "repo", r.Name, "error", updateErr)
-	}
+	rc.repo.Status = types.RepoStatusUpToDate
+	rc.repo.ErrorMessage = ""
+	updateRepoWithLog(rc.repo, rc.store, "complete")
 
 	// Update existing conflict history record to "up_to_date"
-	updateResolveHistoryStatus(r, cfg, cfgMgr)
+	updateResolveHistoryStatus(rc.repo, rc.cfg, rc.cfgMgr)
 
-	if isJSON() {
-		outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
-	} else {
-		outputText("✅ Merge completed for %s (agent-resolved)", r.Name)
-	}
+	outputResult(types.AcceptData{RepoID: rc.repo.ID, Resolved: true}, "✅ Merge completed for %s (agent-resolved)", rc.repo.Name)
 	return nil
 }
 
@@ -418,15 +414,9 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error 
 
 	r.Status = types.RepoStatusConflict
 	r.ErrorMessage = ""
-	if updateErr := store.Update(r); updateErr != nil {
-		logger.Error("resolve: failed to update repo after reject", "repo", r.Name, "error", updateErr)
-	}
+	updateRepoWithLog(r, store, "reject")
 
-	if isJSON() {
-		outputJSON(types.RejectData{RepoID: r.ID, RolledBack: true}, nil)
-	} else {
-		outputText("🔄 Rolled back merge for %s", r.Name)
-	}
+	outputResult(types.RejectData{RepoID: r.ID, RolledBack: true}, "🔄 Rolled back merge for %s", r.Name)
 	return nil
 }
 
@@ -454,15 +444,9 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 	if _, err := os.Stat(mergeHead); err != nil {
 		r.Status = types.RepoStatusUpToDate
 		r.ErrorMessage = ""
-		if updateErr := store.Update(r); updateErr != nil {
-			logger.Error("resolve: failed to update repo after accept (no merge)", "repo", r.Name, "error", updateErr)
-		}
+		updateRepoWithLog(r, store, "accept-no-merge")
 
-		if isJSON() {
-			outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
-		} else {
-			outputText("✅ No merge in progress. Status updated.")
-		}
+		outputResult(types.AcceptData{RepoID: r.ID, Resolved: true}, "✅ No merge in progress. Status updated.")
 		return nil
 	}
 
@@ -473,26 +457,20 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 	}
 
 	// Complete the merge.
-	if err := gitOps.CommitNoEdit(cmd.Context(), r.Path, true); err != nil {
-		if err := gitOps.Commit(cmd.Context(), r.Path, "Merge upstream changes (agent-resolved conflicts)", true); err != nil {
+	if err := gitOps.CommitNoEdit(cmd.Context(), r.Path); err != nil {
+		if err := gitOps.Commit(cmd.Context(), r.Path, "Merge upstream changes (agent-resolved conflicts)"); err != nil {
 			return fmt.Errorf("git commit: %w", err)
 		}
 	}
 
 	r.Status = types.RepoStatusUpToDate
 	r.ErrorMessage = ""
-	if updateErr := store.Update(r); updateErr != nil {
-		logger.Error("resolve: failed to update repo after accept", "repo", r.Name, "error", updateErr)
-	}
+	updateRepoWithLog(r, store, "accept")
 
 	// Update existing conflict history record to "synced"
 	updateResolveHistoryStatus(r, cfg, cfgMgr)
 
-	if isJSON() {
-		outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
-	} else {
-		outputText("✅ Merge completed for %s", r.Name)
-	}
+	outputResult(types.AcceptData{RepoID: r.ID, Resolved: true}, "✅ Merge completed for %s", r.Name)
 	return nil
 }
 
@@ -545,5 +523,29 @@ func updateResolveHistoryStatus(r types.Repo, cfg *config.Config, cfgMgr *config
 		if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusPending)); updateErr != nil {
 			logger.Error("[resolve-accept] update summary status", "error", updateErr)
 		}
+	}
+}
+
+// resolveStrategyOrDefault returns the resolve strategy from config, or the default.
+func resolveStrategyOrDefault(cfg *config.Config) string {
+	if cfg != nil && cfg.Agent.ResolveStrategy != "" {
+		return cfg.Agent.ResolveStrategy
+	}
+	return types.ResolveStrategyPreserveOurs
+}
+
+// updateRepoWithLog updates the repo in the store and logs any error.
+func updateRepoWithLog(r types.Repo, store repo.Store, action string) {
+	if updateErr := store.Update(r); updateErr != nil {
+		logger.Error("resolve: failed to update repo", "repo", r.Name, "action", action, "error", updateErr)
+	}
+}
+
+// outputResult outputs data either as JSON or text depending on the output mode.
+func outputResult(data any, textFormat string, textArgs ...any) {
+	if isJSON() {
+		outputJSON(data, nil)
+	} else {
+		outputText(textFormat, textArgs...)
 	}
 }

@@ -37,7 +37,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 
 	// Set up notifier if enabled in config
 	if cfg != nil && cfg.Notification.Enabled {
-		syncer.SetNotifier(notify.NewNotifier(true))
+		syncer.SetNotifier(notify.New())
 	}
 
 	// Set up history store

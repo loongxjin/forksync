@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/conflict"
@@ -329,19 +330,12 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	}
 
 	// Create or reuse a session for this repo
-	_, err := s.sessionMgr.GetOrCreate(ctx, r.ID, r.Path)
-	if err != nil {
+	if _, err := s.sessionMgr.GetOrCreate(ctx, r.ID, r.Path); err != nil {
 		return false, nil
 	}
 
 	// Determine resolve sub-strategy for the agent prompt
-	resolveStrategy := ""
-	if s.cfg != nil {
-		resolveStrategy = s.cfg.Agent.ResolveStrategy
-	}
-	if resolveStrategy == "" {
-		resolveStrategy = types.ResolveStrategyPreserveOurs
-	}
+	resolveStrategy := s.resolveStrategyOrDefault()
 
 	// Resolve conflicts via agent
 	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy)
@@ -362,7 +356,50 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		return false, nil
 	}
 
-	// Verify no conflict markers remain in resolved files
+	// Verify no conflict markers remain and stage resolved files
+	if !s.verifyAndStageResolvedFiles(ctx, r, result) {
+		return false, nil
+	}
+
+	// Check staged changes (log but don't fail — whitespace issues are non-critical)
+	if checkErr := s.gitOps.CheckStaged(ctx, r.Path); checkErr != nil {
+		logger.Debug("sync: staged changes check found issues", "repo", r.Name, "error", checkErr)
+	}
+
+	// Check if auto-confirm is enabled
+	autoConfirm := true
+	if s.cfg != nil {
+		autoConfirm = !s.cfg.Agent.ConfirmBeforeCommit
+	}
+
+	if !autoConfirm {
+		return s.buildPendingInfo(ctx, r, result)
+	}
+
+	// Complete the merge with a commit
+	commitMsg := fmt.Sprintf("Merge upstream (auto-resolved by %s)", s.sessionMgr.ProviderName())
+	if err := s.gitOps.Commit(ctx, r.Path, commitMsg); err != nil {
+		logger.Warn("sync: failed to commit resolved conflicts",
+			"repo", r.Name,
+			"agent", s.sessionMgr.ProviderName(),
+			"error", err,
+		)
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// resolveStrategyOrDefault returns the resolve strategy from config, or the default.
+func (s *Syncer) resolveStrategyOrDefault() string {
+	if s.cfg != nil && s.cfg.Agent.ResolveStrategy != "" {
+		return s.cfg.Agent.ResolveStrategy
+	}
+	return types.ResolveStrategyPreserveOurs
+}
+
+// verifyAndStageResolvedFiles checks that resolved files have no conflict markers and stages them.
+func (s *Syncer) verifyAndStageResolvedFiles(ctx context.Context, r types.Repo, result *agent.AgentResult) bool {
 	var stillConflicted []string
 	for _, file := range result.ResolvedFiles {
 		content, err := s.gitOps.GetConflictedContent(ctx, r.Path, file)
@@ -380,10 +417,9 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 			"files", stillConflicted,
 			"summary", result.Summary,
 		)
-		return false, nil
+		return false
 	}
 
-	// Stage resolved files
 	for _, file := range result.ResolvedFiles {
 		if err := s.gitOps.StageFile(ctx, r.Path, file); err != nil {
 			logger.Warn("sync: failed to stage resolved file",
@@ -391,59 +427,36 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 				"file", file,
 				"error", err,
 			)
-			return false, nil
+			return false
+		}
+	}
+	return true
+}
+
+// buildPendingInfo creates a pendingInfo for user confirmation flow.
+func (s *Syncer) buildPendingInfo(ctx context.Context, r types.Repo, result *agent.AgentResult) (bool, *pendingInfo) {
+	logger.Info("sync: agent resolved conflicts, awaiting user confirmation",
+		"repo", r.Name,
+		"agent", s.sessionMgr.ProviderName(),
+		"files", result.ResolvedFiles,
+	)
+
+	diffBytes, diffErr := s.gitOps.DiffStaged(ctx, r.Path)
+	diff := ""
+	if diffErr == nil {
+		diff = string(diffBytes)
+		const maxDiffSize = 100 * 1024 // 100KB limit
+		if len(diff) > maxDiffSize {
+			diff = diff[:maxDiffSize] + "\n\n... (diff truncated)"
 		}
 	}
 
-	// Check staged changes
-	if checkErr := s.gitOps.CheckStaged(ctx, r.Path); checkErr != nil {
-		// Log but don't fail — whitespace issues are non-critical
-		logger.Debug("sync: staged changes check found issues", "repo", r.Name, "error", checkErr)
+	return false, &pendingInfo{
+		Files:   result.ResolvedFiles,
+		Diff:    diff,
+		Summary: result.Summary,
+		Agent:   s.sessionMgr.ProviderName(),
 	}
-
-	// Check if auto-confirm is enabled
-	autoConfirm := true
-	if s.cfg != nil {
-		autoConfirm = !s.cfg.Agent.ConfirmBeforeCommit
-	}
-
-	if !autoConfirm {
-		// Agent resolved successfully but user wants to confirm — stop before commit
-		logger.Info("sync: agent resolved conflicts, awaiting user confirmation",
-			"repo", r.Name,
-			"agent", s.sessionMgr.ProviderName(),
-			"files", result.ResolvedFiles,
-		)
-		// Get staged diff for user review
-		diffBytes, diffErr := s.gitOps.DiffStaged(ctx, r.Path)
-		diff := ""
-		if diffErr == nil {
-			diff = string(diffBytes)
-			const maxDiffSize = 100 * 1024 // 100KB limit
-			if len(diff) > maxDiffSize {
-				diff = diff[:maxDiffSize] + "\n\n... (diff truncated)"
-			}
-		}
-		return false, &pendingInfo{
-			Files:   result.ResolvedFiles,
-			Diff:    diff,
-			Summary: result.Summary,
-			Agent:   s.sessionMgr.ProviderName(),
-		}
-	}
-
-	// Complete the merge with a commit
-	commitMsg := fmt.Sprintf("Merge upstream (auto-resolved by %s)", s.sessionMgr.ProviderName())
-	if err := s.gitOps.Commit(ctx, r.Path, commitMsg, true); err != nil {
-		logger.Warn("sync: failed to commit resolved conflicts",
-			"repo", r.Name,
-			"agent", s.sessionMgr.ProviderName(),
-			"error", err,
-		)
-		return false, nil
-	}
-
-	return true, nil
 }
 
 // SyncAll syncs all managed repositories.

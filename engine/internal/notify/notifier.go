@@ -19,6 +19,16 @@ func NewNotifier(enabled bool) *Notifier {
 	return &Notifier{enabled: enabled}
 }
 
+// New creates an enabled Notifier.
+func New() *Notifier {
+	return &Notifier{enabled: true}
+}
+
+// Disabled creates a disabled Notifier that suppresses all notifications.
+func Disabled() *Notifier {
+	return &Notifier{enabled: false}
+}
+
 // NotifySyncSuccess sends a notification for a successful sync.
 func (n *Notifier) NotifySyncSuccess(repoName string, commitsPulled int) {
 	if !n.enabled {

@@ -310,12 +310,12 @@ func TestNotifyResult_Synced(t *testing.T) {
 }
 
 func TestNotifyResult_SyncedZeroCommits(t *testing.T) {
-	s := &Syncer{notifier: notify.NewNotifier(false)}
+	s := &Syncer{notifier: notify.Disabled()}
 	s.notifyResult("my-repo", &Result{Status: "up_to_date", CommitsPulled: 0})
 }
 
 func TestNotifyResult_Conflict(t *testing.T) {
-	s := &Syncer{notifier: notify.NewNotifier(false)}
+	s := &Syncer{notifier: notify.Disabled()}
 	s.notifyResult("my-repo", &Result{
 		Status:        "conflict",
 		ConflictFiles: []string{"a.go", "b.go"},
@@ -323,7 +323,7 @@ func TestNotifyResult_Conflict(t *testing.T) {
 }
 
 func TestNotifyResult_Error(t *testing.T) {
-	s := &Syncer{notifier: notify.NewNotifier(false)}
+	s := &Syncer{notifier: notify.Disabled()}
 	s.notifyResult("my-repo", &Result{
 		Status:       "error",
 		ErrorMessage: "fetch failed",
@@ -331,7 +331,7 @@ func TestNotifyResult_Error(t *testing.T) {
 }
 
 func TestNotifyResult_UnknownStatus(t *testing.T) {
-	s := &Syncer{notifier: notify.NewNotifier(false)}
+	s := &Syncer{notifier: notify.Disabled()}
 	// Unknown status — none of the notifier methods should be called.
 	s.notifyResult("my-repo", &Result{Status: "unknown"})
 }
@@ -397,7 +397,7 @@ func TestSetNotifier(t *testing.T) {
 	if s.notifier != nil {
 		t.Error("expected nil notifier initially")
 	}
-	n := notify.NewNotifier(true)
+	n := notify.New()
 	s.SetNotifier(n)
 	if s.notifier != n {
 		t.Error("SetNotifier did not set the notifier")
