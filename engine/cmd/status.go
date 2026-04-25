@@ -97,11 +97,30 @@ func runStatus(cmd *cobra.Command, args []string) error {
 func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps *git.Operations, store repo.Store) {
 	r := repos[idx]
 
-	// For repos in conflict/resolving/resolved state, re-check the actual
+	// For repos already in conflict/resolving/resolved state, re-check the actual
 	// git merge state. If the user has manually resolved and committed,
 	// the stored status is stale and should be corrected.
 	if isConflictState(r.Status) {
 		reconcileConflictStatus(ctx, repos, idx, gitOps, store)
+	}
+
+	// Proactively detect merge conflicts on disk regardless of stored status.
+	// A repo may have MERGE_HEAD from external operations (e.g. manual git merge)
+	// that were never tracked by forksync.
+	if !isConflictState(repos[idx].Status) {
+		isMerging, unmergedFiles, err := gitOps.IsMergingState(ctx, r.Path)
+		if err == nil && isMerging {
+			if len(unmergedFiles) > 0 {
+				repos[idx].Status = types.RepoStatusConflict
+				repos[idx].ErrorMessage = "repository has unresolved merge conflicts"
+				safeUpdateRepo(store, repos[idx], r.Name)
+				return
+			}
+			// MERGE_HEAD exists but all files resolved → resolved state
+			repos[idx].Status = types.RepoStatusResolved
+			safeUpdateRepo(store, repos[idx], r.Name)
+			return
+		}
 	}
 
 	// Fetch latest refs before calculating ahead/behind
