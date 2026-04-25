@@ -116,7 +116,8 @@ func runResolve(cmd *cobra.Command, args []string) error {
 	}
 
 	// Detect conflict files
-	conflictPaths := conflict.DetectConflicts(cmd.Context(), r.Path)
+	gitOps := git.NewOperations()
+	conflictPaths := gitOps.DetectConflicts(cmd.Context(), r.Path)
 	if len(conflictPaths) == 0 {
 		if isJSON() {
 			outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
@@ -199,7 +200,8 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	}
 
 	// Verify: check for remaining conflict markers
-	trulyUnresolved := verifyAgentResolution(ctx, r, conflict.DetectConflicts(ctx, r.Path))
+	gitOps := git.NewOperations()
+	trulyUnresolved := verifyAgentResolution(ctx, r, gitOps.DetectConflicts(ctx, r.Path))
 	if len(trulyUnresolved) > 0 {
 		return handleUnresolvedConflicts(conflictResolution{repo: r, store: store, agentResult: result, provider: provider, resolvedFlag: &resolved}, trulyUnresolved)
 	}
@@ -422,7 +424,7 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error 
 
 // runResolveAccept checks for remaining conflicts and completes the merge.
 func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, cfgMgr *config.Manager) error {
-	remaining := conflict.DetectConflicts(cmd.Context(), r.Path)
+	remaining := git.NewOperations().DetectConflicts(cmd.Context(), r.Path)
 
 	if len(remaining) > 0 {
 		if isJSON() {
@@ -528,10 +530,7 @@ func updateResolveHistoryStatus(r types.Repo, cfg *config.Config, cfgMgr *config
 
 // resolveStrategyOrDefault returns the resolve strategy from config, or the default.
 func resolveStrategyOrDefault(cfg *config.Config) string {
-	if cfg != nil && cfg.Agent.ResolveStrategy != "" {
-		return cfg.Agent.ResolveStrategy
-	}
-	return types.ResolveStrategyPreserveOurs
+	return config.ResolveStrategyOrDefault(cfg)
 }
 
 // updateRepoWithLog updates the repo in the store and logs any error.

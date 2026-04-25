@@ -254,6 +254,14 @@ func (m *Manager) Get(key string) (interface{}, error) {
 
 // Set updates a single config key using dot-notation and saves the full config.
 // For "[]string" type keys, value should be a JSON-encoded string array like `["a","b"]`.
+// ResolveStrategyOrDefault returns the resolve strategy from config, or the default.
+func ResolveStrategyOrDefault(cfg *Config) string {
+	if cfg != nil && cfg.Agent.ResolveStrategy != "" {
+		return cfg.Agent.ResolveStrategy
+	}
+	return types.ResolveStrategyPreserveOurs
+}
+
 func (m *Manager) Set(key string, value string) error {
 	keyType, ok := validConfigKeys[key]
 	if !ok {

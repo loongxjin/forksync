@@ -20,6 +20,9 @@ import (
 // querying timestamps in the sync_history table.
 const sqliteTimeFormat = "2006-01-02 15:04:05"
 
+// sqliteBusyTimeoutMs is the SQLite busy timeout in milliseconds.
+const sqliteBusyTimeoutMs = 5000
+
 // Record represents a single sync history entry.
 type Record struct {
 	ID             int64     `json:"id"`
@@ -52,7 +55,7 @@ func NewStore(configDir string) (*Store, error) {
 	}
 
 	dbPath := filepath.Join(dbDir, "forksync.db")
-	db, err := sql.Open("sqlite", dbPath+"?_busy_timeout=5000&_journal_mode=WAL")
+	db, err := sql.Open("sqlite", dbPath+fmt.Sprintf("?_busy_timeout=%d&_journal_mode=WAL", sqliteBusyTimeoutMs))
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}

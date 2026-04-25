@@ -8,11 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	sched "github.com/loongxjin/forksync/engine/internal/scheduler"
-	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
 	"github.com/spf13/cobra"
 )
 
@@ -56,20 +54,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load repo store: %w", err)
 	}
 
-	// Create syncer with config
-	syncer := syncpkg.NewSyncerFromConfig(cfg, store)
-
-	// Set up history store
-	histStore, err := history.NewStore(cfgMgr.ConfigDir())
-	if err == nil {
-		syncer.SetHistoryStore(histStore)
-		defer histStore.Close()
-	}
-
-	// Set up agent session manager for auto conflict resolution
-	if mgr := newSessionManager(cfg, cfgMgr); mgr != nil {
-		syncer.SetSessionManager(mgr)
-	}
+	// Create syncer with all dependencies
+	syncer, _, cleanup := setupSyncer(cfg, cfgMgr)
+	defer cleanup()
 
 	// Create and start scheduler (nil notifier — notifications handled by Electron layer)
 	scheduler := sched.NewScheduler(syncer, nil, cfg)

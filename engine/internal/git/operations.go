@@ -292,7 +292,7 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 
 	if err != nil {
 		if strings.Contains(outputStr, "CONFLICT") {
-			conflicts := o.detectConflicts(ctx, repo.Path)
+			conflicts := o.DetectConflicts(ctx, repo.Path)
 			// Filter out files that have been manually resolved but not yet staged.
 			// Auto-stage them so they don't appear as unresolved conflicts.
 			stillConflicted := o.FilterResolvedFiles(ctx, repo.Path, conflicts)
@@ -309,7 +309,8 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 	return &MergeResult{HasConflicts: false}, nil
 }
 
-func (o *Operations) detectConflicts(ctx context.Context, repoPath string) []string {
+// DetectConflicts runs git diff to find files with unresolved conflicts.
+func (o *Operations) DetectConflicts(ctx context.Context, repoPath string) []string {
 	output, err := o.runGit(ctx, repoPath, "diff", "--name-only", "--diff-filter=U")
 	if err != nil {
 		return nil
@@ -356,7 +357,7 @@ func (o *Operations) IsMergingState(ctx context.Context, repoPath string) (bool,
 	}
 
 	// MERGE_HEAD exists — check for unmerged files
-	unmergedFiles := o.detectConflicts(ctx, repoPath)
+	unmergedFiles := o.DetectConflicts(ctx, repoPath)
 	if len(unmergedFiles) == 0 {
 		return true, nil, nil
 	}
@@ -456,6 +457,20 @@ func (o *Operations) getRemotesCLI(ctx context.Context, repoPath string) ([]Remo
 		}
 	}
 	return result, nil
+}
+
+// FindRemoteURL returns the URL of the specified remote, or empty string if not found.
+func (o *Operations) FindRemoteURL(ctx context.Context, repoPath, remoteName string) string {
+	remotes, err := o.GetRemotes(ctx, repoPath)
+	if err != nil {
+		return ""
+	}
+	for _, r := range remotes {
+		if r.Name == remoteName {
+			return r.URL
+		}
+	}
+	return ""
 }
 
 // GetLocalBranches returns a list of local branch names

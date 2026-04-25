@@ -135,7 +135,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		}
 	}
 	if branch == "" {
-	branch = types.DefaultBranch
+		branch = types.DefaultBranch
 	}
 	upstreamRef := fmt.Sprintf("%s/%s", remoteName, r.GetRemoteBranchForLocal(branch))
 
@@ -146,7 +146,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		UpstreamRef: upstreamRef,
 	}
 
-	// Check if already syncing
+	// Concurrency guard: mark repo as active
 	s.mu.Lock()
 	if s.active[r.ID] {
 		s.mu.Unlock()
@@ -163,6 +163,19 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	}()
 	s.mu.Unlock()
 
+	// Phase 1: Pre-checks (conflict state detection)
+	if stopped := s.checkConflictState(ctx, r, result); stopped {
+		return result
+	}
+
+	// Phase 2: Execute the actual sync (fetch → status → merge → post-sync)
+	return s.executeSync(ctx, r, result)
+}
+
+// checkConflictState checks whether the repo is in a conflict or merge state
+// that should block syncing.
+// Returns true if the sync should be aborted (result is already populated).
+func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *Result) bool {
 	// Check if repo is already in a conflict/merge state before proceeding.
 	// This is a pre-check guard, NOT an actual sync attempt — so we skip
 	// recording history to avoid polluting the sync log.
@@ -177,7 +190,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 			s.updateRepoStatus(r.ID, types.RepoStatusResolved, "")
 			s.notifyResult(r.Name, result)
 			s.logResult(result)
-			return result
+			return true
 		}
 		result.Status = string(types.RepoStatusConflict)
 		result.ConflictFiles = unmergedFiles
@@ -187,7 +200,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		s.notifyResult(r.Name, result)
 		// DO NOT call finalizeResult — this is not a real sync, don't pollute history
 		s.logResult(result)
-		return result
+		return true
 	}
 
 	// Also check if stored status indicates a conflict state that hasn't been resolved
@@ -196,9 +209,14 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		result.ErrorMessage = fmt.Sprintf("repository is in %s state, please resolve conflicts before syncing", r.Status)
 		// DO NOT call finalizeResult — this is not a real sync, don't pollute history
 		s.logResult(result)
-		return result
+		return true
 	}
 
+	return false
+}
+
+// executeSync performs the actual sync: fetch → status check → merge → post-sync commands.
+func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) *Result {
 	// Set timeout
 	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()
@@ -392,10 +410,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 
 // resolveStrategyOrDefault returns the resolve strategy from config, or the default.
 func (s *Syncer) resolveStrategyOrDefault() string {
-	if s.cfg != nil && s.cfg.Agent.ResolveStrategy != "" {
-		return s.cfg.Agent.ResolveStrategy
-	}
-	return types.ResolveStrategyPreserveOurs
+	return config.ResolveStrategyOrDefault(s.cfg)
 }
 
 // verifyAndStageResolvedFiles checks that resolved files have no conflict markers and stages them.

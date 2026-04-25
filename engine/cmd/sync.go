@@ -3,11 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
-	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
-	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -33,25 +30,8 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load repo store: %w", err)
 	}
 
-	syncer := syncpkg.NewSyncerFromConfig(cfg, store)
-
-	// Set up notifier if enabled in config
-	if cfg != nil && cfg.Notification.Enabled {
-		syncer.SetNotifier(notify.New())
-	}
-
-	// Set up history store
-	histStore, err := history.NewStore(cfgMgr.ConfigDir())
-	if err == nil {
-		syncer.SetHistoryStore(histStore)
-		defer histStore.Close()
-	}
-
-	// Set up agent session manager for auto conflict resolution
-	if mgr := newSessionManager(cfg, cfgMgr); mgr != nil {
-		syncer.SetSessionManager(mgr)
-	}
-
+	syncer, _, cleanup := setupSyncerWithNotifier(cfg, cfgMgr)
+	defer cleanup()
 	defer logger.Close()
 
 	syncResults := make([]types.SyncResult, 0)

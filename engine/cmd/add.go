@@ -48,17 +48,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get origin URL
-	remotes, err := gitOps.GetRemotes(cmd.Context(), repoPath)
-	if err != nil {
-		logger.Warn("add: failed to get remotes", "repo", repoPath, "error", err)
-	}
-	originURL := ""
-	for _, r := range remotes {
-		if r.Name == "origin" {
-			originURL = r.URL
-			break
-		}
-	}
+	originURL := gitOps.FindRemoteURL(cmd.Context(), repoPath, "origin")
 
 	// Auto-detect upstream if not provided
 	resolvedUpstream := upstreamURL
