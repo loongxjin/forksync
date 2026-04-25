@@ -55,7 +55,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create syncer with all dependencies
-	syncer, _, cleanup := setupSyncer(cfg, cfgMgr)
+	syncer, cleanup := setupSyncer(cfg, cfgMgr, store)
 	defer cleanup()
 
 	// Create and start scheduler (nil notifier — notifications handled by Electron layer)

@@ -30,7 +30,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load repo store: %w", err)
 	}
 
-	syncer, _, cleanup := setupSyncerWithNotifier(cfg, cfgMgr)
+	syncer, cleanup := setupSyncerWithNotifier(cfg, cfgMgr, store)
 	defer cleanup()
 	defer logger.Close()
 
