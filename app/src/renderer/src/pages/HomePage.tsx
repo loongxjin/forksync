@@ -5,7 +5,7 @@ import { useRepos } from '@/contexts/RepoContext'
 import { useAgents } from '@/contexts/AgentContext'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useHistory } from '@/contexts/HistoryContext'
-import { StatusOverviewBar, type FilterStatus } from '@/components/StatusOverviewBar'
+import { StatusOverviewBar, type FilterStatus, CONFLICT_FAMILY } from '@/components/StatusOverviewBar'
 import { RepoRow } from '@/components/RepoRow'
 import { ConflictInlinePanel } from '@/components/ConflictInlinePanel'
 import { RepoDetailPanel } from '@/components/RepoDetailPanel'
@@ -160,8 +160,9 @@ export function HomePage(): JSX.Element {
   // Filtered repos
   const filteredRepos = useMemo(() => {
     if (!filterStatus) return repos
-    if (filterStatus === 'up_to_date') {
-      return repos.filter((r) => r.status === 'up_to_date')
+    if (filterStatus === 'conflict') {
+      // Conflict filter includes all conflict-family statuses
+      return repos.filter((r) => (CONFLICT_FAMILY as string[]).includes(r.status))
     }
     return repos.filter((r) => r.status === filterStatus)
   }, [repos, filterStatus])

@@ -19,6 +19,9 @@ interface StatusItem {
   icon: React.ReactNode
 }
 
+// Conflict-family statuses are grouped under the "conflict" bar item.
+export const CONFLICT_FAMILY: RepoStatus[] = ['conflict', 'resolving', 'resolved']
+
 const STATUS_ITEMS: StatusItem[] = [
   {
     key: 'up_to_date',
@@ -61,6 +64,10 @@ export function StatusOverviewBar({ counts, activeFilter, onFilterChange }: Stat
   const { t } = useTranslation()
 
   const getCount = (key: RepoStatus): number => {
+    if (key === 'conflict') {
+      // Sum up all conflict-family statuses (conflict + resolving + resolved)
+      return CONFLICT_FAMILY.reduce((sum, s) => sum + (counts[s] ?? 0), 0)
+    }
     return counts[key] ?? 0
   }
 
