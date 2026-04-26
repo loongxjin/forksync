@@ -2,6 +2,8 @@
   "name": "forksync",
   "version": "0.2.0",
   "description": "Auto-sync fork repos with AI agent conflict resolution",
+  "homepage": "https://github.com/loongxjin/forksync",
+  "author": "ForkSync Team <forksync@gmail.com>",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

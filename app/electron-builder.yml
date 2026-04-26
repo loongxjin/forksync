@@ -13,7 +13,6 @@ mac:
   category: public.app-category.developer-tools
   target:
     - target: dmg
-    - target: zip
   icon: resources/icon.icns
   # Uncomment for code signing (set CSC_LINK and CSC_KEY_PASSWORD env vars)
   # hardenedRuntime: true
@@ -23,10 +22,9 @@ linux:
   target:
     - target: AppImage
     - target: deb
-    - target: rpm
   category: Development
   icon: resources/icon.png
-  maintainer: ForkSync Team
+  maintainer: ForkSync Team <forksync@gmail.com>
 win:
   target:
     - target: nsis

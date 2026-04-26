@@ -94,7 +94,9 @@ jobs:
         with:
           files: |
             app/dist/*.dmg
+            app/dist/*.zip
             app/dist/*.AppImage
+            app/dist/*.deb
             app/dist/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
