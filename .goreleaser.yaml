@@ -65,6 +65,9 @@ changelog:
     - title: Others
       order: 999
 
+release:
+  draft: true
+
 # Uncomment to enable Homebrew tap
 # brews:
 #   - repository:
