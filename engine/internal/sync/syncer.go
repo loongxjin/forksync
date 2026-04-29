@@ -220,8 +220,13 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 
 // executeSync performs the actual sync: fetch → status check → merge → post-sync commands.
 func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) *Result {
-	// Set timeout
-	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	// Set timeout — use agent timeout if auto-resolve is configured,
+	// otherwise the default 5 minutes may SIGKILL long-running agents.
+	timeout := defaultTimeout
+	if s.shouldUseAgentResolve(r) {
+		timeout = agentResolveTimeout(s.cfg)
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Update status to syncing
@@ -426,6 +431,26 @@ func (s *Syncer) resolveStrategyOrDefault() string {
 	return config.ResolveStrategyOrDefault(s.cfg)
 }
 
+// shouldUseAgentResolve checks whether agent auto-resolve is configured for the repo.
+func (s *Syncer) shouldUseAgentResolve(r types.Repo) bool {
+	strategy := r.ConflictStrategy
+	if strategy == "" && s.cfg != nil {
+		strategy = s.cfg.Agent.ConflictStrategy
+	}
+	return strategy == types.StrategyAgentResolve
+}
+
+// agentResolveTimeout returns the timeout for agent conflict resolution.
+// Falls back to 10 minutes if no config is available.
+func agentResolveTimeout(cfg *config.Config) time.Duration {
+	if cfg != nil && cfg.Agent.Timeout != "" {
+		if d, err := time.ParseDuration(cfg.Agent.Timeout); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 10 * time.Minute
+}
+
 // verifyAndStageResolvedFiles checks that resolved files have no conflict markers and stages them.
 func (s *Syncer) verifyAndStageResolvedFiles(ctx context.Context, r types.Repo, result *agent.AgentResult) bool {
 	var stillConflicted []string
@@ -515,7 +540,11 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 		go func(idx int, repo types.Repo) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			repoCtx, cancel := context.WithTimeout(ctx, defaultTimeout)
+			timeout := defaultTimeout
+			if s.shouldUseAgentResolve(repo) {
+				timeout = agentResolveTimeout(s.cfg)
+			}
+			repoCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 			results[idx] = s.SyncRepo(repoCtx, repo)
 		}(i, r)
