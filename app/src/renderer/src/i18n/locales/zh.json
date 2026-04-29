@@ -211,8 +211,10 @@
       "sessionTTL": "会话有效期",
       "sessionTTLPlaceholder": "如：24h",
       "sessions": "会话（{{count}}）",
-      "cleanupExpired": "🧹 清理过期会话",
-      "noSessions": "暂无活跃会话。"
+    "cleanupExpired": "🧹 清理过期会话",
+    "resetSession": "删除会话",
+    "resetConfirm": "确认删除仓库 \"{{repoId}}\" 的 Agent 会话？",
+    "noSessions": "暂无活跃会话。"
     }
   },
   "ide": {

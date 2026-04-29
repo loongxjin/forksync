@@ -37,6 +37,17 @@ var agentCleanupCmd = &cobra.Command{
 	RunE:  runAgentCleanup,
 }
 
+var agentResetCmd = &cobra.Command{
+	Use:   "reset <repo-name>",
+	Short: "Remove agent session for a specific repo",
+	Long: `Delete the agent session record for a given repository.
+
+This is similar to "agent cleanup" but targets a single repo.
+Useful when a session is stuck or no longer needed.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runAgentReset,
+}
+
 const (
 	// maxSessionIDDisplayLength is the maximum number of characters shown for a session ID.
 	maxSessionIDDisplayLength = 16
@@ -47,7 +58,10 @@ func init() {
 	agentCmd.AddCommand(agentListCmd)
 	agentCmd.AddCommand(agentSessionsCmd)
 	agentCmd.AddCommand(agentCleanupCmd)
+	agentCmd.AddCommand(agentResetCmd)
 }
+
+
 
 func runAgentList(cmd *cobra.Command, args []string) error {
 	registry := agent.NewRegistry("") // empty preferred → auto-discover
@@ -170,6 +184,36 @@ func runAgentCleanup(cmd *cobra.Command, args []string) error {
 		}, nil)
 	} else {
 		outputText("Cleaned up %d expired/failed session(s).", count)
+	}
+
+	return nil
+}
+
+func runAgentReset(cmd *cobra.Command, args []string) error {
+	_, cfgMgr := getSharedConfig()
+
+	sessionDir := filepath.Join(cfgMgr.ConfigDir(), "sessions")
+	sessionStore := session.NewSessionStore(sessionDir)
+	mgr := session.NewManager(sessionStore, nil)
+
+	// Use repo name as the session key (same as session file name)
+	repoID := args[0]
+	cleared, err := mgr.ResetSession(cmd.Context(), repoID)
+	if err != nil {
+		return fmt.Errorf("reset session: %w", err)
+	}
+
+	if isJSON() {
+		outputJSON(types.AgentResetData{
+			RepoID:   repoID,
+			Cleared:  cleared,
+		}, nil)
+	} else {
+		if cleared {
+			outputText("🧹 Agent session removed for %s", repoID)
+		} else {
+			outputText("No agent session found for %s", repoID)
+		}
 	}
 
 	return nil

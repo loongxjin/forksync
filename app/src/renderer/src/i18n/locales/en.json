@@ -211,8 +211,10 @@
       "sessionTTL": "Session TTL",
       "sessionTTLPlaceholder": "e.g. 24h",
       "sessions": "Sessions ({{count}})",
-      "cleanupExpired": "🧹 Cleanup Expired",
-      "noSessions": "No active sessions."
+    "cleanupExpired": "🧹 Cleanup Expired",
+    "resetSession": "Remove Session",
+    "resetConfirm": "Remove agent session for \"{{repoId}}\"?",
+    "noSessions": "No active sessions."
     }
   },
   "ide": {

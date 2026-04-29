@@ -390,6 +390,13 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		autoConfirm = !s.cfg.Agent.ConfirmBeforeCommit
 	}
 
+	logger.Info("sync: auto-confirm check",
+		"repo", r.Name,
+		"autoConfirm", autoConfirm,
+		"confirmBeforeCommit", s.cfg.Agent.ConfirmBeforeCommit,
+		"cfg_nil", s.cfg == nil,
+	)
+
 	if !autoConfirm {
 		return s.buildPendingInfo(ctx, r, result)
 	}

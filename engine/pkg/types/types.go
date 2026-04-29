@@ -272,6 +272,12 @@ type AgentSessionsData struct {
 	Sessions []AgentSessionInfo `json:"sessions"`
 }
 
+// AgentResetData agent reset 响应
+type AgentResetData struct {
+	RepoID  string `json:"repoId"`
+	Cleared bool   `json:"cleared"`
+}
+
 // HistoryData history 响应
 type HistoryData struct {
 	Records []SyncHistoryRecord `json:"records"`

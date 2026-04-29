@@ -211,6 +211,12 @@ export interface AgentSessionsData {
   sessions: AgentSessionInfo[]
 }
 
+/** `forksync agent reset <name>` → ApiResponse<AgentResetData> */
+export interface AgentResetData {
+  repoId: string
+  cleared: boolean
+}
+
 /** `forksync history` → ApiResponse<HistoryData> */
 export interface HistoryData {
   records: SyncHistoryRecord[]
@@ -320,6 +326,7 @@ export type EngineChannel =
   | 'engine:agentList'
   | 'engine:agentSessions'
   | 'engine:agentCleanup'
+  | 'engine:agentReset'
   | 'engine:history'
 
 /** EngineClient method parameter types */

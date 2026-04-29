@@ -226,6 +226,13 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		confirmBeforeCommit = cfg.Agent.ConfirmBeforeCommit
 	}
 
+	logger.Info("resolve: auto-confirm check",
+		"repo", r.Name,
+		"resolveNoConfirm", resolveNoConfirm,
+		"confirmBeforeCommit", confirmBeforeCommit,
+		"cfg_nil", cfg == nil,
+	)
+
 	if resolveNoConfirm || !confirmBeforeCommit {
 		return completeAgentResolve(ctx, cmd, resolveContext{repo: r, store: store, cfg: cfg, cfgMgr: cfgMgr}, result)
 	}

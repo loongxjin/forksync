@@ -10,7 +10,7 @@ import {
   useRef,
   type ReactNode
 } from 'react'
-import type { AgentInfo, AgentSessionInfo, ResolveData, AcceptData } from '@/types/engine'
+import type { AgentInfo, AgentSessionInfo, ResolveData, AcceptData, AgentResetData } from '@/types/engine'
 import { engineApi } from '@/lib/api'
 
 // ---------------------------------------------------------------------------
@@ -86,6 +86,7 @@ interface AgentContextValue extends AgentState {
   resolveAccept: (name: string) => Promise<AcceptData | null>
   resolveReject: (name: string) => Promise<boolean>
   cleanup: () => Promise<number>
+  resetSession: (name: string) => Promise<AgentResetData | null>
 }
 
 const AgentContext = createContext<AgentContextValue | null>(null)
@@ -199,6 +200,22 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
     }
   }, [refreshSessions])
 
+  const resetSession = useCallback(async (name: string): Promise<AgentResetData | null> => {
+    try {
+      const res = await engineApi.agentReset(name)
+      if (res.success) {
+        await refreshSessions()
+        return res.data
+      } else {
+        dispatch({ type: 'SET_ERROR', error: res.error })
+        return null
+      }
+    } catch (err) {
+      dispatch({ type: 'SET_ERROR', error: (err as Error).message })
+      return null
+    }
+  }, [refreshSessions])
+
   return (
     <AgentContext.Provider
       value={{
@@ -208,7 +225,8 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
         resolve,
         resolveAccept,
         resolveReject,
-        cleanup
+        cleanup,
+        resetSession
       }}
     >
       {children}

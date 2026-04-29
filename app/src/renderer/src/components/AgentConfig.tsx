@@ -3,7 +3,7 @@ import { useAgents } from '@/contexts/AgentContext'
 import { useSettings } from '@/contexts/SettingsContext'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { CheckCircle2, XCircle, Clock, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
@@ -55,7 +55,7 @@ const resolveStrategyOptions = [
 ]
 
 export function AgentConfig(): JSX.Element {
-  const { agents, sessions, refreshAgents, refreshSessions, cleanup } = useAgents()
+  const { agents, sessions, refreshAgents, refreshSessions, cleanup, resetSession } = useAgents()
   const { engineConfig, configLoading, updateConfig } = useSettings()
   const { t } = useTranslation()
 
@@ -65,6 +65,7 @@ export function AgentConfig(): JSX.Element {
   const [savingTimeout, setSavingTimeout] = useState(false)
   const [savingTTL, setSavingTTL] = useState(false)
   const [cleaning, setCleaning] = useState(false)
+  const [resettingId, setResettingId] = useState<string | null>(null)
   const [configSaving, setConfigSaving] = useState(false)
   const configSavingRef = useRef(false)
   const isEditingRef = useRef({ timeout: false, sessionTTL: false })
@@ -127,6 +128,16 @@ export function AgentConfig(): JSX.Element {
       await cleanup()
     } finally {
       setCleaning(false)
+    }
+  }
+
+  const handleReset = async (repoId: string): Promise<void> => {
+    if (!confirm(t('settings.agent.resetConfirm', { repoId }))) return
+    setResettingId(repoId)
+    try {
+      await resetSession(repoId)
+    } finally {
+      setResettingId(null)
     }
   }
 
@@ -356,7 +367,19 @@ export function AgentConfig(): JSX.Element {
                   <span className="font-medium">{s.agentName}</span>
                   <span className="text-muted-foreground">{s.repoId}</span>
                 </div>
-                <span className="text-muted-foreground">{s.status}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">{s.status}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleReset(s.repoId)}
+                    disabled={resettingId === s.repoId}
+                    title={t('settings.agent.resetSession')}
+                  >
+                    <Trash2 size={12} />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>

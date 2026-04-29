@@ -84,6 +84,10 @@ export function registerIpcHandlers(): void {
     return e.agentCleanup()
   })
 
+  ipcMain.handle('engine:agentReset', async (_event, name: string) => {
+    return e.agentReset(name)
+  })
+
   ipcMain.handle('engine:history', async (_event, repoName?: string, limit?: number) => {
     return e.history(repoName, limit)
   })

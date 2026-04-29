@@ -228,6 +228,27 @@ func (m *Manager) CloseAll(ctx context.Context) error {
 	return lastErr
 }
 
+// ResetSession forcibly removes a session for the given repository.
+// It deletes the in-memory cache and the persisted JSON file.
+func (m *Manager) ResetSession(_ context.Context, repoID string) (bool, error) {
+	m.mu.Lock()
+	_, hadActive := m.active[repoID]
+	delete(m.active, repoID)
+	m.mu.Unlock()
+
+	// Check if file exists on disk
+	_, diskErr := m.store.Load(repoID)
+	hadDisk := diskErr == nil
+
+	if hadDisk {
+		if err := m.store.Delete(repoID); err != nil {
+			return false, fmt.Errorf("delete session record: %w", err)
+		}
+	}
+
+	return hadActive || hadDisk, nil
+}
+
 // CleanupExpired removes expired and failed session records.
 func (m *Manager) CleanupExpired() (int, error) {
 	return m.store.CleanupExpired()

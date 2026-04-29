@@ -15,6 +15,7 @@ import type {
   AgentListData,
   AgentSessionsData,
   AgentCleanupData,
+  AgentResetData,
   HistoryData,
   BranchMapping,
   EngineConfig,
@@ -46,6 +47,8 @@ const api = {
     ipcRenderer.invoke('engine:agentSessions'),
   agentCleanup: (): Promise<ApiResponse<AgentCleanupData>> =>
     ipcRenderer.invoke('engine:agentCleanup'),
+  agentReset: (name: string): Promise<ApiResponse<AgentResetData>> =>
+    ipcRenderer.invoke('engine:agentReset', name),
   history: (repoName?: string, limit?: number): Promise<ApiResponse<HistoryData>> =>
     ipcRenderer.invoke('engine:history', repoName, limit),
   historyCleanup: (opts?: { repoName?: string; keepDays?: number }): Promise<ApiResponse<{ message: string }>> =>

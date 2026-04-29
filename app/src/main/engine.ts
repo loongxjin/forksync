@@ -21,6 +21,7 @@ import type {
   AgentListData,
   AgentSessionsData,
   AgentCleanupData,
+  AgentResetData,
   HistoryData,
   EngineConfig,
   ConfigSetData
@@ -144,6 +145,11 @@ export class EngineClient {
   /** `forksync agent cleanup --json` */
   async agentCleanup(): Promise<ApiResponse<AgentCleanupData>> {
     return this.exec<AgentCleanupData>(['agent', 'cleanup'])
+  }
+
+  /** `forksync agent reset <name> --json` */
+  async agentReset(name: string): Promise<ApiResponse<AgentResetData>> {
+    return this.exec<AgentResetData>(['agent', 'reset', name])
   }
 
   /** `forksync history [--limit N] [repo-name] --json` */

@@ -18,6 +18,7 @@ import type {
   AgentListData,
   AgentSessionsData,
   AgentCleanupData,
+  AgentResetData,
   HistoryData,
   BranchMapping,
   EngineConfig,
@@ -42,6 +43,7 @@ export interface EngineAPI {
   agentList(): Promise<ApiResponse<AgentListData>>
   agentSessions(): Promise<ApiResponse<AgentSessionsData>>
   agentCleanup(): Promise<ApiResponse<AgentCleanupData>>
+  agentReset(name: string): Promise<ApiResponse<AgentResetData>>
   history(repoName?: string, limit?: number): Promise<ApiResponse<HistoryData>>
   historyCleanup(opts?: { repoName?: string; keepDays?: number }): Promise<ApiResponse<{ message: string }>>
   /** Open a directory dialog and return selected paths. Returns {canceled, filePaths?, error?} */
