@@ -385,7 +385,20 @@ func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveCon
 	// Commit — skip pre-commit hooks since this is an automated merge commit
 	commitMsg := "Merge upstream (agent-resolved conflicts)"
 	if err := gitOps.Commit(ctx, rc.repo.Path, commitMsg); err != nil {
-		return fmt.Errorf("git commit: %w", err)
+		logger.Warn("resolve: commit failed after agent resolution, keeping resolved state for manual confirmation",
+			"repo", rc.repo.Name, "error", err)
+		if isJSON() {
+			outputJSON(types.ResolveData{
+				RepoID:      rc.repo.ID,
+				Conflicts:   []types.ConflictFile{},
+				AgentResult: agentResultToTypes(result),
+				CommitError: fmt.Sprintf("auto-commit failed: %v", err),
+			}, nil)
+		} else {
+			outputText("Agent resolved conflicts but commit failed: %v", err)
+			outputText("Please fix the issue and run 'forksync resolve %s --accept' to complete the merge.", rc.repo.Name)
+		}
+		return nil
 	}
 
 	// Update status

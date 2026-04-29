@@ -11,6 +11,7 @@ import type {
   AddData,
   RemoveData,
   ResolveData,
+  AcceptData,
   RejectData,
   AgentListData,
   AgentSessionsData,

@@ -106,6 +106,7 @@ export interface SyncResult {
   pendingConfirm?: string[]
   agentResult?: AgentResolveResult
   postSyncResults?: PostSyncResult[]
+  commitError?: string
 }
 
 /** Go ConflictFile — simplified conflict info (agent reads file contents) */
@@ -185,6 +186,7 @@ export interface ResolveData {
   repoId: string
   conflicts: ConflictFile[]
   agentResult?: AgentResolveResult
+  commitError?: string
 }
 
 /** `forksync resolve <name> --accept/--no-confirm` → ApiResponse<AcceptData> */

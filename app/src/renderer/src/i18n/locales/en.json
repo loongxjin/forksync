@@ -141,7 +141,9 @@
     "resolveWithAgent": "Resolve with Agent",
     "accept": "✓ Accept",
     "rejectRollback": "✗ Reject & Rollback",
-    "resolvingStatus": "Agent is resolving conflicts for {{repoName}}..."
+    "resolvingStatus": "Agent is resolving conflicts for {{repoName}}...",
+    "commitFailed": "Auto-commit failed",
+    "commitFailedHint": "You can click Accept to retry commit, or Reject & Rollback to abort the merge."
   },
   "settings": {
     "title": "Settings",

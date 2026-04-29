@@ -97,6 +97,20 @@ export function ConflictInlinePanel({
           </div>
         )}
 
+        {/* Commit failure warning */}
+        {resolveResult?.commitError && (
+          <div className="rounded-lg bg-error/10 border border-error/20 p-3 mb-3">
+            <p className="text-xs font-medium text-error flex items-center gap-1.5">
+              <AlertTriangle size={12} />
+              {t('resolvePanel.commitFailed')}
+            </p>
+            <p className="mt-1 text-xs text-error/80 font-mono break-all">{resolveResult.commitError}</p>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {t('resolvePanel.commitFailedHint')}
+            </p>
+          </div>
+        )}
+
         {/* Action buttons */}
         <div className="flex gap-2">
           {status === 'conflict' && (

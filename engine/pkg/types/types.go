@@ -157,6 +157,7 @@ type SyncResult struct {
 	PendingConfirm  []string            `json:"pendingConfirm,omitempty"`
 	PostSyncResults []PostSyncResult    `json:"postSyncResults,omitempty"`
 	AgentResult     *AgentResolveResult `json:"agentResult,omitempty"`
+	CommitError     string              `json:"commitError,omitempty"`
 }
 
 // PostSyncResult represents the result of running a single post-sync command.
@@ -246,6 +247,7 @@ type ResolveData struct {
 	RepoID      string              `json:"repoId"`
 	Conflicts   []ConflictFile      `json:"conflicts"`
 	AgentResult *AgentResolveResult `json:"agentResult,omitempty"`
+	CommitError string              `json:"commitError,omitempty"`
 }
 
 // AcceptData accept 响应 (--accept 或 --no-confirm 後)

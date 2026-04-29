@@ -141,7 +141,9 @@
     "resolveWithAgent": "使用 Agent 解决",
     "accept": "接受",
     "rejectRollback": "拒绝并回退",
-    "resolvingStatus": "Agent 正在为 {{repoName}} 解决冲突..."
+    "resolvingStatus": "Agent 正在为 {{repoName}} 解决冲突...",
+    "commitFailed": "自动提交失败",
+    "commitFailedHint": "您可以点击「接受」再次尝试提交，或点击「拒绝并回退」放弃本次合并。"
   },
   "settings": {
     "title": "设置",

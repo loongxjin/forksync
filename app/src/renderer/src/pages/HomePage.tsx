@@ -123,7 +123,8 @@ export function HomePage(): JSX.Element {
           next[sr.repoName] = {
             repoId: sr.repoId,
             conflicts: (sr.pendingConfirm ?? []).map((p) => ({ path: p })),
-            agentResult: sr.agentResult
+            agentResult: sr.agentResult,
+            commitError: sr.commitError
           }
         }
         return next

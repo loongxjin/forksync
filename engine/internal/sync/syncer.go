@@ -80,10 +80,11 @@ func (s *Syncer) SetSummarizer(sm *summarizer.Summarizer) {
 
 // pendingInfo holds agent resolution details when awaiting user confirmation.
 type pendingInfo struct {
-	Files   []string
-	Diff    string
-	Summary string
-	Agent   string
+	Files       []string
+	Diff        string
+	Summary     string
+	Agent       string
+	CommitError string
 }
 
 // Result contains the result of syncing a single repo.
@@ -104,6 +105,7 @@ type Result struct {
 	AgentResult     *types.AgentResolveResult // agent resolution result when pending confirmation
 	PostSyncResults []types.PostSyncResult
 	HistoryID       int64 // ID of the created history record
+	CommitError     string
 }
 
 // ToSyncResult converts Result to types.SyncResult for JSON output.
@@ -121,6 +123,7 @@ func (r *Result) ToSyncResult() types.SyncResult {
 		PendingConfirm:  r.PendingConfirm,
 		AgentResult:     r.AgentResult,
 		PostSyncResults: r.PostSyncResults,
+		CommitError:     r.CommitError,
 	}
 }
 
@@ -316,6 +319,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 			result.AgentUsed = pending.Agent
 			result.AutoResolved = len(pending.Files)
 			result.PendingConfirm = pending.Files
+			result.CommitError = pending.CommitError
 			result.AgentResult = &types.AgentResolveResult{
 				Success:       true,
 				ResolvedFiles: pending.Files,
@@ -404,12 +408,14 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	// Complete the merge with a commit
 	commitMsg := fmt.Sprintf("Merge upstream (auto-resolved by %s)", s.sessionMgr.ProviderName())
 	if err := s.gitOps.Commit(ctx, r.Path, commitMsg); err != nil {
-		logger.Warn("sync: failed to commit resolved conflicts",
+		logger.Warn("sync: auto-commit failed after agent resolution, falling back to confirmation",
 			"repo", r.Name,
 			"agent", s.sessionMgr.ProviderName(),
 			"error", err,
 		)
-		return false, nil
+		_, pending := s.buildPendingInfo(ctx, r, result)
+		pending.CommitError = fmt.Sprintf("auto-commit failed: %v", err)
+		return false, pending
 	}
 
 	return true, nil
