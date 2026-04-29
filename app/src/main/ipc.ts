@@ -25,8 +25,8 @@ function getEngine(): EngineClient {
 export function registerIpcHandlers(): void {
   const e = getEngine()
 
-  ipcMain.handle('engine:status', async () => {
-    return e.status()
+  ipcMain.handle('engine:status', async (_event, exclude?: string[]) => {
+    return e.status(exclude)
   })
 
   ipcMain.handle('engine:syncAll', async () => {

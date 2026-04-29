@@ -27,7 +27,7 @@ import type {
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '@/types/ide'
 
 export interface EngineAPI {
-  status(): Promise<ApiResponse<StatusData>>
+  status(exclude?: string[]): Promise<ApiResponse<StatusData>>
   syncAll(): Promise<ApiResponse<SyncData>>
   syncRepo(name: string): Promise<ApiResponse<SyncData>>
   scan(dir: string): Promise<ApiResponse<ScanData>>

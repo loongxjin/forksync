@@ -24,7 +24,7 @@ import type { IDEInfo, IDEConfig, IDEOpenResult } from '../renderer/src/types/id
 import type { PostSyncCommand } from './engine'
 
 const api = {
-  status: (): Promise<ApiResponse<StatusData>> => ipcRenderer.invoke('engine:status'),
+  status: (exclude?: string[]): Promise<ApiResponse<StatusData>> => ipcRenderer.invoke('engine:status', exclude),
   syncAll: (): Promise<ApiResponse<SyncData>> => ipcRenderer.invoke('engine:syncAll'),
   syncRepo: (name: string): Promise<ApiResponse<SyncData>> =>
     ipcRenderer.invoke('engine:syncRepo', name),

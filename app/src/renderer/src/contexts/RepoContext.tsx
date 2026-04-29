@@ -142,7 +142,13 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     refreshingRef.current = true
     dispatch({ type: 'SET_LOADING', loading: true })
     try {
-      const res = await engineApi.status()
+      // Exclude repos that are currently being resolved by an agent.
+      // The backend will skip them so their 'resolving' status is preserved.
+      const resolvingRepos = state.repos
+        .filter((r) => r.status === 'resolving')
+        .map((r) => r.name)
+      const exclude = resolvingRepos.length > 0 ? resolvingRepos : undefined
+      const res = await engineApi.status(exclude)
       if (res.success) {
         dispatch({ type: 'SET_REPOS', repos: res.data.repos ?? [] })
       } else {
@@ -153,7 +159,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     } finally {
       refreshingRef.current = false
     }
-  }, [])
+  }, [state.repos])
 
   const syncAll = useCallback(async () => {
     // Prevent concurrent syncAll

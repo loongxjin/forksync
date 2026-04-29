@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var statusExclude []string
+
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show status of all managed repositories",
@@ -22,6 +24,7 @@ var statusCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(statusCmd)
+	statusCmd.Flags().StringSliceVar(&statusExclude, "exclude", nil, "comma-separated repo names to skip (e.g. --exclude repo1,repo2)")
 }
 
 // statusTimeout is the per-repo timeout for status operations (fetch + rev-list).
@@ -52,11 +55,20 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		gitOps = git.NewOperations()
 	}
 
+	// Build exclude set for quick lookup
+	excludeSet := make(map[string]bool, len(statusExclude))
+	for _, name := range statusExclude {
+		excludeSet[name] = true
+	}
+
 	// Update ahead/behind for each repo concurrently and refresh stale conflict statuses
 	var wg stdsync.WaitGroup
 	sem := make(chan struct{}, types.DefaultMaxConcurrency)
 	for i := range repos {
 		if repos[i].Status == types.RepoStatusSyncing {
+			continue
+		}
+		if excludeSet[repos[i].Name] {
 			continue
 		}
 		wg.Add(1)

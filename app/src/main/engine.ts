@@ -66,9 +66,13 @@ export class EngineClient {
   // Public API — one method per CLI command
   // -----------------------------------------------------------------------
 
-  /** `forksync status --json` */
-  async status(): Promise<ApiResponse<StatusData>> {
-    return this.exec<StatusData>(['status'])
+  /** `forksync status --json [--exclude repo1,repo2]` */
+  async status(exclude?: string[]): Promise<ApiResponse<StatusData>> {
+    const args = ['status']
+    if (exclude && exclude.length > 0) {
+      args.push('--exclude', exclude.join(','))
+    }
+    return this.exec<StatusData>(args)
   }
 
   /** `forksync sync --all --json` */
