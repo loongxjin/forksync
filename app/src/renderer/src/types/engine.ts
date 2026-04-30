@@ -20,7 +20,7 @@ export interface ApiResponse<T> {
 // Enums & Shared Types
 // ---------------------------------------------------------------------------
 
-/** Repo status enum — 8 values matching Go RepoStatus constants */
+/** Repo status enum — 9 values matching Go RepoStatus constants */
 export type RepoStatus =
   | 'up_to_date'
   | 'sync_needed'
@@ -28,6 +28,7 @@ export type RepoStatus =
   | 'conflict'
   | 'resolving'
   | 'resolved'
+  | 'waiting'
   | 'error'
   | 'unconfigured'
 
@@ -71,8 +72,8 @@ export interface Repo {
   branchMapping?: BranchMapping
   autoSync: boolean
   syncInterval: string
-  conflictStrategy: string
   postSyncCommands?: PostSyncCommand[]
+  workflow?: SyncWorkflow
   createdAt: string
   lastSync: string | null
   status: RepoStatus
@@ -107,6 +108,47 @@ export interface SyncResult {
   agentResult?: AgentResolveResult
   postSyncResults?: PostSyncResult[]
   commitError?: string
+  workflow?: SyncWorkflow
+}
+
+// ---------------------------------------------------------------------------
+// Workflow Types
+// ---------------------------------------------------------------------------
+
+export type WorkflowStep =
+  | 'fetch'
+  | 'merge'
+  | 'check_conflicts'
+  | 'resolve_strategy'
+  | 'agent_resolve'
+  | 'accept_changes'
+  | 'commit'
+
+export type WorkflowStepStatus =
+  | 'pending'
+  | 'running'
+  | 'success'
+  | 'failed'
+  | 'skipped'
+  | 'waiting'
+
+export interface WorkflowStepRecord {
+  step: WorkflowStep
+  status: WorkflowStepStatus
+  startedAt?: string
+  endedAt?: string
+  message?: string
+  error?: string
+}
+
+export type WorkflowRunStatus = 'running' | 'waiting' | 'success' | 'failed'
+
+export interface SyncWorkflow {
+  runId: string
+  steps: WorkflowStepRecord[]
+  status: WorkflowRunStatus
+  startedAt: string
+  finishedAt?: string
 }
 
 /** Go ConflictFile — simplified conflict info (agent reads file contents) */

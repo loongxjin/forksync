@@ -29,6 +29,7 @@
   },
   "status": {
     "syncing": "同步中",
+    "waiting": "等待中",
     "conflict": "冲突",
     "resolving": "解决中",
     "resolved": "已解决",

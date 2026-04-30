@@ -29,6 +29,7 @@
   },
   "status": {
     "syncing": "Syncing",
+    "waiting": "Waiting",
     "conflict": "Conflict",
     "resolving": "Resolving",
     "resolved": "Resolved",

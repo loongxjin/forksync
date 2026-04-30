@@ -18,6 +18,7 @@ export function RepoStatusBadge({ status, className }: RepoStatusBadgeProps): JS
     up_to_date: 'success',
     sync_needed: 'warning',
     syncing: 'warning',
+    waiting: 'warning',
     conflict: 'error',
     resolving: 'info',
     resolved: 'info',

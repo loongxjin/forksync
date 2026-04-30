@@ -21,7 +21,8 @@ import type {
   BranchMapping,
   EngineConfig,
   ConfigSetData,
-  AgentStreamEvent
+  AgentStreamEvent,
+  SyncWorkflow
 } from '../renderer/src/types/engine'
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '../renderer/src/types/ide'
 import type { PostSyncCommand } from './engine'
@@ -69,6 +70,8 @@ const api = {
     ipcRenderer.invoke('engine:summarize', repoName),
   summarizeRetry: (repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> =>
     ipcRenderer.invoke('engine:summarizeRetry', repoName),
+  workflowContinue: (name: string, action: string): Promise<ApiResponse<{ repoId: string; repoName: string; status: string; workflow?: SyncWorkflow }>> =>
+    ipcRenderer.invoke('engine:workflowContinue', name, action),
 
   // Agent resolve streaming
   resolveStreamStart: (name: string, opts?: { agent?: string; noConfirm?: boolean }): void =>

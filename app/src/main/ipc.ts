@@ -130,6 +130,10 @@ export function registerIpcHandlers(): void {
     return e.summarizeRetry(repoName)
   })
 
+  ipcMain.handle('engine:workflowContinue', async (_event, name: string, action: string) => {
+    return e.workflowContinue(name, action)
+  })
+
   // --- Agent resolve streaming (fire-and-forget start, push events) ---
 
   const activeStreams = new Map<string, ReturnType<EngineClient['resolveStream']>>()

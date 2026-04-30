@@ -61,6 +61,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		excludeSet[name] = true
 	}
 
+	// Clean up stale workflows before refreshing
+	cleanupStaleWorkflows(repos, store)
+
 	// Update ahead/behind for each repo concurrently and refresh stale conflict statuses
 	var wg stdsync.WaitGroup
 	sem := make(chan struct{}, types.DefaultMaxConcurrency)
@@ -109,11 +112,20 @@ func runStatus(cmd *cobra.Command, args []string) error {
 func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps *git.Operations, store repo.Store) {
 	r := repos[idx]
 
-	// For repos already in conflict/resolving/resolved state, re-check the actual
+	// For repos already in conflict/resolving/resolved/waiting state, re-check the actual
 	// git merge state. If the user has manually resolved and committed,
 	// the stored status is stale and should be corrected.
 	if isConflictState(r.Status) {
 		reconcileConflictStatus(ctx, repos, idx, gitOps, store)
+		return
+	}
+
+	// Rebuild workflow for repos that were syncing or in error before restart (spec §7.2).
+	if r.Status == types.RepoStatusSyncing || r.Status == types.RepoStatusError {
+		rebuildWorkflowForSyncingOrError(ctx, repos, idx, gitOps, store)
+		if isConflictState(repos[idx].Status) || repos[idx].Status == types.RepoStatusError {
+			return
+		}
 	}
 
 	// Proactively detect merge conflicts on disk regardless of stored status.
@@ -125,11 +137,18 @@ func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps 
 			if len(unmergedFiles) > 0 {
 				repos[idx].Status = types.RepoStatusConflict
 				repos[idx].ErrorMessage = "repository has unresolved merge conflicts"
+				repos[idx].Workflow = rebuildWorkflow(r,
+					workflowRebuildFromConflict,
+					fmt.Sprintf("%d files have conflicts", len(unmergedFiles)),
+				)
 				safeUpdateRepo(store, repos[idx], r.Name)
 				return
 			}
 			// MERGE_HEAD exists but all files resolved → resolved state
 			repos[idx].Status = types.RepoStatusResolved
+			repos[idx].Workflow = rebuildWorkflow(r,
+				workflowRebuildFromAcceptChanges,
+			)
 			safeUpdateRepo(store, repos[idx], r.Name)
 			return
 		}
@@ -171,11 +190,46 @@ func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps 
 func isConflictState(status types.RepoStatus) bool {
 	return status == types.RepoStatusConflict ||
 		status == types.RepoStatusResolving ||
-		status == types.RepoStatusResolved
+		status == types.RepoStatusResolved ||
+		status == types.RepoStatusWaiting
+}
+
+// cleanupStaleWorkflows removes workflows that have exceeded their retention time.
+// Success: 1 minute, Failed/Aborted: 10 minutes, Waiting: 30 minutes.
+func cleanupStaleWorkflows(repos []types.Repo, store repo.Store) {
+	now := time.Now()
+	for i := range repos {
+		wf := repos[i].Workflow
+		if wf == nil {
+			continue
+		}
+		var maxAge time.Duration
+		switch wf.Status {
+		case types.WorkflowSuccess:
+			maxAge = time.Minute
+		case types.WorkflowFailed:
+			maxAge = 10 * time.Minute
+		case types.WorkflowWaiting:
+			maxAge = 30 * time.Minute
+		default:
+			continue
+		}
+		if wf.StartedAt.IsZero() {
+			continue
+		}
+		if now.Sub(wf.StartedAt) > maxAge {
+			repos[i].Workflow = nil
+			if updateErr := store.Update(repos[i]); updateErr != nil {
+				logger.Error("status: failed to clear stale workflow", "repo", repos[i].Name, "error", updateErr)
+			}
+		}
+	}
 }
 
 // reconcileConflictStatus checks the actual git merge state for a repo in conflict
 // and corrects the stored status if the user has resolved externally.
+// It also rebuilds a lightweight workflow for repos that were in an active state
+// before app restart (see spec §7.2).
 func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, gitOps *git.Operations, store repo.Store) {
 	r := repos[idx]
 	isMerging, unmergedFiles, err := gitOps.IsMergingState(ctx, r.Path)
@@ -187,6 +241,7 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 	if !isMerging {
 		repos[idx].Status = types.RepoStatusUpToDate
 		repos[idx].ErrorMessage = ""
+		repos[idx].Workflow = nil
 		safeUpdateRepo(store, repos[idx], r.Name)
 		return
 	}
@@ -194,6 +249,10 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 	// MERGE_HEAD exists but no unmerged files — user staged all resolutions
 	if len(unmergedFiles) == 0 {
 		repos[idx].Status = types.RepoStatusResolved
+		// Rebuild workflow: fetch→merge→check_conflicts→resolve_strategy→agent_resolve(success)→accept_changes(waiting)
+		repos[idx].Workflow = rebuildWorkflow(r,
+			workflowRebuildFromAcceptChanges,
+		)
 		safeUpdateRepo(store, repos[idx], r.Name)
 		return
 	}
@@ -202,8 +261,21 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 	if r.Status == types.RepoStatusResolving {
 		repos[idx].Status = types.RepoStatusConflict
 		repos[idx].ErrorMessage = "agent exited unexpectedly, conflict resolution incomplete"
+		// Rebuild workflow: fetch→merge→check_conflicts(success)→resolve_strategy(success)→agent_resolve(running)
+		repos[idx].Workflow = rebuildWorkflow(r,
+			workflowRebuildFromAgentResolve,
+		)
 		safeUpdateRepo(store, repos[idx], r.Name)
+		return
 	}
+
+	// Still have unmerged files — conflict state
+	// Rebuild workflow: fetch→merge→check_conflicts(success with msg)→resolve_strategy(waiting)
+	repos[idx].Workflow = rebuildWorkflow(r,
+		workflowRebuildFromConflict,
+		fmt.Sprintf("%d files have conflicts", len(unmergedFiles)),
+	)
+	safeUpdateRepo(store, repos[idx], r.Name)
 }
 
 // isSyncNeeded returns true if upstream has new commits and the repo is in a
@@ -215,7 +287,7 @@ func isSyncNeeded(r types.Repo) bool {
 	switch r.Status {
 	case types.RepoStatusSyncing, types.RepoStatusError,
 		types.RepoStatusConflict, types.RepoStatusResolving,
-		types.RepoStatusResolved:
+		types.RepoStatusResolved, types.RepoStatusWaiting:
 		return false
 	}
 	return true
@@ -228,7 +300,150 @@ func safeUpdateRepo(store repo.Store, r types.Repo, repoName string) {
 	}
 }
 
-// printStatusText renders the status output in human-readable text format.
+// ---------------------------------------------------------------------------
+// Workflow rebuild helpers (spec §7.2)
+// ---------------------------------------------------------------------------
+
+type workflowRebuildPoint int
+
+const (
+	workflowRebuildFromFetch         workflowRebuildPoint = iota // syncing, no MERGE_HEAD
+	workflowRebuildFromMerge                                       // syncing, MERGE_HEAD exists
+	workflowRebuildFromConflict                                    // conflict: check_conflicts success, resolve_strategy waiting
+	workflowRebuildFromAgentResolve                                // resolving: agent_resolve running
+	workflowRebuildFromAcceptChanges                               // resolved: accept_changes waiting
+	workflowRebuildFromCommitFailed                                // error: commit failed
+)
+
+// rebuildWorkflow creates a lightweight workflow for a repo that was in an active
+// state before app restart. The rebuildPoint determines which step the workflow
+// resumes from. All preceding steps are marked as success.
+func rebuildWorkflow(r types.Repo, point workflowRebuildPoint, extraMsg ...string) *types.SyncWorkflow {
+	msg := ""
+	if len(extraMsg) > 0 {
+		msg = extraMsg[0]
+	}
+
+	wf := &types.SyncWorkflow{
+		RunID:     r.ID,
+		Status:    types.WorkflowRunning,
+		StartedAt: time.Now().Add(-time.Minute), // approximate
+		Steps: []types.WorkflowStepRecord{
+			{Step: types.StepFetch, Status: types.StepStatusPending},
+			{Step: types.StepMerge, Status: types.StepStatusPending},
+			{Step: types.StepCheckConflicts, Status: types.StepStatusPending},
+			{Step: types.StepResolveStrategy, Status: types.StepStatusPending},
+			{Step: types.StepAgentResolve, Status: types.StepStatusPending},
+			{Step: types.StepAcceptChanges, Status: types.StepStatusPending},
+			{Step: types.StepCommit, Status: types.StepStatusPending},
+		},
+	}
+
+	switch point {
+	case workflowRebuildFromFetch:
+		// Syncing, no MERGE_HEAD → likely interrupted during fetch
+		wf.Steps[0].Status = types.StepStatusRunning // fetch running
+		wf.Status = types.WorkflowRunning
+
+	case workflowRebuildFromMerge:
+		// Syncing, MERGE_HEAD exists → interrupted during merge
+		wf.Steps[0].Status = types.StepStatusSuccess // fetch done
+		wf.Steps[1].Status = types.StepStatusRunning // merge running
+		wf.Status = types.WorkflowRunning
+
+	case workflowRebuildFromConflict:
+		// Conflict state → check_conflicts found issues, waiting at resolve_strategy
+		wf.Steps[0].Status = types.StepStatusSuccess
+		wf.Steps[1].Status = types.StepStatusSuccess
+		wf.Steps[2].Status = types.StepStatusSuccess
+		wf.Steps[2].Message = msg
+		wf.Steps[3].Status = types.StepStatusWaiting // resolve_strategy waiting
+		wf.Steps[4].Status = types.StepStatusSkipped // agent_resolve
+		wf.Steps[5].Status = types.StepStatusSkipped // accept_changes
+		wf.Status = types.WorkflowWaiting
+
+	case workflowRebuildFromAgentResolve:
+		// Resolving → agent was running
+		wf.Steps[0].Status = types.StepStatusSuccess
+		wf.Steps[1].Status = types.StepStatusSuccess
+		wf.Steps[2].Status = types.StepStatusSuccess
+		wf.Steps[3].Status = types.StepStatusSuccess
+		wf.Steps[4].Status = types.StepStatusRunning // agent_resolve running
+		wf.Status = types.WorkflowRunning
+
+	case workflowRebuildFromAcceptChanges:
+		// Resolved → agent done, waiting for user to accept
+		wf.Steps[0].Status = types.StepStatusSuccess
+		wf.Steps[1].Status = types.StepStatusSuccess
+		wf.Steps[2].Status = types.StepStatusSuccess
+		wf.Steps[3].Status = types.StepStatusSuccess
+		wf.Steps[4].Status = types.StepStatusSuccess
+		wf.Steps[4].Message = "resolved"
+		wf.Steps[5].Status = types.StepStatusWaiting // accept_changes waiting
+		wf.Status = types.WorkflowWaiting
+
+	case workflowRebuildFromCommitFailed:
+		// Error → commit failed
+		wf.Steps[0].Status = types.StepStatusSuccess
+		wf.Steps[1].Status = types.StepStatusSuccess
+		wf.Steps[2].Status = types.StepStatusSuccess
+		wf.Steps[3].Status = types.StepStatusSkipped
+		wf.Steps[4].Status = types.StepStatusSkipped
+		wf.Steps[5].Status = types.StepStatusSkipped
+		wf.Steps[6].Status = types.StepStatusFailed // commit failed
+		wf.Steps[6].Error = r.ErrorMessage
+		wf.Status = types.WorkflowFailed
+	}
+
+	return wf
+}
+
+// rebuildWorkflowForSyncingOrError rebuilds a workflow for repos that were in
+// syncing or error state before app restart.
+func rebuildWorkflowForSyncingOrError(ctx context.Context, repos []types.Repo, idx int, gitOps *git.Operations, store repo.Store) {
+	r := repos[idx]
+
+	isMerging, unmergedFiles, err := gitOps.IsMergingState(ctx, r.Path)
+	if err != nil {
+		return
+	}
+
+	if r.Status == types.RepoStatusSyncing {
+		if !isMerging {
+			// No MERGE_HEAD → interrupted during fetch
+			repos[idx].Workflow = rebuildWorkflow(r, workflowRebuildFromFetch)
+			repos[idx].Status = types.RepoStatusSyncNeeded
+			repos[idx].ErrorMessage = ""
+		} else if len(unmergedFiles) > 0 {
+			// MERGE_HEAD + conflicts → interrupted during merge, conflicts found
+			repos[idx].Workflow = rebuildWorkflow(r,
+				workflowRebuildFromConflict,
+				fmt.Sprintf("%d files have conflicts", len(unmergedFiles)),
+			)
+			repos[idx].Status = types.RepoStatusConflict
+			repos[idx].ErrorMessage = "repository has unresolved merge conflicts"
+		} else {
+			// MERGE_HEAD exists, no conflicts → interrupted during merge/commit
+			repos[idx].Workflow = rebuildWorkflow(r, workflowRebuildFromMerge)
+			repos[idx].Status = types.RepoStatusSyncing
+		}
+		safeUpdateRepo(store, repos[idx], r.Name)
+		return
+	}
+
+	if r.Status == types.RepoStatusError {
+		if isMerging {
+			// MERGE_HEAD exists → commit likely failed
+			repos[idx].Workflow = rebuildWorkflow(r, workflowRebuildFromCommitFailed)
+		} else {
+			// No MERGE_HEAD → fetch or merge failed, clear workflow
+			repos[idx].Workflow = nil
+			repos[idx].Status = types.RepoStatusSyncNeeded
+			repos[idx].ErrorMessage = ""
+		}
+		safeUpdateRepo(store, repos[idx], r.Name)
+	}
+}
 func printStatusText(repos []types.Repo, agents []types.AgentInfo, preferredAgent string) {
 	if len(repos) == 0 {
 		outputText("No repositories managed. Use 'forksync add <path>' to add one.")

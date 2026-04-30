@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/** Check if a repo status indicates a conflict-related state (conflict / resolving / resolved) */
+/** Check if a repo status indicates a conflict-related state (conflict / resolving / resolved / waiting) */
 export function isConflictStatus(status: RepoStatus): boolean {
-  return status === 'conflict' || status === 'resolving' || status === 'resolved'
+  return status === 'conflict' || status === 'resolving' || status === 'resolved' || status === 'waiting'
 }

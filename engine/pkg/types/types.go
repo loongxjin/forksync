@@ -23,6 +23,7 @@ const (
 	RepoStatusConflict     RepoStatus = "conflict"
 	RepoStatusResolving    RepoStatus = "resolving" // agent 正在解决冲突
 	RepoStatusResolved     RepoStatus = "resolved"  // agent 解决完成，等待用户确认
+	RepoStatusWaiting      RepoStatus = "waiting"   // workflow 暂停等待用户决策
 	RepoStatusError        RepoStatus = "error"
 	RepoStatusUnconfigured RepoStatus = "unconfigured"
 )
@@ -104,8 +105,8 @@ type Repo struct {
 	BranchMapping    *BranchMapping    `json:"branchMapping,omitempty"`
 	AutoSync         bool              `json:"autoSync"`
 	SyncInterval     string            `json:"syncInterval"`
-	ConflictStrategy string            `json:"conflictStrategy"`
 	PostSyncCommands []PostSyncCommand `json:"postSyncCommands,omitempty"`
+	Workflow         *SyncWorkflow     `json:"workflow,omitempty"`
 	CreatedAt        time.Time         `json:"createdAt"`
 	LastSync         *Time             `json:"lastSync"`
 	Status           RepoStatus        `json:"status"`
@@ -158,6 +159,65 @@ type SyncResult struct {
 	PostSyncResults []PostSyncResult    `json:"postSyncResults,omitempty"`
 	AgentResult     *AgentResolveResult `json:"agentResult,omitempty"`
 	CommitError     string              `json:"commitError,omitempty"`
+	Workflow        *SyncWorkflow       `json:"workflow,omitempty"`
+}
+
+// ---------------------------------------------------------------------------
+// Workflow Types
+// ---------------------------------------------------------------------------
+
+// WorkflowStep represents a single step in the sync workflow.
+type WorkflowStep string
+
+const (
+	StepFetch           WorkflowStep = "fetch"
+	StepMerge           WorkflowStep = "merge"
+	StepCheckConflicts  WorkflowStep = "check_conflicts"
+	StepResolveStrategy WorkflowStep = "resolve_strategy"
+	StepAgentResolve    WorkflowStep = "agent_resolve"
+	StepAcceptChanges   WorkflowStep = "accept_changes"
+	StepCommit          WorkflowStep = "commit"
+)
+
+// WorkflowStepStatus represents the status of a workflow step.
+type WorkflowStepStatus string
+
+const (
+	StepStatusPending WorkflowStepStatus = "pending"
+	StepStatusRunning WorkflowStepStatus = "running"
+	StepStatusSuccess WorkflowStepStatus = "success"
+	StepStatusFailed  WorkflowStepStatus = "failed"
+	StepStatusSkipped WorkflowStepStatus = "skipped"
+	StepStatusWaiting WorkflowStepStatus = "waiting"
+)
+
+// WorkflowStepRecord represents a single step's execution record.
+type WorkflowStepRecord struct {
+	Step      WorkflowStep       `json:"step"`
+	Status    WorkflowStepStatus `json:"status"`
+	StartedAt *Time              `json:"startedAt,omitempty"`
+	EndedAt   *Time              `json:"endedAt,omitempty"`
+	Message   string             `json:"message,omitempty"`
+	Error     string             `json:"error,omitempty"`
+}
+
+// WorkflowRunStatus represents the overall status of a workflow run.
+type WorkflowRunStatus string
+
+const (
+	WorkflowRunning WorkflowRunStatus = "running"
+	WorkflowWaiting WorkflowRunStatus = "waiting"
+	WorkflowSuccess WorkflowRunStatus = "success"
+	WorkflowFailed  WorkflowRunStatus = "failed"
+)
+
+// SyncWorkflow represents an active sync workflow run.
+type SyncWorkflow struct {
+	RunID      string               `json:"runId"`
+	Steps      []WorkflowStepRecord `json:"steps"`
+	Status     WorkflowRunStatus    `json:"status"`
+	StartedAt  time.Time            `json:"startedAt"`
+	FinishedAt *Time                `json:"finishedAt,omitempty"`
 }
 
 // PostSyncResult represents the result of running a single post-sync command.

@@ -1,6 +1,6 @@
 import { type RepoStatus } from '@/types/engine'
 import { useTranslation } from 'react-i18next'
-import { CheckCircle2, Loader2, AlertTriangle, Zap, XCircle, Circle } from 'lucide-react'
+import { CheckCircle2, Loader2, AlertTriangle, Zap, XCircle, Circle, PauseCircle } from 'lucide-react'
 
 interface StatusCardProps {
   icon: React.ReactNode
@@ -41,6 +41,8 @@ export function StatusIcon({ status, size = 16 }: { status: RepoStatus; size?: n
       return <Zap size={size} className="text-warning" />
     case 'resolved':
       return <CheckCircle2 size={size} className="text-success" />
+    case 'waiting':
+      return <PauseCircle size={size} className="text-warning" />
     case 'error':
       return <XCircle size={size} className="text-error" />
     case 'unconfigured':
@@ -62,6 +64,7 @@ export function getStatusColor(status: RepoStatus): string {
     case 'sync_needed':
     case 'syncing':
     case 'resolving':
+    case 'waiting':
       return 'hsl(var(--warning))'
     case 'conflict':
     case 'error':
@@ -82,6 +85,7 @@ const STATUS_CONFIG: Record<
   up_to_date: { labelKey: 'status.upToDate', color: 'hsl(var(--success))' },
   sync_needed: { labelKey: 'status.syncNeeded', color: 'hsl(var(--warning))' },
   syncing: { labelKey: 'status.syncing', color: 'hsl(var(--warning))' },
+  waiting: { labelKey: 'status.waiting', color: 'hsl(var(--warning))' },
   conflict: { labelKey: 'status.conflict', color: 'hsl(var(--error))' },
   resolving: { labelKey: 'status.resolving', color: 'hsl(var(--warning))' },
   resolved: { labelKey: 'status.resolved', color: 'hsl(var(--success))' },

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { RepoStatus } from '@/types/engine'
-import { CheckCircle2, Loader2, AlertTriangle, XCircle, ArrowDownToLine } from 'lucide-react'
+import { CheckCircle2, Loader2, AlertTriangle, XCircle, ArrowDownToLine, PauseCircle } from 'lucide-react'
 
 export type FilterStatus = RepoStatus | null
 
@@ -43,6 +43,13 @@ const STATUS_ITEMS: StatusItem[] = [
     colorClass: 'text-warning',
     activeClass: 'bg-warning-muted text-warning border-warning/20',
     icon: <Loader2 size={14} className="animate-spin" />
+  },
+  {
+    key: 'waiting',
+    labelKey: 'status.waiting',
+    colorClass: 'text-warning',
+    activeClass: 'bg-warning-muted text-warning border-warning/20',
+    icon: <PauseCircle size={14} />
   },
   {
     key: 'conflict',

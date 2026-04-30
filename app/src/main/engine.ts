@@ -375,6 +375,11 @@ export class EngineClient {
     return this.exec<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName, '--retry'], LONG_TIMEOUT_MS)
   }
 
+  /** `forksync workflow continue <name> --action <action> --json` */
+  async workflowContinue(name: string, action: string): Promise<ApiResponse<{ repoId: string; repoName: string; status: string; workflow?: { runId: string; steps: any[]; status: string; startedAt: string; finishedAt?: string } }>> {
+    return this.exec<{ repoId: string; repoName: string; status: string; workflow?: { runId: string; steps: any[]; status: string; startedAt: string; finishedAt?: string } }>(['workflow', 'continue', name, '--action', action])
+  }
+
   // -----------------------------------------------------------------------
   // Private — spawn + parse logic
   // -----------------------------------------------------------------------

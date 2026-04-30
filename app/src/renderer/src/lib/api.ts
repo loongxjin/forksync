@@ -24,7 +24,8 @@ import type {
   EngineConfig,
   ConfigSetData,
   PostSyncCommandsData,
-  AgentStreamEvent
+  AgentStreamEvent,
+  SyncWorkflow
 } from '@/types/engine'
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '@/types/ide'
 
@@ -70,6 +71,9 @@ export interface EngineAPI {
   postSyncList(repoName: string): Promise<ApiResponse<PostSyncCommandsData>>
   postSyncAdd(repoName: string, name: string, cmd: string): Promise<ApiResponse<PostSyncCommandsData>>
   postSyncRemove(repoName: string, cmdId: string): Promise<ApiResponse<PostSyncCommandsData>>
+
+  // Workflow
+  workflowContinue(name: string, action: string): Promise<ApiResponse<{ repoId: string; repoName: string; status: string; workflow?: SyncWorkflow }>>
 
   // AI Summary
   summarize(repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>>

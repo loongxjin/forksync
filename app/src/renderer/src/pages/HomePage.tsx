@@ -9,6 +9,7 @@ import { StatusOverviewBar, type FilterStatus, CONFLICT_FAMILY } from '@/compone
 import { RepoRow } from '@/components/RepoRow'
 import { ConflictInlinePanel } from '@/components/ConflictInlinePanel'
 import { RepoDetailPanel } from '@/components/RepoDetailPanel'
+import { WorkflowSteps } from '@/components/WorkflowSteps'
 import { AgentTerminalDrawer } from '@/components/AgentTerminalDrawer'
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
@@ -46,8 +47,8 @@ export function HomePage(): JSX.Element {
   // Filter state
   const [filterStatus, setFilterStatus] = useState<FilterStatus>(null)
 
-  // Accordion state
-  const [expandedRepoId, setExpandedRepoId] = useState<string | null>(null)
+  // Accordion state — supports multiple expanded repos (for SyncAll)
+  const [expandedRepoIds, setExpandedRepoIds] = useState<Set<string>>(new Set())
 
   // Conflict resolution state
   const [resolveResults, setResolveResults] = useState<Record<string, ResolveData>>({})
@@ -183,10 +184,52 @@ export function HomePage(): JSX.Element {
     return repos.filter((r) => r.status === filterStatus)
   }, [repos, filterStatus])
 
-  // Toggle expand with accordion behavior
+  // Toggle expand for a single repo
   const toggleExpand = useCallback((repoId: string) => {
-    setExpandedRepoId((current) => (current === repoId ? null : repoId))
+    setExpandedRepoIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(repoId)) {
+        next.delete(repoId)
+      } else {
+        next.add(repoId)
+      }
+      return next
+    })
   }, [])
+
+  // Auto-expand repos with active (running/waiting) workflows during SyncAll.
+  // Only adds to the set — never collapses a repo the user manually expanded.
+  // Collapsed repos are cleaned up when their workflow finishes.
+  useEffect(() => {
+    setExpandedRepoIds((prev) => {
+      const next = new Set(prev)
+      let changed = false
+      for (const repo of repos) {
+        const wf = repo.workflow
+        if (!wf) {
+          // No active workflow — remove from auto-expand if it was there
+          if (next.has(repo.id)) {
+            next.delete(repo.id)
+            changed = true
+          }
+          continue
+        }
+        if (wf.status === 'running' || wf.status === 'waiting') {
+          if (!next.has(repo.id)) {
+            next.add(repo.id)
+            changed = true
+          }
+        } else if (wf.status === 'success' || wf.status === 'failed') {
+          // Workflow finished — remove from auto-expand
+          if (next.has(repo.id)) {
+            next.delete(repo.id)
+            changed = true
+          }
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [repos])
 
   // Conflict resolution handlers
   const handleResolve = useCallback(async (repo: Repo) => {
@@ -253,6 +296,22 @@ export function HomePage(): JSX.Element {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
     }
   }, [resolveReject, refresh])
+
+  const handleWorkflowContinue = useCallback(async (repoName: string, action: string) => {
+    setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
+    try {
+      const res = await engineApi.workflowContinue(repoName, action)
+      if (!res.success) {
+        showToast?.(res.error ?? `Workflow action ${action} failed`, 'error')
+      }
+      await refresh()
+    } catch (err) {
+      showToast?.(`Workflow action ${action} failed: ${(err as Error).message}`, 'error')
+      await refresh()
+    } finally {
+      setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
+    }
+  }, [refresh, showToast])
 
   // Repo actions
   const removingRef = useRef<string | null>(null)
@@ -397,7 +456,7 @@ export function HomePage(): JSX.Element {
 
         <div className="space-y-2">
           {filteredRepos.map((repo) => {
-            const isExpanded = expandedRepoId === repo.id
+            const isExpanded = expandedRepoIds.has(repo.id)
             const isConflict = isConflictStatus(repo.status)
 
             return (
@@ -413,7 +472,24 @@ export function HomePage(): JSX.Element {
                 />
                 <Collapsible open={isExpanded}>
                   <CollapsibleContent>
-                    {isConflict ? (
+                    {repo.workflow ? (
+                      <WorkflowSteps
+                        repo={repo}
+                        streamEvents={streamEvents[repo.name] ?? []}
+                        isStreamLive={streamLive.has(repo.name)}
+                        onResolveWithAgent={() => handleResolve(repo)}
+                        onOpenIDE={() => window.api.ideOpen(repo.path, 'default')}
+                        onAbort={() => handleWorkflowContinue(repo.name, 'abort')}
+                        onAccept={() => handleWorkflowContinue(repo.name, 'accept')}
+                        onReject={() => handleWorkflowContinue(repo.name, 'reject')}
+                        onRetryCommit={() => handleWorkflowContinue(repo.name, 'retry_commit')}
+                        onViewTerminal={() => {
+                          setTerminalDrawerRepo(repo.name)
+                          loadAgentLog(repo.name)
+                        }}
+                        loading={agentLoading || !!localLoading[repo.name]}
+                      />
+                    ) : isConflict ? (
                       <ConflictInlinePanel
                         repo={repo}
                         resolveResult={resolveResults[repo.name] ?? null}
