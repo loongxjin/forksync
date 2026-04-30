@@ -26,7 +26,7 @@ export function HomePage(): JSX.Element {
   const { t } = useTranslation()
   const {
     repos, scannedRepos, loading, initialized, error, refresh, syncAll, syncRepo,
-    scan, addRepo, removeRepo, updateRepoStatus, syncResults, showToast,
+    scan, addRepo, removeRepo, updateRepoStatus, updateRepo, syncResults, showToast,
     startupSyncDone, markStartupSyncDone
   } = useRepos()
   const {
@@ -235,16 +235,35 @@ export function HomePage(): JSX.Element {
   const handleResolve = useCallback(async (repo: Repo) => {
     setLocalLoading((prev) => ({ ...prev, [repo.name]: true }))
     try {
-      updateRepoStatus(repo.id, 'resolving')
       const noConfirm = engineConfig?.Agent?.ConfirmBeforeCommit === false
-      // Start streaming resolve and open terminal drawer immediately
+
+      // If repo has an active workflow (triggered from WorkflowSteps),
+      // first update the workflow steps via `workflow continue resolve_with_agent`
+      // so the UI transitions from resolve_strategy:waiting to agent_resolve:running.
+      if (repo.workflow) {
+        const wfRes = await engineApi.workflowContinue(repo.name, 'resolve_with_agent')
+        if (!wfRes.success) {
+          showToast?.(wfRes.error ?? 'Workflow continue failed', 'error')
+          setLocalLoading((prev) => ({ ...prev, [repo.name]: false }))
+          return
+        }
+        // Optimistically update repo with the new workflow from backend
+        if (wfRes.data?.workflow) {
+          updateRepo({ ...repo, workflow: wfRes.data.workflow })
+        }
+      } else {
+        // Triggered from ConflictInlinePanel — optimistically update status
+        updateRepoStatus(repo.id, 'resolving')
+      }
+
+      // Start streaming resolve and open terminal drawer
       resolveStream(repo.name, { agent: preferred || undefined, noConfirm })
       setTerminalDrawerRepo(repo.name)
     } catch (err) {
       await refresh().catch(() => {})
       setLocalLoading((prev) => ({ ...prev, [repo.name]: false }))
     }
-  }, [resolveStream, preferred, updateRepoStatus, refresh, engineConfig])
+  }, [resolveStream, preferred, updateRepoStatus, updateRepo, refresh, engineConfig, showToast])
 
   // Listen for streaming resolve results
   useEffect(() => {

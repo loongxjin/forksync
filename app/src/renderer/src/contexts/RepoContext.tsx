@@ -112,6 +112,7 @@ interface RepoContextValue extends RepoState {
   addRepo: (path: string, upstream?: string, branchMapping?: BranchMapping) => Promise<void>
   removeRepo: (name: string) => Promise<void>
   updateRepoStatus: (repoId: string, status: Repo['status']) => void
+  updateRepo: (repo: Repo) => void
   showToast: (message: string, type?: ToastState['type']) => void
   hideToast: () => void
   startupSyncDone: boolean
@@ -362,9 +363,13 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     dispatch({ type: 'SET_REPO_STATUS', repoId, status })
   }, [])
 
+  const updateRepo = useCallback((updatedRepo: Repo) => {
+    dispatch({ type: 'UPDATE_REPO', repo: updatedRepo })
+  }, [])
+
   return (
     <RepoContext.Provider
-      value={{ ...state, refresh, syncAll, syncRepo, scan, addRepo, removeRepo, updateRepoStatus, showToast, hideToast, startupSyncDone: startupSyncDoneRef.current, markStartupSyncDone }}
+      value={{ ...state, refresh, syncAll, syncRepo, scan, addRepo, removeRepo, updateRepoStatus, updateRepo, showToast, hideToast, startupSyncDone: startupSyncDoneRef.current, markStartupSyncDone }}
     >
       {children}
     </RepoContext.Provider>

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { StepItem, MiniTerminal } from '@/components/StepItem'
 import type { Repo, WorkflowStepRecord, AgentStreamEvent } from '@/types/engine'
 import { cn } from '@/lib/utils'
-import { Bot, Monitor, GitPullRequestClosed, RotateCcw } from 'lucide-react'
+import { Bot, Monitor, GitPullRequestClosed, RotateCcw, Terminal } from 'lucide-react'
 
 interface WorkflowStepsProps {
   repo: Repo
@@ -71,13 +71,41 @@ export function WorkflowSteps({
               isLast={isLast}
               isNextActive={isNextActive}
             >
-              {/* Mini terminal for agent_resolve running */}
+              {/* Mini terminal + View Live button for agent_resolve running */}
               {isAgentResolveRunning && (
-                <MiniTerminal
-                  events={streamEvents}
-                  isLive={isStreamLive}
-                  onExpand={onViewTerminal}
-                />
+                <div className="mt-2 space-y-2">
+                  <MiniTerminal
+                    events={streamEvents}
+                    isLive={isStreamLive}
+                    onExpand={onViewTerminal}
+                  />
+                  {onViewTerminal && (
+                    <Button
+                      onClick={onViewTerminal}
+                      size="sm"
+                      variant="outline"
+                      className="text-xs"
+                    >
+                      <Terminal size={12} className="mr-1" />
+                      View Live Terminal
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* View Agent Log button for agent_resolve success/failed */}
+              {stepRecord.step === 'agent_resolve' && (stepRecord.status === 'success' || stepRecord.status === 'failed') && onViewTerminal && (
+                <div className="mt-1">
+                  <Button
+                    onClick={onViewTerminal}
+                    size="sm"
+                    variant="outline"
+                    className="text-xs"
+                  >
+                    <Terminal size={12} className="mr-1" />
+                    View Agent Log
+                  </Button>
+                </div>
               )}
 
               {/* Waiting step action buttons */}
