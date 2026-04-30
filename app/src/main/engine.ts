@@ -242,8 +242,8 @@ export class EngineClient {
     isRunning: boolean
   }> {
     console.log('[engine:readAgentLog]', repoName)
-    const configDir = process.env.XDG_CONFIG_HOME || join(homedir(), '.config')
-    const logDir = join(configDir, 'forksync', 'agent-logs', repoName)
+    const configDir = join(homedir(), '.forksync')
+    const logDir = join(configDir, 'agent-logs', repoName)
 
     if (!existsSync(logDir)) {
       console.log('[engine:readAgentLog] logDir not found', logDir)

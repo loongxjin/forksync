@@ -29,14 +29,9 @@ type LogWriter struct {
 }
 
 // NewLogWriter creates a new LogWriter for the given repoID.
-// The log file is created under ~/.config/forksync/agent-logs/<repoID>/<YYYYMMDD-HHMMSS>.ndjson.
-func NewLogWriter(repoID string) (*LogWriter, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return nil, fmt.Errorf("get user config dir: %w", err)
-	}
-
-	dir := filepath.Join(configDir, "forksync", agentLogDirName, sanitizeRepoID(repoID))
+// The log file is created under <baseDir>/agent-logs/<repoID>/<YYYYMMDD-HHMMSS>.ndjson.
+func NewLogWriter(baseDir, repoID string) (*LogWriter, error) {
+	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create agent log dir: %w", err)
 	}
@@ -78,13 +73,8 @@ func (lw *LogWriter) StreamWriter() *StreamWriter {
 }
 
 // LatestLogFile returns the path of the most recent log file for the given repoID.
-func LatestLogFile(repoID string) (string, error) {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("get user config dir: %w", err)
-	}
-
-	dir := filepath.Join(configDir, "forksync", agentLogDirName, sanitizeRepoID(repoID))
+func LatestLogFile(baseDir, repoID string) (string, error) {
+	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -147,17 +137,12 @@ func ReadLogFile(path string) ([]StreamEvent, error) {
 }
 
 // CleanupOldLogs removes log files older than maxAge for the given repoID.
-func CleanupOldLogs(repoID string, maxAge time.Duration) error {
+func CleanupOldLogs(baseDir, repoID string, maxAge time.Duration) error {
 	if maxAge <= 0 {
 		maxAge = defaultLogRetention
 	}
 
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return fmt.Errorf("get user config dir: %w", err)
-	}
-
-	dir := filepath.Join(configDir, "forksync", agentLogDirName, sanitizeRepoID(repoID))
+	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -37,6 +37,7 @@ type Syncer struct {
 	sessionMgr   *session.Manager
 	historyStore *history.Store
 	summarizer   *summarizer.Summarizer
+	configDir    string // base config directory (e.g. ~/.forksync)
 	mu           sync.Mutex
 	active       map[string]bool // tracks repos currently syncing
 }
@@ -366,7 +367,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 
 	// Set up log writer for auto-sync background runs so users can replay later
 	var streamWriter *agent.StreamWriter
-	lw, lwErr := agent.NewLogWriter(r.Name)
+	lw, lwErr := agent.NewLogWriter(s.configDir, r.Name)
 	if lwErr != nil {
 		logger.Warn("sync: failed to create agent log writer", "repo", r.Name, "error", lwErr)
 	}
@@ -638,7 +639,7 @@ func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg str
 }
 
 // NewSyncerFromConfig creates a Syncer using config defaults.
-func NewSyncerFromConfig(cfg *config.Config, store repo.Store) *Syncer {
+func NewSyncerFromConfig(cfg *config.Config, store repo.Store, configDir string) *Syncer {
 	var gitOps *git.Operations
 	if cfg != nil && cfg.Proxy.Enabled && cfg.Proxy.URL != "" {
 		gitOps = git.NewOperationsWithProxy(cfg.Proxy.URL)
@@ -646,10 +647,11 @@ func NewSyncerFromConfig(cfg *config.Config, store repo.Store) *Syncer {
 		gitOps = git.NewOperations()
 	}
 	return &Syncer{
-		gitOps: gitOps,
-		store:  store,
-		cfg:    cfg,
-		active: make(map[string]bool),
+		gitOps:    gitOps,
+		store:     store,
+		cfg:       cfg,
+		configDir: configDir,
+		active:    make(map[string]bool),
 	}
 }
 

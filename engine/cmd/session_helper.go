@@ -49,7 +49,7 @@ func newSessionManager(cfg *config.Config, cfgMgr *config.Manager) *session.Mana
 // It accepts an already-loaded store so the caller and syncer share the same instance.
 // Returns the syncer, store, and a cleanup function that must be deferred.
 func setupSyncer(cfg *config.Config, cfgMgr *config.Manager, store repo.Store) (*syncpkg.Syncer, func()) {
-	syncer := syncpkg.NewSyncerFromConfig(cfg, store)
+	syncer := syncpkg.NewSyncerFromConfig(cfg, store, cfgMgr.ConfigDir())
 
 	// Set up history store
 	var histCleanup func()
