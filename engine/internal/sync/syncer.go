@@ -364,8 +364,20 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	// Determine resolve sub-strategy for the agent prompt
 	resolveStrategy := s.resolveStrategyOrDefault()
 
+	// Set up log writer for auto-sync background runs so users can replay later
+	var streamWriter *agent.StreamWriter
+	lw, lwErr := agent.NewLogWriter(r.Name)
+	if lwErr != nil {
+		logger.Warn("sync: failed to create agent log writer", "repo", r.Name, "error", lwErr)
+	}
+	if lw != nil {
+		defer lw.Close()
+		streamWriter = lw.StreamWriter()
+		logger.Info("sync: agent log writer active", "repo", r.Name)
+	}
+
 	// Resolve conflicts via agent
-	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy)
+	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy, streamWriter)
 	if err != nil {
 		logger.Warn("sync: agent resolve failed",
 			"repo", r.Name,

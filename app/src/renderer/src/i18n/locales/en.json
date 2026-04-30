@@ -143,7 +143,19 @@
     "rejectRollback": "✗ Reject & Rollback",
     "resolvingStatus": "Agent is resolving conflicts for {{repoName}}...",
     "commitFailed": "Auto-commit failed",
-    "commitFailedHint": "You can click Accept to retry commit, or Reject & Rollback to abort the merge."
+    "commitFailedHint": "You can click Accept to retry commit, or Reject & Rollback to abort the merge.",
+    "viewTerminal": "View Terminal",
+    "viewLive": "View Live",
+    "viewLog": "View Log"
+  },
+  "agentTerminal": {
+    "title": "Agent Resolve",
+    "waiting": "Waiting for agent output...",
+    "live": "Live",
+    "started": "Started {{agent}}",
+    "completed": "Completed",
+    "failed": "Failed",
+    "resumeScroll": "Resume auto-scroll"
   },
   "settings": {
     "title": "Settings",

@@ -27,6 +27,10 @@ func (a *CodexAdapter) ResolveConflicts(ctx context.Context, session *Session, p
 	return a.baseAdapter.ResolveConflicts(ctx, session, prompt, a.buildArgs)
 }
 
+func (a *CodexAdapter) ResolveConflictsWithStream(ctx context.Context, session *Session, prompt string, sw *StreamWriter) (*AgentResult, error) {
+	return a.baseAdapter.ResolveConflictsWithStream(ctx, session, prompt, a.buildArgs, sw)
+}
+
 // buildArgs constructs the CLI arguments for a Codex invocation.
 // Uses "codex exec" for non-interactive execution.
 // sessionID is non-empty when resuming an existing session.

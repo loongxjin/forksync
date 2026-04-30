@@ -147,6 +147,20 @@ export interface AgentResolveResult {
   agentName: string
 }
 
+/** Agent stream event emitted during conflict resolution */
+export interface AgentStreamEvent {
+  t: 'start' | 'stdout' | 'stderr' | 'tool' | 'done' | 'error'
+  d?: string
+  agent?: string
+  files?: string[]
+  ts: string
+  success?: boolean
+  summary?: string
+  session_id?: string
+  name?: string
+  path?: string
+}
+
 /** Go AgentResolveRequest — resolve command options */
 export interface AgentResolveRequest {
   repoId: string

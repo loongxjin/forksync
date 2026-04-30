@@ -12,6 +12,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { EngineClient } from './engine'
 import { notifySyncResults, updateNotificationConfig } from './notify'
+import type { AgentStreamEvent } from '../renderer/src/types/engine'
 
 let engine: EngineClient | null = null
 
@@ -127,6 +128,46 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('engine:summarizeRetry', async (_event, repoName: string) => {
     return e.summarizeRetry(repoName)
+  })
+
+  // --- Agent resolve streaming (fire-and-forget start, push events) ---
+
+  const activeStreams = new Map<string, ReturnType<EngineClient['resolveStream']>>()
+
+  ipcMain.on('engine:resolveStream:start', (event, name: string, opts?: { agent?: string; noConfirm?: boolean }) => {
+    console.log('[ipc:resolveStream:start]', name, opts)
+    // Kill any existing stream for this repo
+    const existing = activeStreams.get(name)
+    if (existing) {
+      console.log('[ipc:resolveStream:start] killing existing stream for', name)
+      existing.kill()
+      activeStreams.delete(name)
+    }
+
+    const stream = e.resolveStream(name, opts)
+    activeStreams.set(name, stream)
+
+    stream.onEvent((ev: AgentStreamEvent) => {
+      console.log('[ipc:resolveStream:event]', name, ev.t)
+      event.sender.send('engine:resolveStream:event', name, ev)
+    })
+
+    stream.onDone((result) => {
+      console.log('[ipc:resolveStream:done]', name, result.success)
+      event.sender.send('engine:resolveStream:done', name, result)
+      activeStreams.delete(name)
+    })
+
+    stream.onError((err: string) => {
+      console.error('[ipc:resolveStream:error]', name, err)
+      event.sender.send('engine:resolveStream:error', name, err)
+      activeStreams.delete(name)
+    })
+  })
+
+  ipcMain.handle('engine:readAgentLog', async (_event, repoName: string) => {
+    console.log('[ipc:readAgentLog]', repoName)
+    return e.readAgentLog(repoName)
   })
 
   ipcMain.handle('app:setAutoLaunch', async (_event, enabled: boolean) => {

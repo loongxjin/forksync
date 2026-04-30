@@ -9,6 +9,9 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { spawn, ChildProcess } from 'child_process'
+import { createInterface } from 'readline'
+import { existsSync, readdirSync, readFileSync } from 'fs'
+import { homedir } from 'os'
 import type {
   ApiResponse,
   StatusData,
@@ -25,7 +28,8 @@ import type {
   AgentResetData,
   HistoryData,
   EngineConfig,
-  ConfigSetData
+  ConfigSetData,
+  AgentStreamEvent
 } from '../renderer/src/types/engine'
 
 /** Default timeout for quick commands (status, config, history, etc.) */
@@ -121,6 +125,165 @@ export class EngineClient {
       args.push('--no-confirm')
     }
     return this.exec<ResolveData>(args, LONG_TIMEOUT_MS)
+  }
+
+  /**
+   * Spawn `forksync resolve <name> --stream` and emit NDJSON lines as events.
+   * Returns a controller with onEvent/onDone/onError/kill callbacks.
+   */
+  resolveStream(
+    name: string,
+    opts?: { agent?: string; noConfirm?: boolean }
+  ): {
+    onEvent: (cb: (ev: AgentStreamEvent) => void) => void
+    onDone: (cb: (result: ApiResponse<ResolveData>) => void) => void
+    onError: (cb: (err: string) => void) => void
+    kill: () => void
+  } {
+    const args = ['resolve', name, '--stream']
+    if (opts?.agent) {
+      args.push('--agent', opts.agent)
+    }
+    if (opts?.noConfirm) {
+      args.push('--no-confirm')
+    }
+
+    const fullArgs = this.buildArgs(args)
+    const child: ChildProcess = spawn(this.binaryPath, fullArgs, {
+      cwd: app.isPackaged ? undefined : this.engineDir,
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    console.log('[engine:resolveStream] spawned', name, 'pid:', child.pid, 'args:', fullArgs)
+
+    const eventCbs: Array<(ev: AgentStreamEvent) => void> = []
+    const doneCbs: Array<(result: ApiResponse<ResolveData>) => void> = []
+    const errorCbs: Array<(err: string) => void> = []
+
+    let killed = false
+
+    const notifyEvent = (ev: AgentStreamEvent): void => {
+      for (const cb of eventCbs) cb(ev)
+    }
+    const notifyDone = (result: ApiResponse<ResolveData>): void => {
+      console.log('[engine:resolveStream] done', name, 'success:', result.success)
+      for (const cb of doneCbs) cb(result)
+    }
+    const notifyError = (err: string): void => {
+      console.error('[engine:resolveStream] error', name, err)
+      for (const cb of errorCbs) cb(err)
+    }
+
+    // Read stdout line-by-line
+    if (child.stdout) {
+      const rl = createInterface({ input: child.stdout })
+      rl.on('line', (line) => {
+        if (!line.trim()) return
+        try {
+          const parsed = JSON.parse(line)
+          // Stream events have 't' field
+          if (parsed.t != null) {
+            console.log('[engine:resolveStream] stdout event', name, 'type:', parsed.t)
+            notifyEvent(parsed as AgentStreamEvent)
+          } else if (parsed.success != null) {
+            // Final ApiResponse
+            notifyDone(parsed as ApiResponse<ResolveData>)
+          } else {
+            // Unknown JSON — treat as raw stdout
+            console.log('[engine:resolveStream] stdout unknown json', name, line.substring(0, 200))
+            notifyEvent({ t: 'stdout', d: line, ts: new Date().toISOString() })
+          }
+        } catch {
+          // Not valid JSON — raw stdout
+          console.log('[engine:resolveStream] stdout raw', name, line.substring(0, 200))
+          notifyEvent({ t: 'stdout', d: line, ts: new Date().toISOString() })
+        }
+      })
+    }
+
+    // Read stderr line-by-line
+    if (child.stderr) {
+      const rl = createInterface({ input: child.stderr })
+      rl.on('line', (line) => {
+        if (!line.trim()) return
+        console.log('[engine:resolveStream] stderr', name, line.substring(0, 200))
+        notifyEvent({ t: 'stderr', d: line, ts: new Date().toISOString() })
+      })
+    }
+
+    child.on('error', (err) => {
+      console.error('[engine:resolveStream] spawn error', name, err)
+      if (!killed) notifyError(`Failed to spawn engine: ${err.message}`)
+    })
+
+    child.on('close', (code) => {
+      console.log('[engine:resolveStream] close', name, 'code:', code, 'killed:', killed)
+      if (!killed && code !== 0) {
+        notifyError(`Engine exited with code ${code}`)
+      }
+    })
+
+    return {
+      onEvent: (cb) => { eventCbs.push(cb) },
+      onDone: (cb) => { doneCbs.push(cb) },
+      onError: (cb) => { errorCbs.push(cb) },
+      kill: () => {
+        killed = true
+        child.kill()
+      }
+    }
+  }
+
+  /**
+   * Read the latest agent log file for a repo and return parsed events.
+   */
+  async readAgentLog(repoName: string): Promise<{
+    events: AgentStreamEvent[]
+    isRunning: boolean
+  }> {
+    console.log('[engine:readAgentLog]', repoName)
+    const configDir = process.env.XDG_CONFIG_HOME || join(homedir(), '.config')
+    const logDir = join(configDir, 'forksync', 'agent-logs', repoName)
+
+    if (!existsSync(logDir)) {
+      console.log('[engine:readAgentLog] logDir not found', logDir)
+      return { events: [], isRunning: false }
+    }
+
+    const files = readdirSync(logDir)
+      .filter((f) => f.endsWith('.ndjson'))
+      .sort()
+      .reverse()
+
+    if (files.length === 0) {
+      console.log('[engine:readAgentLog] no log files')
+      return { events: [], isRunning: false }
+    }
+
+    const latest = join(logDir, files[0])
+    console.log('[engine:readAgentLog] reading', latest)
+    const content = readFileSync(latest, 'utf-8')
+    const events: AgentStreamEvent[] = []
+
+    for (const line of content.split('\n')) {
+      if (!line.trim()) continue
+      try {
+        const parsed = JSON.parse(line)
+        if (parsed.t != null) {
+          events.push(parsed as AgentStreamEvent)
+        }
+      } catch {
+        // Skip corrupted lines
+        console.warn('[engine:readAgentLog] skipping corrupted line', line.substring(0, 100))
+      }
+    }
+
+    // isRunning is true if the last event is not 'done' or 'error'
+    const last = events[events.length - 1]
+    const isRunning = last != null && last.t !== 'done' && last.t !== 'error'
+    console.log('[engine:readAgentLog] parsed', events.length, 'events, isRunning:', isRunning)
+
+    return { events, isRunning }
   }
 
   /** `forksync resolve <name> --accept --json` */

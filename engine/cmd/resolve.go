@@ -28,6 +28,7 @@ var (
 	resolveNoConfirm bool   // --no-confirm
 	resolveReject    bool   // --reject
 	resolveAccept    bool   // --accept
+	resolveStream    bool   // --stream
 
 	// signalsToWatch lists OS signals that should trigger status rollback
 	// when the Go process is killed during agent conflict resolution.
@@ -79,6 +80,7 @@ func init() {
 	resolveCmd.Flags().BoolVar(&resolveNoConfirm, "no-confirm", false, "auto-commit without user confirmation")
 	resolveCmd.Flags().BoolVar(&resolveReject, "reject", false, "reject last resolution and rollback")
 	resolveCmd.Flags().BoolVar(&resolveAccept, "accept", false, "accept all conflicts as resolved")
+	resolveCmd.Flags().BoolVar(&resolveStream, "stream", false, "stream agent output as NDJSON")
 	rootCmd.AddCommand(resolveCmd)
 }
 
@@ -190,14 +192,23 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	defer cancel()
 
 	// Resolve conflicts
-	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy)
+	var streamWriter *agent.StreamWriter
+	if resolveStream {
+		logger.Info("resolve: streaming mode enabled", "repo", r.Name)
+		sw := agent.NewStreamWriter(os.Stdout)
+		streamWriter = sw
+	}
+
+	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy, streamWriter)
 	if err != nil {
+		logger.Warn("resolve: agent resolve failed", "repo", r.Name, "error", err)
 		resolved.Store(true) // agent finished (with error) — we handle the status
 		r.Status = types.RepoStatusConflict
 		r.ErrorMessage = fmt.Sprintf("agent resolve failed: %v", err)
 		updateRepoWithLog(r, store, "agent-error")
 		return fmt.Errorf("agent resolve: %w", err)
 	}
+	logger.Info("resolve: agent resolve completed", "repo", r.Name, "success", result != nil && result.Success)
 
 	// Verify: check for remaining conflict markers
 	gitOps := git.NewOperations()

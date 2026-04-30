@@ -20,7 +20,8 @@ import type {
   HistoryData,
   BranchMapping,
   EngineConfig,
-  ConfigSetData
+  ConfigSetData,
+  AgentStreamEvent
 } from '../renderer/src/types/engine'
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '../renderer/src/types/ide'
 import type { PostSyncCommand } from './engine'
@@ -68,6 +69,27 @@ const api = {
     ipcRenderer.invoke('engine:summarize', repoName),
   summarizeRetry: (repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> =>
     ipcRenderer.invoke('engine:summarizeRetry', repoName),
+
+  // Agent resolve streaming
+  resolveStreamStart: (name: string, opts?: { agent?: string; noConfirm?: boolean }): void =>
+    ipcRenderer.send('engine:resolveStream:start', name, opts),
+  onResolveStreamEvent: (callback: (repoName: string, event: AgentStreamEvent) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, repoName: string, ev: AgentStreamEvent): void => callback(repoName, ev)
+    ipcRenderer.on('engine:resolveStream:event', handler)
+    return () => ipcRenderer.removeListener('engine:resolveStream:event', handler)
+  },
+  onResolveStreamDone: (callback: (repoName: string, result: ApiResponse<ResolveData>) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, repoName: string, result: ApiResponse<ResolveData>): void => callback(repoName, result)
+    ipcRenderer.on('engine:resolveStream:done', handler)
+    return () => ipcRenderer.removeListener('engine:resolveStream:done', handler)
+  },
+  onResolveStreamError: (callback: (repoName: string, error: string) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, repoName: string, error: string): void => callback(repoName, error)
+    ipcRenderer.on('engine:resolveStream:error', handler)
+    return () => ipcRenderer.removeListener('engine:resolveStream:error', handler)
+  },
+  readAgentLog: (repoName: string): Promise<{ events: AgentStreamEvent[]; isRunning: boolean }> =>
+    ipcRenderer.invoke('engine:readAgentLog', repoName),
   setAutoLaunch: (enabled: boolean): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('app:setAutoLaunch', enabled),
   openDirectory: (): Promise<{ canceled: boolean; filePaths?: string[]; error?: string }> =>

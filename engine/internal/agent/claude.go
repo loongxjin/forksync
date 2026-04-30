@@ -1,11 +1,16 @@
 package agent
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strings"
+	"sync"
 	"time"
+
+	"github.com/loongxjin/forksync/engine/internal/logger"
 )
 
 // ClaudeAdapter implements AgentProvider for Claude Code CLI.
@@ -69,6 +74,175 @@ func (a *ClaudeAdapter) ResolveConflicts(ctx context.Context, session *Session, 
 		Success:   true,
 		SessionID: session.ID,
 		Summary:   truncateOutput(result.Text, maxSummaryLength),
+	}, nil
+}
+
+// ResolveConflictsWithStream runs Claude with real-time streaming output.
+// Claude emits JSON at the end; we stream the content of the "result" field
+// as stdout lines while the process runs.
+func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session *Session, prompt string, sw *StreamWriter) (*AgentResult, error) {
+	args := []string{
+		"--print",
+		"--dangerously-skip-permissions",
+		"--output-format", "json",
+		"--resume", session.ID,
+		prompt,
+	}
+	logger.Info("claude: starting streamed resolve", "repo", session.RepoPath, "session", session.ID)
+
+	cmd := exec.CommandContext(ctx, a.binary, args...)
+	cmd.Dir = session.RepoPath
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("claude stdout pipe: %w", err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("claude stderr pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("claude start: %w", err)
+	}
+	logger.Debug("claude: process started", "pid", cmd.Process.Pid)
+
+	var stdoutBuilder strings.Builder
+	var wg sync.WaitGroup
+
+	// Emit start event
+	_ = sw.WriteEvent(StreamEvent{
+		Type:      StreamEventStart,
+		Agent:     a.Name(),
+		Timestamp: time.Now().UTC(),
+	})
+
+	// Scan stdout — accumulate raw output for JSON parsing at the end
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		scanner := bufio.NewScanner(stdoutPipe)
+		for scanner.Scan() {
+			line := scanner.Text()
+			stdoutBuilder.WriteString(line)
+			stdoutBuilder.WriteByte('\n')
+			// We don't know yet if this line is part of the final JSON blob.
+			// Emit it as stdout so the user sees progress (Claude sometimes
+			// prints intermediate text before the JSON).
+			_ = sw.WriteEvent(StreamEvent{
+				Type:      StreamEventStdout,
+				Data:      line,
+				Timestamp: time.Now().UTC(),
+			})
+		}
+		if err := scanner.Err(); err != nil {
+			logger.Warn("claude: stdout scanner error", "error", err)
+		}
+		logger.Debug("claude: stdout scanner done")
+	}()
+
+	// Scan stderr
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		scanner := bufio.NewScanner(stderrPipe)
+		for scanner.Scan() {
+			line := scanner.Text()
+			_ = sw.WriteEvent(StreamEvent{
+				Type:      StreamEventStderr,
+				Data:      line,
+				Timestamp: time.Now().UTC(),
+			})
+		}
+		if err := scanner.Err(); err != nil {
+			logger.Warn("claude: stderr scanner error", "error", err)
+		}
+		logger.Debug("claude: stderr scanner done")
+	}()
+
+	// Wait for process and scanners
+	waitErr := cmd.Wait()
+	wg.Wait()
+
+	// Parse the final JSON output from accumulated stdout
+	stdoutRaw := stdoutBuilder.String()
+	var parsed claudeJSONResult
+	jsonErr := json.Unmarshal([]byte(stdoutRaw), &parsed)
+
+	if waitErr != nil {
+		logger.Warn("claude: process exited with error", "error", waitErr)
+		_ = sw.WriteEvent(StreamEvent{
+			Type:      StreamEventError,
+			Data:      fmt.Sprintf("claude CLI: %v", waitErr),
+			Timestamp: time.Now().UTC(),
+			Success:   false,
+		})
+		return &AgentResult{
+			Success:   false,
+			SessionID: session.ID,
+			Summary:   fmt.Sprintf("claude error: %v", waitErr),
+		}, fmt.Errorf("claude resolve: %w", waitErr)
+	}
+
+	if jsonErr != nil {
+		logger.Error("claude: JSON parse error", "error", jsonErr, "rawLength", len(stdoutRaw))
+		_ = sw.WriteEvent(StreamEvent{
+			Type:      StreamEventError,
+			Data:      fmt.Sprintf("claude JSON parse error: %v", jsonErr),
+			Timestamp: time.Now().UTC(),
+			Success:   false,
+		})
+		return &AgentResult{
+			Success:   false,
+			SessionID: session.ID,
+			Summary:   fmt.Sprintf("claude JSON parse error: %v", jsonErr),
+		}, fmt.Errorf("claude resolve: failed to parse JSON: %w", jsonErr)
+	}
+
+	if parsed.IsError {
+		logger.Error("claude: agent returned error", "result", parsed.Result)
+		_ = sw.WriteEvent(StreamEvent{
+			Type:      StreamEventError,
+			Data:      fmt.Sprintf("claude returned error: %s", parsed.Result),
+			Timestamp: time.Now().UTC(),
+			Success:   false,
+		})
+		return &AgentResult{
+			Success:   false,
+			SessionID: session.ID,
+			Summary:   fmt.Sprintf("claude error: %s", parsed.Result),
+		}, fmt.Errorf("claude resolve: %s", parsed.Result)
+	}
+
+	// Split the result text by line and emit as stdout events
+	// (overwriting the raw JSON lines we emitted earlier, so the user sees
+	// clean agent output rather than raw JSON).
+	resultLines := strings.Split(parsed.Result, "\n")
+	for _, line := range resultLines {
+		if line == "" {
+			continue
+		}
+		_ = sw.WriteEvent(StreamEvent{
+			Type:      StreamEventStdout,
+			Data:      line,
+			Timestamp: time.Now().UTC(),
+		})
+	}
+
+	summary := truncateOutput(parsed.Result, maxSummaryLength)
+	logger.Info("claude: streamed resolve completed", "sessionID", parsed.SessionID)
+	_ = sw.WriteEvent(StreamEvent{
+		Type:      StreamEventDone,
+		Timestamp: time.Now().UTC(),
+		Success:   true,
+		Summary:   summary,
+		SessionID: parsed.SessionID,
+	})
+
+	return &AgentResult{
+		Success:   true,
+		SessionID: parsed.SessionID,
+		Summary:   summary,
 	}, nil
 }
 

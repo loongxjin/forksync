@@ -143,7 +143,19 @@
     "rejectRollback": "拒绝并回退",
     "resolvingStatus": "Agent 正在为 {{repoName}} 解决冲突...",
     "commitFailed": "自动提交失败",
-    "commitFailedHint": "您可以点击「接受」再次尝试提交，或点击「拒绝并回退」放弃本次合并。"
+    "commitFailedHint": "您可以点击「接受」再次尝试提交，或点击「拒绝并回退」放弃本次合并。",
+    "viewTerminal": "查看终端",
+    "viewLive": "查看实时",
+    "viewLog": "查看日志"
+  },
+  "agentTerminal": {
+    "title": "Agent 解决",
+    "waiting": "等待 Agent 输出...",
+    "live": "实时",
+    "started": "已启动 {{agent}}",
+    "completed": "已完成",
+    "failed": "失败",
+    "resumeScroll": "恢复自动滚动"
   },
   "settings": {
     "title": "设置",

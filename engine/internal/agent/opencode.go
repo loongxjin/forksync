@@ -26,6 +26,10 @@ func (a *OpenCodeAdapter) ResolveConflicts(ctx context.Context, session *Session
 	return a.baseAdapter.ResolveConflicts(ctx, session, prompt, a.buildArgs)
 }
 
+func (a *OpenCodeAdapter) ResolveConflictsWithStream(ctx context.Context, session *Session, prompt string, sw *StreamWriter) (*AgentResult, error) {
+	return a.baseAdapter.ResolveConflictsWithStream(ctx, session, prompt, a.buildArgs, sw)
+}
+
 // buildArgs constructs the CLI arguments for an OpenCode invocation.
 func (a *OpenCodeAdapter) buildArgs(sessionID, prompt string) []string {
 	args := []string{"run"}

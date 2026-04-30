@@ -27,6 +27,10 @@ func (a *DroidAdapter) ResolveConflicts(ctx context.Context, session *Session, p
 	return a.baseAdapter.ResolveConflicts(ctx, session, prompt, a.buildArgs)
 }
 
+func (a *DroidAdapter) ResolveConflictsWithStream(ctx context.Context, session *Session, prompt string, sw *StreamWriter) (*AgentResult, error) {
+	return a.baseAdapter.ResolveConflictsWithStream(ctx, session, prompt, a.buildArgs, sw)
+}
+
 // buildArgs constructs the CLI arguments for a Droid exec invocation.
 func (a *DroidAdapter) buildArgs(sessionID, prompt string) []string {
 	args := []string{"exec", "--auto", "high"}

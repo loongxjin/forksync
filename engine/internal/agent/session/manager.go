@@ -88,7 +88,14 @@ func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*ag
 // It ensures a session exists, builds the prompt, and calls the agent.
 // If resuming an existing session fails (e.g. the agent CLI lost it),
 // it transparently creates a new session and retries.
-func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string, conflictFiles []string, strategy string) (*agent.AgentResult, error) {
+// An optional streamWriter enables real-time NDJSON streaming of agent output.
+func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string, conflictFiles []string, strategy string, streamWriter ...*agent.StreamWriter) (*agent.AgentResult, error) {
+	var sw *agent.StreamWriter
+	if len(streamWriter) > 0 {
+		sw = streamWriter[0]
+	}
+	logger.Info("session: resolving conflicts", "repo", repoID, "strategy", strategy, "streaming", sw != nil)
+
 	// Ensure session exists — reuse active or create new
 	sess, err := m.GetOrCreate(ctx, repoID, repoPath)
 	if err != nil {
@@ -105,9 +112,11 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 		prompt = agent.BuildConflictPrompt(conflictFiles, strategy)
 	}
 
-	// Call agent
-	result, err := m.provider.ResolveConflicts(ctx, sess, prompt)
+	// Call agent — use streaming if a StreamWriter is provided and the
+	// adapter supports it.
+	result, err := m.resolveWithOptionalStream(ctx, sess, prompt, conflictFiles, sw)
 	if err != nil {
+		logger.Info("session: resolve failed, retrying with new session", "repo", repoID, "error", err)
 		// Resume failed — the session is stale on the agent side.
 		// Discard it and create a fresh one, then retry.
 		m.invalidateSession(repoID)
@@ -120,7 +129,7 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 		}
 		// Retry with merged prompt (this is a new session too)
 		prompt = agent.BuildInitialConflictPrompt(conflictFiles, strategy)
-		result, err = m.provider.ResolveConflicts(ctx, sess, prompt)
+		result, err = m.resolveWithOptionalStream(ctx, sess, prompt, conflictFiles, sw)
 		if err != nil {
 			if updateErr := m.store.UpdateStatus(repoID, string(types.SessionStatusFailed)); updateErr != nil {
 				logger.Warn("session: failed to mark failed after retry", "repo", repoID, "error", updateErr)
@@ -157,6 +166,32 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 	}
 
 	return result, nil
+}
+
+// resolveWithOptionalStream dispatches to the adapter's streaming or non-streaming method.
+func (m *Manager) resolveWithOptionalStream(ctx context.Context, sess *agent.Session, prompt string, conflictFiles []string, sw *agent.StreamWriter) (*agent.AgentResult, error) {
+	if sw != nil {
+		logger.Info("session: using streaming resolve", "agent", m.provider.Name(), "repo", sess.RepoPath)
+		// Update start event with files
+		_ = sw.WriteEvent(agent.StreamEvent{
+			Type:      agent.StreamEventStart,
+			Agent:     m.provider.Name(),
+			Files:     conflictFiles,
+			Timestamp: time.Now().UTC(),
+		})
+
+		// Try adapter-specific streaming methods via type assertion.
+		// All concrete adapters (ClaudeAdapter, OpenCodeAdapter, DroidAdapter, CodexAdapter)
+		// implement ResolveConflictsWithStream with the same signature.
+		if p, ok := m.provider.(interface {
+			ResolveConflictsWithStream(context.Context, *agent.Session, string, *agent.StreamWriter) (*agent.AgentResult, error)
+		}); ok {
+			return p.ResolveConflictsWithStream(ctx, sess, prompt, sw)
+		}
+		logger.Warn("session: adapter does not support streaming, falling back to non-streaming", "agent", m.provider.Name())
+	}
+
+	return m.provider.ResolveConflicts(ctx, sess, prompt)
 }
 
 // invalidateSession removes a session from in-memory cache and marks it

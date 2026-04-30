@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DiffViewer } from '@/components/DiffViewer'
 import type { Repo, ResolveData } from '@/types/engine'
-import { Bot, FileText, AlertTriangle, Check, X, Loader2 } from 'lucide-react'
+import { Bot, FileText, AlertTriangle, Check, X, Loader2, Terminal } from 'lucide-react'
 
 interface ConflictInlinePanelProps {
   repo: Repo
@@ -13,6 +13,8 @@ interface ConflictInlinePanelProps {
   onAccept: () => Promise<void>
   onReject: () => Promise<void>
   loading: boolean
+  onViewTerminal?: () => void
+  hasLog?: boolean
 }
 
 export function ConflictInlinePanel({
@@ -21,7 +23,9 @@ export function ConflictInlinePanel({
   onResolve,
   onAccept,
   onReject,
-  loading
+  loading,
+  onViewTerminal,
+  hasLog
 }: ConflictInlinePanelProps): JSX.Element {
   const { t } = useTranslation()
   const [resolving, setResolving] = useState(false)
@@ -112,11 +116,19 @@ export function ConflictInlinePanel({
         )}
 
         {/* Action buttons */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {status === 'conflict' && (
-            <Button onClick={handleResolve} disabled={loading || resolving} size="sm">
-              {resolving ? t('resolvePanel.resolving') : t('resolvePanel.resolveWithAgent')}
-            </Button>
+            <>
+              <Button onClick={handleResolve} disabled={loading || resolving} size="sm">
+                {resolving ? t('resolvePanel.resolving') : t('resolvePanel.resolveWithAgent')}
+              </Button>
+              {hasLog && onViewTerminal && (
+                <Button onClick={onViewTerminal} disabled={loading} size="sm" variant="outline">
+                  <Terminal size={14} className="mr-1" />
+                  {t('resolvePanel.viewTerminal')}
+                </Button>
+              )}
+            </>
           )}
           {status === 'resolved' && (
             <>
@@ -128,13 +140,27 @@ export function ConflictInlinePanel({
                 <X size={14} className="mr-1" />
                 {t('resolvePanel.rejectRollback')}
               </Button>
+              {onViewTerminal && (
+                <Button onClick={onViewTerminal} disabled={loading} size="sm" variant="outline">
+                  <Terminal size={14} className="mr-1" />
+                  {t('resolvePanel.viewLog')}
+                </Button>
+              )}
             </>
           )}
           {status === 'resolving' && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 size={14} className="animate-spin text-warning" />
-              {t('resolvePanel.resolvingStatus', { repoName: repo.name })}
-            </div>
+            <>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 size={14} className="animate-spin text-warning" />
+                {t('resolvePanel.resolvingStatus', { repoName: repo.name })}
+              </div>
+              {onViewTerminal && (
+                <Button onClick={onViewTerminal} disabled={loading} size="sm" variant="outline">
+                  <Terminal size={14} className="mr-1" />
+                  {t('resolvePanel.viewLive')}
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>

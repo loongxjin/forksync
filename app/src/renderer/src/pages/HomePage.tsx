@@ -9,6 +9,7 @@ import { StatusOverviewBar, type FilterStatus, CONFLICT_FAMILY } from '@/compone
 import { RepoRow } from '@/components/RepoRow'
 import { ConflictInlinePanel } from '@/components/ConflictInlinePanel'
 import { RepoDetailPanel } from '@/components/RepoDetailPanel'
+import { AgentTerminalDrawer } from '@/components/AgentTerminalDrawer'
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -28,7 +29,8 @@ export function HomePage(): JSX.Element {
     startupSyncDone, markStartupSyncDone
   } = useRepos()
   const {
-    resolve, resolveAccept, resolveReject, preferred, loading: agentLoading, error: agentError
+    resolveAccept, resolveReject, preferred, loading: agentLoading, error: agentError,
+    resolveStream, loadAgentLog, streamEvents, streamLive, streamResults
   } = useAgents()
   const { engineConfig } = useSettings()
   const {
@@ -65,6 +67,9 @@ export function HomePage(): JSX.Element {
 
   // History list expanded: click title to toggle between showing all records vs 3 records
   const [historyExpanded, setHistoryExpanded] = useState(false)
+
+  // Terminal drawer state
+  const [terminalDrawerRepo, setTerminalDrawerRepo] = useState<string | null>(null)
 
   const handleSummaryRetry = useCallback(async (record: SyncHistoryRecord): Promise<void> => {
     // Optimistically update status to 'generating' so the polling kicks in
@@ -104,6 +109,16 @@ export function HomePage(): JSX.Element {
       historyInitialized && !hasSyncing && now - lastLoadAt < HISTORY_CACHE_MS
     if (!shouldSkip) loadHistory()
   }, [loadHistory, historyInitialized, lastLoadAt, hasSyncing])
+
+  // Load persisted agent logs for repos that are currently resolving
+  useEffect(() => {
+    if (!initialized) return
+    for (const repo of repos) {
+      if (repo.status === 'resolving') {
+        loadAgentLog(repo.name)
+      }
+    }
+  }, [initialized, repos, loadAgentLog])
 
   // Reload history after sync, and populate resolveResults for auto-resolved repos
   useEffect(() => {
@@ -179,19 +194,26 @@ export function HomePage(): JSX.Element {
     try {
       updateRepoStatus(repo.id, 'resolving')
       const noConfirm = engineConfig?.Agent?.ConfirmBeforeCommit === false
-      const result = await resolve(repo.name, { agent: preferred || undefined, noConfirm })
-      if (result) {
-        setResolveResults((prev) => ({ ...prev, [repo.name]: result }))
-      }
-      await refresh()
-      loadHistory()
+      // Start streaming resolve and open terminal drawer immediately
+      resolveStream(repo.name, { agent: preferred || undefined, noConfirm })
+      setTerminalDrawerRepo(repo.name)
     } catch (err) {
-      // Agent process crashed/timed out — refresh to recover from optimistic 'resolving' status
       await refresh().catch(() => {})
-    } finally {
       setLocalLoading((prev) => ({ ...prev, [repo.name]: false }))
     }
-  }, [resolve, preferred, updateRepoStatus, refresh, engineConfig, loadHistory])
+  }, [resolveStream, preferred, updateRepoStatus, refresh, engineConfig])
+
+  // Listen for streaming resolve results
+  useEffect(() => {
+    for (const [repoName, result] of Object.entries(streamResults)) {
+      if (result) {
+        setResolveResults((prev) => ({ ...prev, [repoName]: result }))
+      }
+      setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
+      refresh().catch(() => {})
+      loadHistory()
+    }
+  }, [streamResults, refresh, loadHistory])
 
   const handleAccept = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
@@ -399,6 +421,11 @@ export function HomePage(): JSX.Element {
                         onAccept={() => handleAccept(repo.name)}
                         onReject={() => handleReject(repo.name)}
                         loading={agentLoading || !!localLoading[repo.name]}
+                        onViewTerminal={() => {
+                          setTerminalDrawerRepo(repo.name)
+                          loadAgentLog(repo.name)
+                        }}
+                        hasLog={(streamEvents[repo.name]?.length ?? 0) > 0}
                       />
                     ) : (
                       <RepoDetailPanel
@@ -499,6 +526,17 @@ export function HomePage(): JSX.Element {
         repoName={settingsRepo ?? ''}
         open={settingsRepo !== null}
         onClose={() => { setSettingsRepo(null); setCommandsVersion((v) => v + 1) }}
+      />
+
+      {/* Agent Terminal Drawer */}
+      <AgentTerminalDrawer
+        open={terminalDrawerRepo !== null}
+        onOpenChange={(open) => {
+          if (!open) setTerminalDrawerRepo(null)
+        }}
+        repoName={terminalDrawerRepo ?? ''}
+        events={terminalDrawerRepo ? (streamEvents[terminalDrawerRepo] ?? []) : []}
+        isLive={terminalDrawerRepo ? streamLive.has(terminalDrawerRepo) : false}
       />
     </div>
   )

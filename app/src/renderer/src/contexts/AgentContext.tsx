@@ -8,9 +8,10 @@ import {
   useReducer,
   useCallback,
   useRef,
+  useEffect,
   type ReactNode
 } from 'react'
-import type { AgentInfo, AgentSessionInfo, ResolveData, AcceptData, AgentResetData } from '@/types/engine'
+import type { AgentInfo, AgentSessionInfo, ResolveData, AcceptData, AgentResetData, AgentStreamEvent } from '@/types/engine'
 import { engineApi } from '@/lib/api'
 
 // ---------------------------------------------------------------------------
@@ -24,6 +25,9 @@ interface AgentState {
   loading: boolean
   initialized: boolean
   error: string | null
+  streamEvents: Record<string, AgentStreamEvent[]>
+  streamLive: Set<string>
+  streamResults: Record<string, ResolveData | null>
 }
 
 type AgentAction =
@@ -33,6 +37,11 @@ type AgentAction =
   | { type: 'SET_SESSIONS'; sessions: AgentSessionInfo[] }
   | { type: 'SET_SESSIONS_SILENT'; sessions: AgentSessionInfo[] }
   | { type: 'SET_ERROR'; error: string | null }
+  | { type: 'STREAM_START'; repoName: string }
+  | { type: 'STREAM_EVENT'; repoName: string; event: AgentStreamEvent }
+  | { type: 'STREAM_DONE'; repoName: string; result?: ResolveData | null }
+  | { type: 'STREAM_LOAD'; repoName: string; events: AgentStreamEvent[]; isRunning: boolean }
+  | { type: 'STREAM_CLEAR'; repoName: string }
 
 const initialState: AgentState = {
   agents: [],
@@ -40,7 +49,10 @@ const initialState: AgentState = {
   sessions: [],
   loading: false,
   initialized: false,
-  error: null
+  error: null,
+  streamEvents: {},
+  streamLive: new Set(),
+  streamResults: {}
 }
 
 function agentReducer(state: AgentState, action: AgentAction): AgentState {
@@ -67,6 +79,62 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
       return { ...state, sessions: action.sessions }
     case 'SET_ERROR':
       return { ...state, error: action.error, loading: false }
+    case 'STREAM_START': {
+      const nextLive = new Set(state.streamLive)
+      nextLive.add(action.repoName)
+      return {
+        ...state,
+        streamLive: nextLive,
+        streamEvents: {
+          ...state.streamEvents,
+          [action.repoName]: []
+        }
+      }
+    }
+    case 'STREAM_EVENT': {
+      const existing = state.streamEvents[action.repoName] ?? []
+      return {
+        ...state,
+        streamEvents: {
+          ...state.streamEvents,
+          [action.repoName]: [...existing, action.event]
+        }
+      }
+    }
+    case 'STREAM_DONE': {
+      const nextLive = new Set(state.streamLive)
+      nextLive.delete(action.repoName)
+      return {
+        ...state,
+        streamLive: nextLive,
+        streamResults: action.result !== undefined
+          ? { ...state.streamResults, [action.repoName]: action.result }
+          : state.streamResults
+      }
+    }
+    case 'STREAM_LOAD': {
+      const nextLive = new Set(state.streamLive)
+      if (action.isRunning) {
+        nextLive.add(action.repoName)
+      } else {
+        nextLive.delete(action.repoName)
+      }
+      return {
+        ...state,
+        streamEvents: {
+          ...state.streamEvents,
+          [action.repoName]: action.events
+        },
+        streamLive: nextLive
+      }
+    }
+    case 'STREAM_CLEAR': {
+      const nextEvents = { ...state.streamEvents }
+      delete nextEvents[action.repoName]
+      const nextLive = new Set(state.streamLive)
+      nextLive.delete(action.repoName)
+      return { ...state, streamEvents: nextEvents, streamLive: nextLive }
+    }
     default:
       return state
   }
@@ -87,6 +155,10 @@ interface AgentContextValue extends AgentState {
   resolveReject: (name: string) => Promise<boolean>
   cleanup: () => Promise<number>
   resetSession: (name: string) => Promise<AgentResetData | null>
+  resolveStream: (name: string, opts?: { agent?: string; noConfirm?: boolean }) => void
+  loadAgentLog: (name: string) => Promise<void>
+  clearStream: (name: string) => void
+  streamResults: Record<string, ResolveData | null>
 }
 
 const AgentContext = createContext<AgentContextValue | null>(null)
@@ -97,6 +169,7 @@ const AgentContext = createContext<AgentContextValue | null>(null)
 
 export function AgentProvider({ children }: { children: ReactNode }): JSX.Element {
   const [state, dispatch] = useReducer(agentReducer, initialState)
+  const ipcSetupRef = useRef(false)
 
   const refreshAgents = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', loading: true })
@@ -216,6 +289,56 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
     }
   }, [refreshSessions])
 
+  const resolveStream = useCallback((name: string, opts?: { agent?: string; noConfirm?: boolean }) => {
+    console.log('[AgentContext] resolveStream', name, opts)
+    dispatch({ type: 'STREAM_START', repoName: name })
+    engineApi.resolveStreamStart(name, opts)
+  }, [])
+
+  const loadAgentLog = useCallback(async (name: string): Promise<void> => {
+    console.log('[AgentContext] loadAgentLog', name)
+    try {
+      const res = await engineApi.readAgentLog(name)
+      console.log('[AgentContext] loadAgentLog result', name, res.events.length, 'events, isRunning:', res.isRunning)
+      dispatch({ type: 'STREAM_LOAD', repoName: name, events: res.events, isRunning: res.isRunning })
+    } catch (err) {
+      console.error('[AgentContext] loadAgentLog failed', name, err)
+      dispatch({ type: 'STREAM_LOAD', repoName: name, events: [], isRunning: false })
+    }
+  }, [])
+
+  const clearStream = useCallback((name: string) => {
+    dispatch({ type: 'STREAM_CLEAR', repoName: name })
+  }, [])
+
+  // Set up IPC listeners once
+  useEffect(() => {
+    if (ipcSetupRef.current) return
+    ipcSetupRef.current = true
+
+    const unsubEvent = engineApi.onResolveStreamEvent((repoName, event) => {
+      console.log('[AgentContext] stream event', repoName, event.t)
+      dispatch({ type: 'STREAM_EVENT', repoName, event })
+    })
+
+    const unsubDone = engineApi.onResolveStreamDone((repoName, apiRes) => {
+      console.log('[AgentContext] stream done', repoName, apiRes.success)
+      dispatch({ type: 'STREAM_DONE', repoName, result: apiRes.success ? apiRes.data : null })
+    })
+
+    const unsubError = engineApi.onResolveStreamError((repoName, error) => {
+      console.error('[AgentContext] stream error', repoName, error)
+      dispatch({ type: 'STREAM_EVENT', repoName, event: { t: 'error', d: error, ts: new Date().toISOString() } })
+      dispatch({ type: 'STREAM_DONE', repoName })
+    })
+
+    return () => {
+      unsubEvent()
+      unsubDone()
+      unsubError()
+    }
+  }, [])
+
   return (
     <AgentContext.Provider
       value={{
@@ -226,7 +349,11 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
         resolveAccept,
         resolveReject,
         cleanup,
-        resetSession
+        resetSession,
+        resolveStream,
+        loadAgentLog,
+        clearStream,
+        streamResults: state.streamResults
       }}
     >
       {children}
