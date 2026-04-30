@@ -194,30 +194,16 @@ func isConflictState(status types.RepoStatus) bool {
 		status == types.RepoStatusWaiting
 }
 
-// cleanupStaleWorkflows removes workflows that have exceeded their retention time.
-// Success: 1 minute, Failed/Aborted: 10 minutes, Waiting: 30 minutes.
+// cleanupStaleWorkflows removes successfully completed workflows.
+// Success: cleared immediately on refresh.
+// Failed/Waiting: retained until the user explicitly handles them.
 func cleanupStaleWorkflows(repos []types.Repo, store repo.Store) {
-	now := time.Now()
 	for i := range repos {
 		wf := repos[i].Workflow
 		if wf == nil {
 			continue
 		}
-		var maxAge time.Duration
-		switch wf.Status {
-		case types.WorkflowSuccess:
-			maxAge = time.Minute
-		case types.WorkflowFailed:
-			maxAge = 10 * time.Minute
-		case types.WorkflowWaiting:
-			maxAge = 30 * time.Minute
-		default:
-			continue
-		}
-		if wf.StartedAt.IsZero() {
-			continue
-		}
-		if now.Sub(wf.StartedAt) > maxAge {
+		if wf.Status == types.WorkflowSuccess {
 			repos[i].Workflow = nil
 			if updateErr := store.Update(repos[i]); updateErr != nil {
 				logger.Error("status: failed to clear stale workflow", "repo", repos[i].Name, "error", updateErr)
