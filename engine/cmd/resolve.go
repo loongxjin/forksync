@@ -450,7 +450,9 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error 
 
 	r.Status = types.RepoStatusConflict
 	r.ErrorMessage = ""
-	updateWorkflowAbort(&r)
+	// User explicitly rejected — clear the workflow entirely rather than leaving
+	// a failed record behind. The git state has already been rolled back.
+	r.Workflow = nil
 	updateRepoWithLog(r, store, "reject")
 
 	outputResult(types.RejectData{RepoID: r.ID, RolledBack: true}, "🔄 Rolled back merge for %s", r.Name)

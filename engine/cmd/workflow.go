@@ -129,10 +129,9 @@ func handleWorkflowAbort(ctx context.Context, r types.Repo, store repo.Store) er
 			wf.Steps[i].EndedAt = &now
 		}
 	}
-	wf.Status = types.WorkflowFailed
-	now := types.Time{Time: time.Now()}
-	wf.FinishedAt = &now
-	r.Workflow = wf
+	// User explicitly aborted — clear the workflow entirely rather than leaving
+	// a failed record behind. The git state has already been rolled back.
+	r.Workflow = nil
 	r.Status = types.RepoStatusSyncNeeded
 	r.ErrorMessage = ""
 	if err := store.Update(r); err != nil {
@@ -202,10 +201,9 @@ func handleWorkflowReject(ctx context.Context, r types.Repo, store repo.Store) e
 			wf.Steps[i].EndedAt = &now
 		}
 	}
-	wf.Status = types.WorkflowFailed
-	now := types.Time{Time: time.Now()}
-	wf.FinishedAt = &now
-	r.Workflow = wf
+	// User explicitly rejected — clear the workflow entirely rather than leaving
+	// a failed record behind. The git state has already been rolled back.
+	r.Workflow = nil
 	r.Status = types.RepoStatusSyncNeeded
 	r.ErrorMessage = ""
 	if err := store.Update(r); err != nil {
