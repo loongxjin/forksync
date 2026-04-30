@@ -194,22 +194,39 @@ func isConflictState(status types.RepoStatus) bool {
 		status == types.RepoStatusWaiting
 }
 
-// cleanupStaleWorkflows removes successfully completed workflows.
-// Success: cleared immediately on refresh.
-// Failed/Waiting: retained until the user explicitly handles them.
+// cleanupStaleWorkflows removes successfully completed workflows and workflows
+// that were explicitly aborted/rejected by the user.
+// Success / Aborted: cleared immediately on refresh.
+// Failed (with a failed step): retained so the user can retry.
+// Waiting: retained until the user explicitly handles them.
 func cleanupStaleWorkflows(repos []types.Repo, store repo.Store) {
 	for i := range repos {
 		wf := repos[i].Workflow
 		if wf == nil {
 			continue
 		}
-		if wf.Status == types.WorkflowSuccess {
+		if wf.Status == types.WorkflowSuccess || isAbortedWorkflow(wf) {
 			repos[i].Workflow = nil
 			if updateErr := store.Update(repos[i]); updateErr != nil {
 				logger.Error("status: failed to clear stale workflow", "repo", repos[i].Name, "error", updateErr)
 			}
 		}
 	}
+}
+
+// isAbortedWorkflow reports whether a failed workflow was produced by an explicit
+// user abort/reject. These workflows have no failed steps — all pending steps were
+// marked as skipped — unlike genuine failures where at least one step is failed.
+func isAbortedWorkflow(wf *types.SyncWorkflow) bool {
+	if wf == nil || wf.Status != types.WorkflowFailed {
+		return false
+	}
+	for _, step := range wf.Steps {
+		if step.Status == types.StepStatusFailed {
+			return false
+		}
+	}
+	return true
 }
 
 // reconcileConflictStatus checks the actual git merge state for a repo in conflict
