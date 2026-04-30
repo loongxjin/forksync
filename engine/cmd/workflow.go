@@ -92,7 +92,19 @@ func handleResolveWithAgent(_ context.Context, r types.Repo, store repo.Store) e
 	}
 	advanceWorkflowStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
 	advanceWorkflowStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
+	// Restore accept_changes from skipped to pending so it can be used later.
+	for i := range wf.Steps {
+		if wf.Steps[i].Step == types.StepAcceptChanges && wf.Steps[i].Status == types.StepStatusSkipped {
+			wf.Steps[i].Status = types.StepStatusPending
+			wf.Steps[i].Message = ""
+			wf.Steps[i].EndedAt = nil
+		}
+	}
+	wf.Status = types.WorkflowRunning
 	r.Workflow = wf
+	// Keep repo status as conflict so `forksync resolve` can pick it up.
+	r.Status = types.RepoStatusConflict
+	r.ErrorMessage = ""
 	if err := store.Update(r); err != nil {
 		logger.Error("workflow: failed to update repo", "repo", r.Name, "error", err)
 	}

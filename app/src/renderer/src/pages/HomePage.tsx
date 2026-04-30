@@ -244,12 +244,11 @@ export function HomePage(): JSX.Element {
         const wfRes = await engineApi.workflowContinue(repo.name, 'resolve_with_agent')
         if (!wfRes.success) {
           showToast?.(wfRes.error ?? 'Workflow continue failed', 'error')
-          setLocalLoading((prev) => ({ ...prev, [repo.name]: false }))
           return
         }
-        // Optimistically update repo with the new workflow from backend
+        // Optimistically update repo with the new workflow and status from backend
         if (wfRes.data?.workflow) {
-          updateRepo({ ...repo, workflow: wfRes.data.workflow })
+          updateRepo({ ...repo, status: wfRes.data.status ?? repo.status, workflow: wfRes.data.workflow })
         }
       } else {
         // Triggered from ConflictInlinePanel — optimistically update status
@@ -261,6 +260,9 @@ export function HomePage(): JSX.Element {
       setTerminalDrawerRepo(repo.name)
     } catch (err) {
       await refresh().catch(() => {})
+      showToast?.(`Agent resolve failed: ${(err as Error).message}`, 'error')
+    } finally {
+      // Release loading immediately — stream progress is tracked via streamLive, not localLoading.
       setLocalLoading((prev) => ({ ...prev, [repo.name]: false }))
     }
   }, [resolveStream, preferred, updateRepoStatus, updateRepo, refresh, engineConfig, showToast])

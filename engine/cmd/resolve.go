@@ -107,15 +107,16 @@ func runResolve(cmd *cobra.Command, args []string) error {
 		return runResolveReject(cmd, r, store)
 	}
 
-	// Not in conflict state
-	if r.Status != types.RepoStatusConflict && r.Status != types.RepoStatusResolved {
-		if isJSON() {
-			outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
-		} else {
-			outputText("No conflicts to resolve for %s", r.Name)
+		// Not in a conflict-related state
+		if r.Status != types.RepoStatusConflict && r.Status != types.RepoStatusResolved &&
+			r.Status != types.RepoStatusResolving && r.Status != types.RepoStatusWaiting {
+			if isJSON() {
+				outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
+			} else {
+				outputText("No conflicts to resolve for %s", r.Name)
+			}
+			return nil
 		}
-		return nil
-	}
 
 	// Detect conflict files
 	gitOps := git.NewOperations()

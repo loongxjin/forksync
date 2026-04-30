@@ -113,38 +113,58 @@ export function WorkflowSteps({
                 <div className="flex flex-wrap gap-2 mt-2">
                   {stepRecord.step === 'resolve_strategy' && (
                     <>
-                      {onResolveWithAgent && (
-                        <Button
-                          onClick={onResolveWithAgent}
-                          disabled={loading}
-                          size="sm"
-                          variant="default"
-                        >
-                          <Bot size={14} className="mr-1" />
-                          {t('resolvePanel.resolveWithAgent')}
-                        </Button>
-                      )}
-                      {onOpenIDE && (
-                        <Button
-                          onClick={onOpenIDE}
-                          disabled={loading}
-                          size="sm"
-                          variant="outline"
-                        >
-                          <Monitor size={14} className="mr-1" />
-                          Open in IDE
-                        </Button>
-                      )}
-                      {onAbort && (
-                        <Button
-                          onClick={onAbort}
-                          disabled={loading}
-                          size="sm"
-                          variant="destructive"
-                        >
-                          <GitPullRequestClosed size={14} className="mr-1" />
-                          Abort Merge
-                        </Button>
+                      {isStreamLive ? (
+                        <div className="flex items-center gap-2">
+                          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                          <span className="text-sm text-muted-foreground">Agent resolving conflicts...</span>
+                          {onViewTerminal && (
+                            <Button
+                              onClick={onViewTerminal}
+                              size="sm"
+                              variant="outline"
+                              className="text-xs ml-2"
+                            >
+                              <Terminal size={12} className="mr-1" />
+                              View Live
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          {onResolveWithAgent && (
+                            <Button
+                              onClick={onResolveWithAgent}
+                              disabled={loading}
+                              size="sm"
+                              variant="default"
+                            >
+                              <Bot size={14} className="mr-1" />
+                              {t('resolvePanel.resolveWithAgent')}
+                            </Button>
+                          )}
+                          {onOpenIDE && (
+                            <Button
+                              onClick={onOpenIDE}
+                              disabled={loading}
+                              size="sm"
+                              variant="outline"
+                            >
+                              <Monitor size={14} className="mr-1" />
+                              Open in IDE
+                            </Button>
+                          )}
+                          {onAbort && (
+                            <Button
+                              onClick={onAbort}
+                              disabled={loading}
+                              size="sm"
+                              variant="destructive"
+                            >
+                              <GitPullRequestClosed size={14} className="mr-1" />
+                              Abort Merge
+                            </Button>
+                          )}
+                        </>
                       )}
                     </>
                   )}
