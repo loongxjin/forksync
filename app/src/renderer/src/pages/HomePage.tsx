@@ -506,7 +506,9 @@ export function HomePage(): JSX.Element {
                         onRetryCommit={() => handleWorkflowContinue(repo.name, 'retry_commit')}
                         onViewTerminal={() => {
                           setTerminalDrawerRepo(repo.name)
-                          loadAgentLog(repo.name)
+                          if (!(streamEvents[repo.name]?.length)) {
+                            loadAgentLog(repo.name)
+                          }
                         }}
                         loading={agentLoading || !!localLoading[repo.name]}
                       />
@@ -520,7 +522,9 @@ export function HomePage(): JSX.Element {
                         loading={agentLoading || !!localLoading[repo.name]}
                         onViewTerminal={() => {
                           setTerminalDrawerRepo(repo.name)
-                          loadAgentLog(repo.name)
+                          if (!(streamEvents[repo.name]?.length)) {
+                            loadAgentLog(repo.name)
+                          }
                         }}
                         hasLog={(streamEvents[repo.name]?.length ?? 0) > 0}
                       />

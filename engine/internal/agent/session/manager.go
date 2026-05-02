@@ -94,7 +94,7 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 	if len(streamWriter) > 0 {
 		sw = streamWriter[0]
 	}
-	logger.Info("session: resolving conflicts", "repo", repoID, "strategy", strategy, "streaming", sw != nil)
+	logger.Info("[TRACE] session: ResolveConflicts ENTRY", "repo", repoID, "strategy", strategy, "streaming", sw != nil, "conflictFiles", conflictFiles)
 
 	// Ensure session exists — reuse active or create new
 	sess, err := m.GetOrCreate(ctx, repoID, repoPath)
@@ -114,6 +114,7 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 
 	// Call agent — use streaming if a StreamWriter is provided and the
 	// adapter supports it.
+	logger.Info("[TRACE] session: calling resolveWithOptionalStream", "provider", m.provider.Name(), "hasStreamWriter", sw != nil)
 	result, err := m.resolveWithOptionalStream(ctx, sess, prompt, conflictFiles, sw)
 	if err != nil {
 		logger.Info("session: resolve failed, retrying with new session", "repo", repoID, "error", err)
@@ -170,6 +171,7 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 
 // resolveWithOptionalStream dispatches to the adapter's streaming or non-streaming method.
 func (m *Manager) resolveWithOptionalStream(ctx context.Context, sess *agent.Session, prompt string, conflictFiles []string, sw *agent.StreamWriter) (*agent.AgentResult, error) {
+	logger.Info("[TRACE] session: resolveWithOptionalStream ENTRY", "provider", m.provider.Name(), "hasSW", sw != nil, "sessionID", sess.ID, "isNew", sess.IsNew)
 	if sw != nil {
 		logger.Info("session: using streaming resolve", "agent", m.provider.Name(), "repo", sess.RepoPath)
 		// Update start event with files
@@ -180,15 +182,18 @@ func (m *Manager) resolveWithOptionalStream(ctx context.Context, sess *agent.Ses
 			Timestamp: time.Now().UTC(),
 		})
 
-		// Try adapter-specific streaming methods via type assertion.
-		// All concrete adapters (ClaudeAdapter, OpenCodeAdapter, DroidAdapter, CodexAdapter)
-		// implement ResolveConflictsWithStream with the same signature.
-		if p, ok := m.provider.(interface {
-			ResolveConflictsWithStream(context.Context, *agent.Session, string, *agent.StreamWriter) (*agent.AgentResult, error)
-		}); ok {
-			return p.ResolveConflictsWithStream(ctx, sess, prompt, sw)
-		}
-		logger.Warn("session: adapter does not support streaming, falling back to non-streaming", "agent", m.provider.Name())
+			// Try adapter-specific streaming methods via type assertion.
+			// All concrete adapters (ClaudeAdapter, OpenCodeAdapter, DroidAdapter, CodexAdapter)
+			// implement ResolveConflictsWithStream with the same signature.
+			if p, ok := m.provider.(interface {
+				ResolveConflictsWithStream(context.Context, *agent.Session, string, *agent.StreamWriter) (*agent.AgentResult, error)
+			}); ok {
+				logger.Info("[TRACE] session: adapter supports streaming, calling ResolveConflictsWithStream", "provider", m.provider.Name())
+				result, err := p.ResolveConflictsWithStream(ctx, sess, prompt, sw)
+				logger.Info("[TRACE] session: ResolveConflictsWithStream RETURNED", "provider", m.provider.Name(), "err", err, "success", result != nil && result.Success)
+				return result, err
+			}
+			logger.Warn("[TRACE] session: adapter does NOT support streaming, falling back to non-streaming", "agent", m.provider.Name())
 	}
 
 	return m.provider.ResolveConflicts(ctx, sess, prompt)

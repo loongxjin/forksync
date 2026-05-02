@@ -79,7 +79,7 @@ func (a *baseAdapter) ResolveConflicts(ctx context.Context, session *Session, pr
 // when a StreamWriter is provided.
 func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *Session, prompt string, buildArgs func(sessionID, prompt string) []string, sw *StreamWriter) (*AgentResult, error) {
 	args := buildArgs(session.ID, prompt)
-	logger.Info("baseAdapter: starting streamed resolve", "agent", a.name, "repo", session.RepoPath, "session", session.ID)
+	logger.Info("[TRACE] baseAdapter: ResolveConflictsWithStream START", "agent", a.name, "repo", session.RepoPath, "session", session.ID, "args", args)
 
 	cmd := exec.CommandContext(ctx, a.binary, args...)
 	cmd.Dir = session.RepoPath
@@ -94,27 +94,27 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 	}
 
 	if err := cmd.Start(); err != nil {
+		logger.Error("[TRACE] baseAdapter: cmd.Start FAILED", "agent", a.name, "error", err)
 		return nil, fmt.Errorf("%s start: %w", a.name, err)
 	}
-	logger.Debug("baseAdapter: agent process started", "agent", a.name, "pid", cmd.Process.Pid)
+	logger.Info("[TRACE] baseAdapter: process started OK", "agent", a.name, "pid", cmd.Process.Pid)
 
 	var outputBuilder strings.Builder
 	var wg sync.WaitGroup
 
-	// Emit start event
-	_ = sw.WriteEvent(StreamEvent{
-		Type:      StreamEventStart,
-		Agent:     a.name,
-		Timestamp: time.Now().UTC(),
-	})
+	// NOTE: start event is already emitted by session.Manager.resolveWithOptionalStream,
+	// so we do NOT emit a duplicate start here.
 
 	// Scan stdout
+	stdoutLineCount := 0
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		scanner := bufio.NewScanner(stdoutPipe)
 		for scanner.Scan() {
 			line := scanner.Text()
+			stdoutLineCount++
+			logger.Info("[TRACE] baseAdapter: stdout line", "agent", a.name, "lineNum", stdoutLineCount, "len", len(line), "preview", truncateForLog(line, 120))
 			outputBuilder.WriteString(line)
 			outputBuilder.WriteByte('\n')
 			_ = sw.WriteEvent(StreamEvent{
@@ -124,18 +124,21 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 			})
 		}
 		if err := scanner.Err(); err != nil {
-			logger.Warn("baseAdapter: stdout scanner error", "agent", a.name, "error", err)
+			logger.Warn("[TRACE] baseAdapter: stdout scanner error", "agent", a.name, "error", err)
 		}
-		logger.Debug("baseAdapter: stdout scanner done", "agent", a.name)
+		logger.Info("[TRACE] baseAdapter: stdout scanner DONE", "agent", a.name, "totalLines", stdoutLineCount)
 	}()
 
 	// Scan stderr
+	stderrLineCount := 0
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		scanner := bufio.NewScanner(stderrPipe)
 		for scanner.Scan() {
 			line := scanner.Text()
+			stderrLineCount++
+			logger.Info("[TRACE] baseAdapter: stderr line", "agent", a.name, "lineNum", stderrLineCount, "preview", truncateForLog(line, 120))
 			outputBuilder.WriteString(line)
 			outputBuilder.WriteByte('\n')
 			_ = sw.WriteEvent(StreamEvent{
@@ -145,9 +148,9 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 			})
 		}
 		if err := scanner.Err(); err != nil {
-			logger.Warn("baseAdapter: stderr scanner error", "agent", a.name, "error", err)
+			logger.Warn("[TRACE] baseAdapter: stderr scanner error", "agent", a.name, "error", err)
 		}
-		logger.Debug("baseAdapter: stderr scanner done", "agent", a.name)
+		logger.Info("[TRACE] baseAdapter: stderr scanner DONE", "agent", a.name, "totalLines", stderrLineCount)
 	}()
 
 	// Wait for process and scanners
@@ -155,6 +158,7 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 	wg.Wait()
 
 	output := outputBuilder.String()
+	logger.Info("[TRACE] baseAdapter: process finished", "agent", a.name, "waitErr", waitErr, "outputLen", len(output), "stdoutLines", stdoutLineCount, "stderrLines", stderrLineCount)
 
 	if waitErr != nil {
 		logger.Warn("baseAdapter: agent process exited with error", "agent", a.name, "error", waitErr)
@@ -177,7 +181,7 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 	}
 
 	summary := truncateOutput(output, maxSummaryLength)
-	logger.Info("baseAdapter: agent process completed", "agent", a.name, "sessionID", sessionID)
+	logger.Info("[TRACE] baseAdapter: agent process completed", "agent", a.name, "sessionID", sessionID)
 	_ = sw.WriteEvent(StreamEvent{
 		Type:      StreamEventDone,
 		Timestamp: time.Now().UTC(),

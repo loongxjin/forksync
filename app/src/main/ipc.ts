@@ -7,7 +7,7 @@
 
 import { ipcMain, dialog, app, BrowserWindow } from 'electron'
 import { t } from './i18n'
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync, unlinkSync, appendFileSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import { EngineClient } from './engine'
@@ -137,13 +137,18 @@ export function registerIpcHandlers(): void {
   // --- Agent resolve streaming (fire-and-forget start, push events) ---
 
   const activeStreams = new Map<string, ReturnType<EngineClient['resolveStream']>>()
+  const ipcLogPath = join(homedir(), '.forksync', 'logs', 'electron-resolve-stream.log')
+  const ipcLog = (msg: string): void => {
+    const ts = new Date().toISOString()
+    try { appendFileSync(ipcLogPath, `[${ts}] [IPC] ${msg}\n`) } catch {}
+  }
 
   ipcMain.on('engine:resolveStream:start', (event, name: string, opts?: { agent?: string; noConfirm?: boolean }) => {
-    console.log('[ipc:resolveStream:start]', name, opts)
+    ipcLog(`resolveStream:start name=${name} opts=${JSON.stringify(opts)}`)
     // Kill any existing stream for this repo
     const existing = activeStreams.get(name)
     if (existing) {
-      console.log('[ipc:resolveStream:start] killing existing stream for', name)
+      ipcLog(`killing existing stream for ${name}`)
       existing.kill()
       activeStreams.delete(name)
     }
@@ -152,18 +157,18 @@ export function registerIpcHandlers(): void {
     activeStreams.set(name, stream)
 
     stream.onEvent((ev: AgentStreamEvent) => {
-      console.log('[ipc:resolveStream:event]', name, ev.t)
+      ipcLog(`resolveStream:event name=${name} type=${ev.t} dataLen=${(ev.d?.length ?? 0)}`)
       event.sender.send('engine:resolveStream:event', name, ev)
     })
 
     stream.onDone((result) => {
-      console.log('[ipc:resolveStream:done]', name, result.success)
+      ipcLog(`resolveStream:done name=${name} success=${result.success}`)
       event.sender.send('engine:resolveStream:done', name, result)
       activeStreams.delete(name)
     })
 
     stream.onError((err: string) => {
-      console.error('[ipc:resolveStream:error]', name, err)
+      ipcLog(`resolveStream:error name=${name} err=${err}`)
       event.sender.send('engine:resolveStream:error', name, err)
       activeStreams.delete(name)
     })

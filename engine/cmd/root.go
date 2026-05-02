@@ -48,7 +48,9 @@ var versionCmd = &cobra.Command{
 	},
 }
 
-// outputJSON writes a JSON ApiResponse to stdout.
+// outputJSON writes a JSON ApiResponse to stdout as a single-line JSON object.
+// Single-line output is required for NDJSON compatibility: the Electron main
+// process parses stdout line-by-line, so indented multi-line JSON would break.
 func outputJSON[T any](data T, err error) {
 	resp := types.ApiResponse[T]{}
 	if err != nil {
@@ -59,11 +61,12 @@ func outputJSON[T any](data T, err error) {
 		resp.Data = data
 	}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	if encodeErr := enc.Encode(resp); encodeErr != nil {
+	raw, encodeErr := json.Marshal(resp)
+	if encodeErr != nil {
 		fmt.Fprintf(os.Stderr, "error encoding json: %v\n", encodeErr)
+		return
 	}
+	fmt.Println(string(raw))
 }
 
 // outputText writes a human-readable message to stdout.

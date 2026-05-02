@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bufio"
 	"encoding/json"
 	"io"
 	"sync"
@@ -55,24 +56,72 @@ type StreamEvent struct {
 }
 
 // StreamWriter writes StreamEvents as NDJSON lines to an io.Writer.
+// Each WriteEvent immediately flushes so downstream consumers (e.g. Electron
+// readline) see the event without delay.
 type StreamWriter struct {
-	mu  sync.Mutex
-	enc *json.Encoder
+	mu    sync.Mutex
+	w     *bufio.Writer
+	enc   *json.Encoder
+	multi *MultiStreamWriter // if set, delegates WriteEvent here instead
 }
 
 // NewStreamWriter creates a new StreamWriter that writes to w.
+// It wraps w in a bufio.Writer and flushes after every event.
 func NewStreamWriter(w io.Writer) *StreamWriter {
-	return &StreamWriter{enc: json.NewEncoder(w)}
+	bw := bufio.NewWriter(w)
+	return &StreamWriter{
+		w:   bw,
+		enc: json.NewEncoder(bw),
+	}
 }
 
-// WriteEvent encodes ev as a single NDJSON line.
+// WriteEvent encodes ev as a single NDJSON line and flushes immediately.
 func (sw *StreamWriter) WriteEvent(ev StreamEvent) error {
+	// Delegate to MultiStreamWriter if configured
+	if sw.multi != nil {
+		return sw.multi.WriteEvent(ev)
+	}
 	sw.mu.Lock()
 	defer sw.mu.Unlock()
 	if err := sw.enc.Encode(ev); err != nil {
 		logger.Warn("stream: failed to encode event", "type", ev.Type, "error", err)
 		return err
 	}
-	logger.Debug("stream: wrote event", "type", ev.Type)
+	if err := sw.w.Flush(); err != nil {
+		logger.Warn("stream: failed to flush", "type", ev.Type, "error", err)
+		return err
+	}
 	return nil
+}
+
+// MultiStreamWriter fans out every WriteEvent to multiple StreamWriters.
+// Used when --stream mode needs to write to both os.Stdout (for real-time
+// Electron consumption) and a disk log file (for later replay).
+type MultiStreamWriter struct {
+	writers []*StreamWriter
+}
+
+// NewMultiStreamWriter creates a MultiStreamWriter that duplicates events
+// to all given writers.
+func NewMultiStreamWriter(writers ...*StreamWriter) *MultiStreamWriter {
+	return &MultiStreamWriter{writers: writers}
+}
+
+// WriteEvent writes the event to every underlying writer.
+// Errors from individual writers are logged but do not stop the others.
+func (msw *MultiStreamWriter) WriteEvent(ev StreamEvent) error {
+	var firstErr error
+	for _, w := range msw.writers {
+		if err := w.WriteEvent(ev); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// StreamWriter returns a *StreamWriter that delegates WriteEvent calls to
+// this MultiStreamWriter. This allows MultiStreamWriter to be used anywhere
+// a *StreamWriter is expected (e.g. as a parameter to ResolveConflicts).
+func (msw *MultiStreamWriter) StreamWriter() *StreamWriter {
+	return &StreamWriter{multi: msw}
 }

@@ -164,3 +164,11 @@ func truncateOutput(output string, maxLen int) string {
 	runes := []rune(output)
 	return string(runes[:maxLen]) + "..."
 }
+
+// truncateForLog truncates a string for safe use in log output.
+func truncateForLog(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}

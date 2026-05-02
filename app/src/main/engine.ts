@@ -10,7 +10,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import { createInterface } from 'readline'
-import { existsSync, readdirSync, readFileSync } from 'fs'
+import { existsSync, readdirSync, readFileSync, appendFileSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import type {
   ApiResponse,
@@ -149,6 +149,7 @@ export class EngineClient {
     }
 
     const fullArgs = this.buildArgs(args)
+    console.log('[engine:resolveStream] spawned', name, 'args:', fullArgs)
     const child: ChildProcess = spawn(this.binaryPath, fullArgs, {
       cwd: app.isPackaged ? undefined : this.engineDir,
       env: { ...process.env },
@@ -156,46 +157,87 @@ export class EngineClient {
     })
     console.log('[engine:resolveStream] spawned', name, 'pid:', child.pid, 'args:', fullArgs)
 
+    // Debug log file for tracing stream issues
+    const debugLogPath = join(homedir(), '.forksync', 'logs', 'electron-resolve-stream.log')
+    const debugLog = (msg: string): void => {
+      const ts = new Date().toISOString()
+      const line = `[${ts}] ${msg}\n`
+      console.log(`[engine:resolveStream] ${msg}`)
+      try { appendFileSync(debugLogPath, line) } catch {}
+    }
+    debugLog(`START resolveStream name=${name} pid=${child.pid} args=${JSON.stringify(fullArgs)}`)
+
     const eventCbs: Array<(ev: AgentStreamEvent) => void> = []
     const doneCbs: Array<(result: ApiResponse<ResolveData>) => void> = []
     const errorCbs: Array<(err: string) => void> = []
 
     let killed = false
+    let notified = false // whether done/error was already notified
 
     const notifyEvent = (ev: AgentStreamEvent): void => {
       for (const cb of eventCbs) cb(ev)
     }
     const notifyDone = (result: ApiResponse<ResolveData>): void => {
+      notified = true
       console.log('[engine:resolveStream] done', name, 'success:', result.success)
       for (const cb of doneCbs) cb(result)
     }
     const notifyError = (err: string): void => {
+      notified = true
       console.error('[engine:resolveStream] error', name, err)
       for (const cb of errorCbs) cb(err)
     }
+
+    // Ensure log dir exists
+    try { mkdirSync(join(homedir(), '.forksync', 'logs'), { recursive: true }) } catch {}
 
     // Read stdout line-by-line
     if (child.stdout) {
       const rl = createInterface({ input: child.stdout })
       rl.on('line', (line) => {
         if (!line.trim()) return
+        debugLog(`STDOUT line len=${line.length} preview=${line.substring(0, 200)}`)
         try {
           const parsed = JSON.parse(line)
           // Stream events have 't' field
           if (parsed.t != null) {
-            console.log('[engine:resolveStream] stdout event', name, 'type:', parsed.t)
-            notifyEvent(parsed as AgentStreamEvent)
+            // 'done' event is a stream completion signal — treat as final result
+            if (parsed.t === 'done') {
+              debugLog(`STDOUT done event success=${parsed.success}`)
+              notifyDone({
+                success: parsed.success ?? true,
+                data: {
+                  repoId: '',
+                  conflicts: [],
+                  agentResult: {
+                    success: parsed.success ?? true,
+                    summary: parsed.summary ?? '',
+                    sessionId: parsed.session_id ?? '',
+                    agentName: '',
+                    resolvedFiles: [],
+                    diff: ''
+                  }
+                }
+              } as ApiResponse<ResolveData>)
+            } else if (parsed.t === 'error') {
+              debugLog(`STDOUT error event`)
+              notifyError(parsed.d ?? 'Agent resolve error')
+            } else {
+              debugLog(`STDOUT event type=${parsed.t}`)
+              notifyEvent(parsed as AgentStreamEvent)
+            }
           } else if (parsed.success != null) {
-            // Final ApiResponse
+            // Final ApiResponse (without 't' field)
+            debugLog(`STDOUT ApiResponse success=${parsed.success}`)
             notifyDone(parsed as ApiResponse<ResolveData>)
           } else {
             // Unknown JSON — treat as raw stdout
-            console.log('[engine:resolveStream] stdout unknown json', name, line.substring(0, 200))
+            debugLog(`STDOUT unknown json`)
             notifyEvent({ t: 'stdout', d: line, ts: new Date().toISOString() })
           }
         } catch {
           // Not valid JSON — raw stdout
-          console.log('[engine:resolveStream] stdout raw', name, line.substring(0, 200))
+          debugLog(`STDOUT raw (not JSON) preview=${line.substring(0, 200)}`)
           notifyEvent({ t: 'stdout', d: line, ts: new Date().toISOString() })
         }
       })
@@ -206,20 +248,28 @@ export class EngineClient {
       const rl = createInterface({ input: child.stderr })
       rl.on('line', (line) => {
         if (!line.trim()) return
-        console.log('[engine:resolveStream] stderr', name, line.substring(0, 200))
+        debugLog(`STDERR preview=${line.substring(0, 200)}`)
         notifyEvent({ t: 'stderr', d: line, ts: new Date().toISOString() })
       })
     }
 
     child.on('error', (err) => {
-      console.error('[engine:resolveStream] spawn error', name, err)
+      debugLog(`SPAWN ERROR: ${err.message}`)
       if (!killed) notifyError(`Failed to spawn engine: ${err.message}`)
     })
 
     child.on('close', (code) => {
-      console.log('[engine:resolveStream] close', name, 'code:', code, 'killed:', killed)
-      if (!killed && code !== 0) {
-        notifyError(`Engine exited with code ${code}`)
+      debugLog(`CLOSE code=${code} killed=${killed} notified=${notified}`)
+      if (killed) return
+      if (!notified) {
+        // Safety net: process exited but notifyDone/notifyError was never called.
+        // Can happen if the final JSON output couldn't be parsed.
+        if (code !== 0) {
+          notifyError(`Engine exited with code ${code}`)
+        } else {
+          debugLog(`CLOSE: code 0 but not notified, treating as done`)
+          notifyDone({ success: true, data: null as unknown as ResolveData })
+        }
       }
     })
 

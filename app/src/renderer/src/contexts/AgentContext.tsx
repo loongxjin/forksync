@@ -290,9 +290,10 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
   }, [refreshSessions])
 
   const resolveStream = useCallback((name: string, opts?: { agent?: string; noConfirm?: boolean }) => {
-    console.log('[AgentContext] resolveStream', name, opts)
+    console.log('[AgentContext] resolveStream called', name, opts, 'ipcSetup:', ipcSetupRef.current)
     dispatch({ type: 'STREAM_START', repoName: name })
     engineApi.resolveStreamStart(name, opts)
+    console.log('[AgentContext] resolveStreamStart sent')
   }, [])
 
   const loadAgentLog = useCallback(async (name: string): Promise<void> => {
@@ -317,22 +318,23 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
     ipcSetupRef.current = true
 
     const unsubEvent = engineApi.onResolveStreamEvent((repoName, event) => {
-      console.log('[AgentContext] stream event', repoName, event.t)
+      console.log('[AgentContext] stream event received', repoName, event.t, 'dataLen:', event.d?.length ?? 0)
       dispatch({ type: 'STREAM_EVENT', repoName, event })
     })
 
     const unsubDone = engineApi.onResolveStreamDone((repoName, apiRes) => {
-      console.log('[AgentContext] stream done', repoName, apiRes.success)
+      console.log('[AgentContext] stream done received', repoName, apiRes.success, 'data:', JSON.stringify(apiRes.data)?.substring(0, 200))
       dispatch({ type: 'STREAM_DONE', repoName, result: apiRes.success ? apiRes.data : null })
     })
 
     const unsubError = engineApi.onResolveStreamError((repoName, error) => {
-      console.error('[AgentContext] stream error', repoName, error)
+      console.error('[AgentContext] stream error received', repoName, error)
       dispatch({ type: 'STREAM_EVENT', repoName, event: { t: 'error', d: error, ts: new Date().toISOString() } })
       dispatch({ type: 'STREAM_DONE', repoName })
     })
 
     return () => {
+      ipcSetupRef.current = false
       unsubEvent()
       unsubDone()
       unsubError()
