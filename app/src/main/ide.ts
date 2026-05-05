@@ -220,9 +220,24 @@ async function openInIDE(repoPath: string, ideId: string): Promise<IDEOpenResult
 
   // Find IDE info from cache or re-detect
   const ides = cachedDetectedIDEs ?? (await detectAllIDEs())
-  const ide = ides.find((i) => i.id === ideId)
+
+  // Resolve 'default' to the configured default IDE or the first installed one
+  let resolvedId = ideId
+  if (ideId === 'default') {
+    const config = loadPersistedConfig()
+    if (config.defaultIDE) {
+      resolvedId = config.defaultIDE
+    } else {
+      const firstInstalled = ides.find((i) => i.installed)
+      if (firstInstalled) {
+        resolvedId = firstInstalled.id
+      }
+    }
+  }
+
+  const ide = ides.find((i) => i.id === resolvedId)
   if (!ide) {
-    return { success: false, error: t('ide.ideNotFound', { ideId }) }
+    return { success: false, error: t('ide.ideNotFound', { ideId: resolvedId }) }
   }
   if (!ide.installed) {
     return { success: false, error: t('ide.ideNotDetected', { name: ide.name }) }
