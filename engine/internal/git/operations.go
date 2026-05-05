@@ -179,12 +179,28 @@ func (o *Operations) statusGoGit(ctx context.Context, repo types.Repo) (*StatusR
 		return nil, fmt.Errorf("open repo: %w", err)
 	}
 
-	head, err := r.Head()
-	if err != nil {
-		return nil, fmt.Errorf("get HEAD: %w", err)
+	// Use stored branch if available, otherwise detect from HEAD
+	branch := repo.Branch
+	if branch == "" {
+		head, err := r.Head()
+		if err != nil {
+			return nil, fmt.Errorf("get HEAD: %w", err)
+		}
+		branch = head.Name().Short()
 	}
 
-	branch := head.Name().Short()
+	// Resolve local ref for the stored branch
+	localRef, err := r.Reference(plumbing.ReferenceName("refs/heads/"+branch), true)
+	if err != nil {
+		// Branch doesn't exist locally — fall back to HEAD
+		head, headErr := r.Head()
+		if headErr != nil {
+			return nil, fmt.Errorf("get HEAD: %w", headErr)
+		}
+		branch = head.Name().Short()
+		localRef = head
+	}
+
 	remoteBranchName := repo.GetRemoteBranchForLocal(branch)
 	remoteBranch := fmt.Sprintf("refs/remotes/%s/%s", repo.RemoteName(), remoteBranchName)
 
@@ -193,7 +209,7 @@ func (o *Operations) statusGoGit(ctx context.Context, repo types.Repo) (*StatusR
 		return &StatusResult{AheadBy: 0, BehindBy: 0, Branch: branch}, nil
 	}
 
-	ahead, behind, err := o.countDivergence(ctx, repo.Path, head.Hash().String(), remoteRef.Hash().String())
+	ahead, behind, err := o.countDivergence(ctx, repo.Path, localRef.Hash().String(), remoteRef.Hash().String())
 	if err != nil {
 		return nil, err
 	}
@@ -221,26 +237,40 @@ func (o *Operations) countDivergence(ctx context.Context, repoPath, local, remot
 }
 
 func (o *Operations) statusCLI(ctx context.Context, repo types.Repo) (*StatusResult, error) {
-	// Get current branch
-	output, err := o.runGit(ctx, repo.Path, "rev-parse", "--abbrev-ref", "HEAD")
-	if err != nil {
-		return nil, fmt.Errorf("get branch: %w", err)
+	// Use stored branch if available, otherwise detect from HEAD
+	branch := repo.Branch
+	if branch == "" {
+		output, err := o.runGit(ctx, repo.Path, "rev-parse", "--abbrev-ref", "HEAD")
+		if err != nil {
+			return nil, fmt.Errorf("get branch: %w", err)
+		}
+		branch = strings.TrimSpace(string(output))
 	}
-	branch := strings.TrimSpace(string(output))
+
+	// Verify the local branch exists
+	localRef := fmt.Sprintf("refs/heads/%s", branch)
+	if _, err := o.runGit(ctx, repo.Path, "rev-parse", "--verify", localRef); err != nil {
+		// Branch doesn't exist locally — fall back to HEAD
+		output, headErr := o.runGit(ctx, repo.Path, "rev-parse", "--abbrev-ref", "HEAD")
+		if headErr != nil {
+			return nil, fmt.Errorf("get branch: %w", headErr)
+		}
+		branch = strings.TrimSpace(string(output))
+	}
 
 	remoteName := repo.RemoteName()
 	remoteBranchName := repo.GetRemoteBranchForLocal(branch)
 	upstreamRef := fmt.Sprintf("%s/%s", remoteName, remoteBranchName)
 
 	// Get ahead count
-	ahead, err := o.revListCount(ctx, repo.Path, upstreamRef, "HEAD")
+	ahead, err := o.revListCount(ctx, repo.Path, upstreamRef, branch)
 	if err != nil {
 		// Upstream ref may not exist yet
 		ahead = 0
 	}
 
 	// Get behind count
-	behind, err := o.revListCount(ctx, repo.Path, "HEAD", upstreamRef)
+	behind, err := o.revListCount(ctx, repo.Path, branch, upstreamRef)
 	if err != nil {
 		behind = 0
 	}
@@ -283,6 +313,14 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 			return nil, fmt.Errorf("get branch: %w", err)
 		}
 		branch = strings.TrimSpace(string(output))
+	}
+
+	// Ensure we are on the target branch before merging
+	currentBranch, _ := o.GetCurrentBranch(ctx, repo.Path)
+	if currentBranch != "" && currentBranch != branch {
+		if _, err := o.runGitCombined(ctx, repo.Path, "checkout", branch); err != nil {
+			return nil, fmt.Errorf("checkout %s: %w", branch, err)
+		}
 	}
 
 	remoteBranchName := repo.GetRemoteBranchForLocal(branch)
