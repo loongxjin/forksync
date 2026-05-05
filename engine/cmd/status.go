@@ -68,7 +68,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	var wg stdsync.WaitGroup
 	sem := make(chan struct{}, types.DefaultMaxConcurrency)
 	for i := range repos {
-		if repos[i].Status == types.RepoStatusSyncing {
+		if repos[i].Status == types.RepoStatusSyncing || repos[i].Status == types.RepoStatusResolving {
 			continue
 		}
 		if excludeSet[repos[i].Name] {
@@ -131,7 +131,10 @@ func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps 
 	// Proactively detect merge conflicts on disk regardless of stored status.
 	// A repo may have MERGE_HEAD from external operations (e.g. manual git merge)
 	// that were never tracked by forksync.
-	if !isConflictState(repos[idx].Status) {
+	// However, if the repo already has an active workflow (running/waiting),
+	// skip this detection — the workflow was created by a syncer/resolve process
+	// and rebuilding would destroy the real workflow state.
+	if !isConflictState(repos[idx].Status) && (repos[idx].Workflow == nil || repos[idx].Workflow.Status == "") {
 		isMerging, unmergedFiles, err := gitOps.IsMergingState(ctx, r.Path)
 		if err == nil && isMerging {
 			if len(unmergedFiles) > 0 {

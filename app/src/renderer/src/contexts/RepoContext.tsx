@@ -138,6 +138,31 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   // Guard against concurrent syncAll calls
   const syncingAllRef = useRef(false)
 
+  // Poll repos during sync so the UI shows workflow progress
+  const syncPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Start polling repo status while sync is running (agent resolve can take minutes)
+  const startSyncPoll = useCallback(() => {
+    if (syncPollRef.current) return // already polling
+    syncPollRef.current = setInterval(async () => {
+      try {
+        const res = await engineApi.status()
+        if (res.success) {
+          dispatch({ type: 'SET_REPOS_SILENT', repos: res.data.repos ?? [] })
+        }
+      } catch {
+        // silent — polling is best-effort
+      }
+    }, 3000)
+  }, [])
+
+  const stopSyncPoll = useCallback(() => {
+    if (syncPollRef.current) {
+      clearInterval(syncPollRef.current)
+      syncPollRef.current = null
+    }
+  }, [])
+
   const refresh = useCallback(async () => {
     if (refreshingRef.current) return
     refreshingRef.current = true
@@ -175,6 +200,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     }
 
     dispatch({ type: 'SET_LOADING', loading: true })
+    startSyncPoll() // poll repo status during sync to show workflow progress
     try {
       const res = await engineApi.syncAll()
       if (res.success) {
@@ -219,9 +245,10 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       dispatch({ type: 'SET_ERROR', error: (err as Error).message })
       await refresh()
     } finally {
+      stopSyncPoll()
       syncingAllRef.current = false
     }
-  }, [state, refresh, engineConfig])
+  }, [state, refresh, engineConfig, startSyncPoll, stopSyncPoll])
 
   // Toast functions must be defined before syncRepo to avoid TDZ error
   const hideToast = useCallback(() => {
@@ -272,6 +299,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       }
 
       dispatch({ type: 'SET_LOADING', loading: true })
+      startSyncPoll() // poll repo status during sync to show workflow progress
       try {
         const res = await engineApi.syncRepo(name)
         if (res.success) {
@@ -301,10 +329,11 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         dispatch({ type: 'SET_ERROR', error: (err as Error).message })
         await refresh()
       } finally {
+        stopSyncPoll()
         syncingReposRef.current.delete(name)
       }
     },
-    [state, refresh, showToast, engineConfig]
+    [state, refresh, showToast, engineConfig, startSyncPoll, stopSyncPoll]
   )
 
   const scan = useCallback(async (dir: string) => {

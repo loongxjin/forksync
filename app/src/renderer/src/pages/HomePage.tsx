@@ -241,22 +241,21 @@ export function HomePage(): JSX.Element {
     try {
       const noConfirm = engineConfig?.Agent?.ConfirmBeforeCommit === false
 
-      // If repo has an active workflow (triggered from WorkflowSteps),
-      // first update the workflow steps via `workflow continue resolve_with_agent`
-      // so the UI transitions from resolve_strategy:waiting to agent_resolve:running.
-      if (repo.workflow) {
-        const wfRes = await engineApi.workflowContinue(repo.name, 'resolve_with_agent')
-        if (!wfRes.success) {
-          showToast?.(wfRes.error ?? 'Workflow continue failed', 'error')
-          return
-        }
-        // Optimistically update repo with the new workflow and status from backend
-        if (wfRes.data?.workflow) {
-          updateRepo({ ...repo, status: wfRes.data.status ?? repo.status, workflow: wfRes.data.workflow })
-        }
-      } else {
-        // Triggered from ConflictInlinePanel — optimistically update status
-        updateRepoStatus(repo.id, 'resolving')
+      // Always call `workflow continue resolve_with_agent` to create/advance the workflow.
+      // When triggered from ConflictInlinePanel (no existing workflow),
+      // `handleResolveWithAgent` creates a new workflow with fetch/merge/check_conflicts
+      // marked as success and resolve_strategy as success, agent_resolve as running.
+      // When triggered from WorkflowSteps (existing workflow), it advances the steps.
+      // Either way, the backend returns the updated repo with workflow so the UI
+      // can immediately show WorkflowSteps instead of staying on ConflictInlinePanel.
+      const wfRes = await engineApi.workflowContinue(repo.name, 'resolve_with_agent')
+      if (!wfRes.success) {
+        showToast?.(wfRes.error ?? 'Workflow continue failed', 'error')
+        return
+      }
+      // Optimistically update repo with the new workflow and status from backend
+      if (wfRes.data?.workflow) {
+        updateRepo({ ...repo, status: wfRes.data.status ?? repo.status, workflow: wfRes.data.workflow })
       }
 
       // Start streaming resolve and open terminal drawer
@@ -269,7 +268,7 @@ export function HomePage(): JSX.Element {
       // Release loading immediately — stream progress is tracked via streamLive, not localLoading.
       setLocalLoading((prev) => ({ ...prev, [repo.name]: false }))
     }
-  }, [resolveStream, preferred, updateRepoStatus, updateRepo, refresh, engineConfig, showToast])
+  }, [resolveStream, preferred, updateRepo, refresh, engineConfig, showToast])
 
   // Listen for streaming resolve results
   useEffect(() => {
