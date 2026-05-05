@@ -769,6 +769,7 @@ func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg str
 	if status == types.RepoStatusUpToDate {
 		now := types.Time{Time: time.Now()}
 		r.LastSync = &now
+		r.BehindBy = 0
 	}
 	if updateErr := s.store.Update(r); updateErr != nil {
 		logger.Error("syncer: failed to update repo status", "repo", r.Name, "error", updateErr)

@@ -182,6 +182,11 @@ func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps 
 		repos[idx].Status = types.RepoStatusSyncNeeded
 		repos[idx].ErrorMessage = ""
 		safeUpdateRepo(store, repos[idx], r.Name)
+	} else if repos[idx].BehindBy == 0 && repos[idx].Status == types.RepoStatusSyncNeeded {
+		// Previously sync_needed but now up-to-date (e.g. user synced externally)
+		repos[idx].Status = types.RepoStatusUpToDate
+		repos[idx].ErrorMessage = ""
+		safeUpdateRepo(store, repos[idx], r.Name)
 	}
 }
 
