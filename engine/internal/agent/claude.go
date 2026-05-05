@@ -109,6 +109,12 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 
 	if err := cmd.Start(); err != nil {
 		logger.Error("[TRACE] claude: cmd.Start FAILED", "error", err)
+		_ = sw.WriteEvent(StreamEvent{
+			Type:      StreamEventError,
+			Data:      fmt.Sprintf("failed to start claude: %v", err),
+			Timestamp: time.Now().UTC(),
+			Success:   false,
+		})
 		return nil, fmt.Errorf("claude start: %w", err)
 	}
 	logger.Info("[TRACE] claude: process started OK (stream-json)", "pid", cmd.Process.Pid)

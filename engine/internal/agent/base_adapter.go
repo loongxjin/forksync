@@ -95,6 +95,12 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 
 	if err := cmd.Start(); err != nil {
 		logger.Error("[TRACE] baseAdapter: cmd.Start FAILED", "agent", a.name, "error", err)
+		_ = sw.WriteEvent(StreamEvent{
+			Type:      StreamEventError,
+			Data:      fmt.Sprintf("failed to start %s: %v", a.name, err),
+			Timestamp: time.Now().UTC(),
+			Success:   false,
+		})
 		return nil, fmt.Errorf("%s start: %w", a.name, err)
 	}
 	logger.Info("[TRACE] baseAdapter: process started OK", "agent", a.name, "pid", cmd.Process.Pid)

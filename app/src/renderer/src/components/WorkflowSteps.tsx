@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
-import { StepItem, MiniTerminal } from '@/components/StepItem'
+import { StepItem } from '@/components/StepItem'
 import type { Repo, WorkflowStepRecord, AgentStreamEvent } from '@/types/engine'
 import { cn } from '@/lib/utils'
 import { Bot, Monitor, GitPullRequestClosed, RotateCcw, Terminal } from 'lucide-react'
@@ -73,25 +73,18 @@ export function WorkflowSteps({
               isLast={isLast}
               isNextActive={isNextActive}
             >
-              {/* Mini terminal + View Live button for agent_resolve running */}
-              {isAgentResolveRunning && (
-                <div className="mt-2 space-y-2">
-                  <MiniTerminal
-                    events={streamEvents}
-                    isLive={isStreamLive}
-                    onExpand={onViewTerminal}
-                  />
-                  {onViewTerminal && (
-                    <Button
-                      onClick={onViewTerminal}
-                      size="sm"
-                      variant="outline"
-                      className="text-xs"
-                    >
-                      <Terminal size={12} className="mr-1" />
-                      View Live Terminal
-                    </Button>
-                  )}
+              {/* View Live Terminal button for agent_resolve running */}
+              {isAgentResolveRunning && onViewTerminal && (
+                <div className="mt-2">
+                  <Button
+                    onClick={onViewTerminal}
+                    size="sm"
+                    variant="outline"
+                    className="text-xs"
+                  >
+                    <Terminal size={12} className="mr-1" />
+                    View Live Terminal
+                  </Button>
                 </div>
               )}
 

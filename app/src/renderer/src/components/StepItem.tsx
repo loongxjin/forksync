@@ -7,8 +7,7 @@ import {
   Loader2,
   Circle,
   PauseCircle,
-  SkipForward,
-  Terminal
+  SkipForward
 } from 'lucide-react'
 
 interface StepItemProps {
@@ -124,40 +123,3 @@ export function StepItem({
   )
 }
 
-interface MiniTerminalProps {
-  events: { t: string; d?: string; ts: string }[]
-  isLive: boolean
-  onExpand?: () => void
-}
-
-export function MiniTerminal({ events, isLive, onExpand }: MiniTerminalProps): JSX.Element {
-  return (
-    <div
-      className="mt-2 rounded-md border border-border bg-card overflow-hidden cursor-pointer"
-      onClick={onExpand}
-    >
-      <div className="flex items-center justify-between px-2 py-1 border-b border-border bg-muted/30">
-        <div className="flex items-center gap-1.5">
-          <Terminal size={12} className="text-muted-foreground" />
-          <span className="text-[10px] text-muted-foreground font-mono">
-            {isLive ? 'Live' : 'Log'}
-          </span>
-        </div>
-        {isLive && (
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-        )}
-      </div>
-      <div className="h-40 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed space-y-0.5">
-        {events.length === 0 ? (
-          <span className="text-muted-foreground opacity-50">Waiting for agent output...</span>
-        ) : (
-          events.map((ev, i) => (
-            <div key={i} className="break-all">
-              {ev.d && <span className="text-foreground/80">{ev.d}</span>}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  )
-}
