@@ -53,9 +53,9 @@ export function StepItem({
       case 'waiting':
         return <PauseCircle size={16} className="text-warning" />
       case 'skipped':
-        return <SkipForward size={16} className="text-muted-foreground opacity-50" />
+        return <SkipForward size={14} className="text-muted-foreground opacity-50" />
       default:
-        return <Circle size={16} className="text-muted-foreground opacity-40" />
+        return <Circle size={14} className="text-muted-foreground opacity-40" />
     }
   })()
 
@@ -67,24 +67,26 @@ export function StepItem({
   })()
 
   return (
-    <div className="relative flex gap-3">
-      {/* Connector line */}
-      {!isLast && (
-        <div
-          className={cn(
-            'absolute left-[7px] top-6 w-[2px] h-[calc(100%-8px)] transition-colors',
-            lineColor,
-            isNextActive && status === 'success' && 'bg-success'
-          )}
-        />
-      )}
-
-      {/* Icon */}
-      <div className="relative z-10 flex h-4 w-4 shrink-0 items-center justify-center mt-0.5">
-        {icon}
+    <div className="flex gap-3">
+      {/* Left column: icon + connector */}
+      <div className="flex flex-col items-center w-5 shrink-0">
+        {/* Icon */}
+        <div className="relative z-10 h-5 w-5 flex items-center justify-center">
+          {icon}
+        </div>
+        {/* Connector line */}
+        {!isLast && (
+          <div
+            className={cn(
+              'w-[2px] flex-1 transition-colors',
+              lineColor,
+              isNextActive && status === 'success' && 'bg-success'
+            )}
+          />
+        )}
       </div>
 
-      {/* Content */}
+      {/* Right column: content */}
       <div className="flex-1 min-w-0 pb-3">
         <div className="flex items-center gap-2">
           <span
