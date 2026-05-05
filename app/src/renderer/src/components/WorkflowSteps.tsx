@@ -16,6 +16,7 @@ interface WorkflowStepsProps {
   onReject?: () => void
   onRetryCommit?: () => void
   onViewTerminal?: () => void
+  onViewDiff?: () => void
   loading?: boolean
 }
 
@@ -30,6 +31,7 @@ export function WorkflowSteps({
   onReject,
   onRetryCommit,
   onViewTerminal,
+  onViewDiff,
   loading = false
 }: WorkflowStepsProps): JSX.Element {
   const { t } = useTranslation()
@@ -182,9 +184,9 @@ export function WorkflowSteps({
                           Accept & Commit
                         </Button>
                       )}
-                      {onViewTerminal && (
+                      {onViewDiff && (
                         <Button
-                          onClick={onViewTerminal}
+                          onClick={onViewDiff}
                           disabled={loading}
                           size="sm"
                           variant="outline"

@@ -268,7 +268,9 @@
     "retry": "Try again"
   },
   "diffViewer": {
-    "noDiff": "No diff available."
+    "title": "Resolved Diff",
+    "noDiff": "No diff available.",
+    "failed": "Failed to load diff."
   },
   "toast": {
     "conflictsWarning": "\"{{name}}\" has unresolved conflicts, please resolve first",

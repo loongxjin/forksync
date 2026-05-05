@@ -179,6 +179,11 @@ export function registerIpcHandlers(): void {
     return e.readAgentLog(repoName)
   })
 
+  ipcMain.handle('engine:repoDiff', async (_event, repoName: string) => {
+    console.log('[ipc:repoDiff]', repoName)
+    return e.repoDiff(repoName)
+  })
+
   ipcMain.handle('app:setAutoLaunch', async (_event, enabled: boolean) => {
     try {
       if (process.platform === 'linux') {

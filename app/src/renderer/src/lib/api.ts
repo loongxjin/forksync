@@ -82,6 +82,9 @@ export interface EngineAPI {
   // App settings
   setAutoLaunch(enabled: boolean): Promise<{ success: boolean; error?: string }>
 
+  // Diff
+  repoDiff(repoName: string): Promise<{ success: boolean; diff?: string; error?: string }>
+
   // Agent resolve streaming
   resolveStreamStart(name: string, opts?: { agent?: string; noConfirm?: boolean }): void
   onResolveStreamEvent(callback: (repoName: string, event: AgentStreamEvent) => void): () => void

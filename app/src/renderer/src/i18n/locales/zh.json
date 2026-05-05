@@ -268,7 +268,9 @@
     "retry": "重试"
   },
   "diffViewer": {
-    "noDiff": "暂无 Diff。"
+    "title": "解决后的 Diff",
+    "noDiff": "暂无 Diff。",
+    "failed": "加载 Diff 失败。"
   },
   "toast": {
     "conflictsWarning": "\"{{name}}\" 存在未解决的冲突，请先解决",

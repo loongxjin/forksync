@@ -8,10 +8,13 @@
 
 import { app } from 'electron'
 import { join } from 'path'
-import { spawn, ChildProcess } from 'child_process'
+import { spawn, ChildProcess, exec } from 'child_process'
 import { createInterface } from 'readline'
 import { existsSync, readdirSync, readFileSync, appendFileSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
+import { promisify } from 'util'
+
+const execAsync = promisify(exec)
 import type {
   ApiResponse,
   StatusData,
@@ -334,6 +337,34 @@ export class EngineClient {
     console.log('[engine:readAgentLog] parsed', events.length, 'events, isRunning:', isRunning)
 
     return { events, isRunning }
+  }
+
+  /**
+   * Get git diff for a repo (working tree vs HEAD).
+   * Reads repos.json to find the repo path, then runs `git diff HEAD`.
+   */
+  async repoDiff(repoName: string): Promise<{ success: boolean; diff?: string; error?: string }> {
+    try {
+      const configDir = join(homedir(), '.forksync')
+      const reposPath = join(configDir, 'repos.json')
+      if (!existsSync(reposPath)) {
+        return { success: false, error: 'repos.json not found' }
+      }
+      const repos = JSON.parse(readFileSync(reposPath, 'utf-8')) as Array<{ name: string; path: string }>
+      const repo = repos.find((r) => r.name === repoName)
+      if (!repo) {
+        return { success: false, error: `repo "${repoName}" not found` }
+      }
+      const { stdout, stderr } = await execAsync(`git -C "${repo.path}" diff HEAD`)
+      if (stderr) {
+        console.warn('[engine:repoDiff] stderr:', stderr)
+      }
+      return { success: true, diff: stdout }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[engine:repoDiff] error:', message)
+      return { success: false, error: message }
+    }
   }
 
   /** `forksync resolve <name> --accept --json` */

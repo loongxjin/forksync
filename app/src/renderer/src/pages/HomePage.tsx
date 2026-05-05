@@ -11,6 +11,7 @@ import { ConflictInlinePanel } from '@/components/ConflictInlinePanel'
 import { RepoDetailPanel } from '@/components/RepoDetailPanel'
 import { WorkflowSteps } from '@/components/WorkflowSteps'
 import { AgentTerminalDrawer } from '@/components/AgentTerminalDrawer'
+import { DiffDrawer } from '@/components/DiffDrawer'
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -71,6 +72,9 @@ export function HomePage(): JSX.Element {
 
   // Terminal drawer state
   const [terminalDrawerRepo, setTerminalDrawerRepo] = useState<string | null>(null)
+
+  // Diff drawer state
+  const [diffDrawerRepo, setDiffDrawerRepo] = useState<string | null>(null)
 
   const handleSummaryRetry = useCallback(async (record: SyncHistoryRecord): Promise<void> => {
     // Optimistically update status to 'generating' so the polling kicks in
@@ -510,6 +514,7 @@ export function HomePage(): JSX.Element {
                             loadAgentLog(repo.name)
                           }
                         }}
+                        onViewDiff={() => setDiffDrawerRepo(repo.name)}
                         loading={agentLoading || !!localLoading[repo.name]}
                       />
                     ) : isConflict ? (
@@ -638,6 +643,15 @@ export function HomePage(): JSX.Element {
         repoName={terminalDrawerRepo ?? ''}
         events={terminalDrawerRepo ? (streamEvents[terminalDrawerRepo] ?? []) : []}
         isLive={terminalDrawerRepo ? streamLive.has(terminalDrawerRepo) : false}
+      />
+
+      {/* Diff Drawer */}
+      <DiffDrawer
+        open={diffDrawerRepo !== null}
+        onOpenChange={(open) => {
+          if (!open) setDiffDrawerRepo(null)
+        }}
+        repoName={diffDrawerRepo ?? ''}
       />
     </div>
   )

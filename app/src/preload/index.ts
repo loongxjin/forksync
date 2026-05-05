@@ -93,6 +93,8 @@ const api = {
   },
   readAgentLog: (repoName: string): Promise<{ events: AgentStreamEvent[]; isRunning: boolean }> =>
     ipcRenderer.invoke('engine:readAgentLog', repoName),
+  repoDiff: (repoName: string): Promise<{ success: boolean; diff?: string; error?: string }> =>
+    ipcRenderer.invoke('engine:repoDiff', repoName),
   setAutoLaunch: (enabled: boolean): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('app:setAutoLaunch', enabled),
   openDirectory: (): Promise<{ canceled: boolean; filePaths?: string[]; error?: string }> =>
