@@ -684,3 +684,18 @@ func (o *Operations) Diff(ctx context.Context, repoPath string) ([]byte, error) 
 func (o *Operations) DiffStaged(ctx context.Context, repoPath string) ([]byte, error) {
 	return o.runGit(ctx, repoPath, "diff", "--staged")
 }
+
+// GetPreMergeHEAD returns the first parent of the most recent merge commit,
+// which corresponds to the HEAD before the merge. Used to recover OldHEAD
+// when the workflow was created before the OldHEAD field was added.
+func (o *Operations) GetPreMergeHEAD(ctx context.Context, repoPath string) (string, error) {
+	output, err := o.runGit(ctx, repoPath, "log", "--merges", "-1", "--format=%P")
+	if err != nil {
+		return "", err
+	}
+	parents := strings.Fields(strings.TrimSpace(string(output)))
+	if len(parents) == 0 {
+		return "", fmt.Errorf("no merge commit found")
+	}
+	return parents[0], nil
+}

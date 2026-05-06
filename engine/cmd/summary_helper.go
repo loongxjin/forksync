@@ -41,13 +41,8 @@ func generateSummary(
 		return "", fmt.Errorf("agent %q is not installed", agentName)
 	}
 
-	// Update status to generating
-	if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusGenerating)); updateErr != nil {
-		logger.Error("summarize: failed to set generating status", "error", updateErr)
-	}
-
-	// Get commits (oldHEAD..upstreamRef)
-	upstreamRef := resolveUpstreamRef(ctx, r)
+	// Records without old HEAD cannot be summarized — mark as failed so the
+	// frontend stops polling and the user can retry manually if needed.
 	if record.OldHEAD == "" {
 		if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusFailed)); updateErr != nil {
 			logger.Error("summarize: failed to set failed status (no old HEAD)", "error", updateErr)
@@ -55,6 +50,13 @@ func generateSummary(
 		return "", fmt.Errorf("no old HEAD recorded for %q, cannot determine pulled commits", r.Name)
 	}
 
+	// Update status to generating
+	if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusGenerating)); updateErr != nil {
+		logger.Error("summarize: failed to set generating status", "error", updateErr)
+	}
+
+	// Get commits (oldHEAD..upstreamRef)
+	upstreamRef := resolveUpstreamRef(ctx, r)
 	gitOps := git.NewOperations()
 	gitCommits, err := gitOps.GetCommitLog(ctx, r.Path, record.OldHEAD, upstreamRef)
 	if err != nil || len(gitCommits) == 0 {

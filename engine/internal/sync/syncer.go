@@ -333,6 +333,7 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	// Remember HEAD before merge for summarizer
 	if head, err := s.gitOps.GetHEAD(ctx, r.Path); err == nil {
 		result.OldHEAD = head
+		wf.OldHEAD = head
 	}
 
 	advanceStep(wf, types.StepMerge, types.StepStatusRunning, "")
@@ -443,7 +444,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 			s.updateRepoStatus(r.ID, types.RepoStatusResolved, "")
 			s.saveWorkflow(r, wf)
 			s.notifyResult(r.Name, result)
-			s.finalizeResult(result)
+			// History recorded when user accepts the resolution
 			return result
 		}
 		// Agent failed
@@ -466,7 +467,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	s.updateRepoStatus(r.ID, types.RepoStatusWaiting, "")
 	s.saveWorkflow(r, wf)
 	s.notifyResult(r.Name, result)
-	s.finalizeResult(result)
+	// History recorded when user manually resolves and commits
 	return result
 }
 

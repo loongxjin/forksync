@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/git"
@@ -182,7 +183,8 @@ func handleWorkflowAccept(ctx context.Context, r types.Repo, store repo.Store) e
 	if err := store.Update(r); err != nil {
 		logger.Error("workflow: failed to update repo", "repo", r.Name, "error", err)
 	}
-	updateWorkflowHistoryToUpToDate(r.ID)
+	autoResolved, conflictsFound, agentUsed, oldHEAD := workflowCompletionInfo(wf)
+	recordWorkflowComplete(r.ID, r.Name, 0, autoResolved, conflictsFound, agentUsed, oldHEAD, r.Path)
 	outputWorkflowResult(r)
 	return nil
 }
@@ -291,7 +293,8 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 		now2 := types.Time{Time: time.Now()}
 		r.LastSync = &now2
 		_ = store.Update(r)
-		updateWorkflowHistoryToUpToDate(r.ID)
+		autoResolved, conflictsFound, agentUsed, oldHEAD := workflowCompletionInfo(wf)
+		recordWorkflowComplete(r.ID, r.Name, 0, autoResolved, conflictsFound, agentUsed, oldHEAD, r.Path)
 		outputWorkflowResult(r)
 		return nil
 	}
@@ -335,14 +338,45 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 	if err := store.Update(r); err != nil {
 		logger.Error("workflow: failed to update repo", "repo", r.Name, "error", err)
 	}
-	updateWorkflowHistoryToUpToDate(r.ID)
+	autoResolved, conflictsFound, agentUsed, oldHEAD := workflowCompletionInfo(wf)
+	recordWorkflowComplete(r.ID, r.Name, 0, autoResolved, conflictsFound, agentUsed, oldHEAD, r.Path)
 	outputWorkflowResult(r)
 	return nil
 }
 
-// updateWorkflowHistoryToUpToDate updates the latest history record for a repo to up_to_date.
-// Called after manual or workflow accept resolution completes successfully.
-func updateWorkflowHistoryToUpToDate(repoID string) {
+// workflowCompletionInfo extracts completion metadata from a workflow.
+func workflowCompletionInfo(wf *types.SyncWorkflow) (autoResolved int, conflictsFound int, agentUsed string, oldHEAD string) {
+	if wf == nil {
+		return
+	}
+	oldHEAD = wf.OldHEAD
+	for _, s := range wf.Steps {
+		switch s.Step {
+		case types.StepCheckConflicts:
+			// Message format: "N files have conflicts"
+			fmt.Sscanf(s.Message, "%d files have conflicts", &conflictsFound)
+		case types.StepAgentResolve:
+			// Message format: "resolved by <agent>"
+			if s.Status == types.StepStatusSuccess && s.Message != "" {
+				agentUsed = strings.TrimPrefix(s.Message, "resolved by ")
+				if agentUsed == s.Message {
+					agentUsed = "" // not a "resolved by" message
+				}
+			}
+		}
+	}
+	// autoResolved equals conflictsFound when agent resolved all
+	if agentUsed != "" {
+		autoResolved = conflictsFound
+	}
+	return
+}
+
+// recordWorkflowComplete creates a new history record when a paused workflow is
+// completed by the user (accept or manual resolution). This replaces the old
+// updateWorkflowHistoryToUpToDate which modified an intermediate record that
+// no longer exists.
+func recordWorkflowComplete(repoID, repoName string, commitsPulled, autoResolved, conflictsFound int, agentUsed, oldHEAD string, repoPath string) {
 	_, cfgMgr := getSharedConfig()
 	histStore, err := history.NewStore(cfgMgr.ConfigDir())
 	if err != nil {
@@ -351,22 +385,39 @@ func updateWorkflowHistoryToUpToDate(repoID string) {
 	}
 	defer histStore.Close()
 
-	record, err := histStore.LatestByRepo(repoID)
+	// If oldHEAD is missing (e.g. workflow created before the OldHEAD field was added),
+	// try to recover it from git reflog (the commit before the merge commit).
+	if oldHEAD == "" && repoPath != "" {
+		gitOps := git.NewOperations()
+		if head, err := gitOps.GetPreMergeHEAD(context.Background(), repoPath); err == nil && head != "" {
+			oldHEAD = head
+			logger.Debug("[workflow] recovered oldHEAD from reflog", "repo", repoName, "oldHEAD", oldHEAD)
+		}
+	}
+
+	_, err = histStore.Record(history.Record{
+		RepoID:         repoID,
+		RepoName:       repoName,
+		Status:         string(types.RepoStatusUpToDate),
+		CommitsPulled:  commitsPulled,
+		AutoResolved:   autoResolved,
+		ConflictsFound: conflictsFound,
+		AgentUsed:      agentUsed,
+		OldHEAD:        oldHEAD,
+		CreatedAt:      time.Now(),
+	})
 	if err != nil {
-		logger.Error("[workflow] find history record", "error", err)
+		logger.Error("[workflow] record completion history", "error", err)
 		return
-	}
-	if record.Status == string(types.RepoStatusUpToDate) {
-		return
-	}
-	if updateErr := histStore.UpdateStatus(record.ID, string(types.RepoStatusUpToDate)); updateErr != nil {
-		logger.Error("[workflow] update history status", "error", updateErr)
 	}
 
 	cfg, _ := getSharedConfig()
-	if cfg != nil && cfg.Sync.AutoSummary && record.SummaryStatus == "" {
-		if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusPending)); updateErr != nil {
-			logger.Error("[workflow] update summary status", "error", updateErr)
+	if cfg != nil && cfg.Sync.AutoSummary {
+		latest, err := histStore.LatestByRepo(repoID)
+		if err == nil && latest.SummaryStatus == "" {
+			if updateErr := histStore.UpdateSummary(latest.ID, "", string(types.SummaryStatusPending)); updateErr != nil {
+				logger.Error("[workflow] update summary status", "error", updateErr)
+			}
 		}
 	}
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/git"
-	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -444,8 +443,8 @@ func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveCon
 	updateWorkflowCommit(&rc.repo)
 	updateRepoWithLog(rc.repo, rc.store, "complete")
 
-	// Update existing conflict history record to "up_to_date"
-	updateResolveHistoryStatus(rc.repo, rc.cfg, rc.cfgMgr)
+	autoResolved, conflictsFound, agentUsed, oldHEAD := workflowCompletionInfo(rc.repo.Workflow)
+	recordWorkflowComplete(rc.repo.ID, rc.repo.Name, 0, autoResolved, conflictsFound, agentUsed, oldHEAD, rc.repo.Path)
 
 	if !resolveStream {
 		outputResult(types.AcceptData{RepoID: rc.repo.ID, Resolved: true}, "✅ Merge completed for %s (agent-resolved)", rc.repo.Name)
@@ -535,8 +534,8 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 	updateWorkflowCommit(&r)
 	updateRepoWithLog(r, store, "accept")
 
-	// Update existing conflict history record to "synced"
-	updateResolveHistoryStatus(r, cfg, cfgMgr)
+	autoResolved, conflictsFound, agentUsed, oldHEAD := workflowCompletionInfo(r.Workflow)
+	recordWorkflowComplete(r.ID, r.Name, 0, autoResolved, conflictsFound, agentUsed, oldHEAD, r.Path)
 
 	outputResult(types.AcceptData{RepoID: r.ID, Resolved: true}, "✅ Merge completed for %s", r.Name)
 	return nil
@@ -563,34 +562,6 @@ func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
 		Summary:       r.Summary,
 		SessionID:     r.SessionID,
 		AgentName:     r.AgentName,
-	}
-}
-
-// updateResolveHistoryStatus updates the existing conflict history record to "up_to_date".
-// If auto_summary is enabled and the record has no summary status yet, it also pre-sets
-// summary_status to "pending" so the frontend polling can show the generating indicator.
-func updateResolveHistoryStatus(r types.Repo, cfg *config.Config, cfgMgr *config.Manager) {
-	histStore, err := history.NewStore(cfgMgr.ConfigDir())
-	if err != nil {
-		logger.Error("[resolve-accept] open history store", "error", err)
-		return
-	}
-	defer histStore.Close()
-
-	record, err := histStore.LatestByRepo(r.ID)
-	if err != nil {
-		logger.Error("[resolve-accept] find history record", "error", err)
-		return
-	}
-
-	if updateErr := histStore.UpdateStatus(record.ID, string(types.RepoStatusUpToDate)); updateErr != nil {
-		logger.Error("[resolve-accept] update history status", "error", updateErr)
-	}
-
-	if cfg != nil && cfg.Sync.AutoSummary && record.SummaryStatus == "" {
-		if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusPending)); updateErr != nil {
-			logger.Error("[resolve-accept] update summary status", "error", updateErr)
-		}
 	}
 }
 

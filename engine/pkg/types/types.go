@@ -218,6 +218,7 @@ type SyncWorkflow struct {
 	Status     WorkflowRunStatus    `json:"status"`
 	StartedAt  time.Time            `json:"startedAt"`
 	FinishedAt *Time                `json:"finishedAt,omitempty"`
+	OldHEAD    string               `json:"oldHEAD,omitempty"`
 }
 
 // PostSyncResult represents the result of running a single post-sync command.

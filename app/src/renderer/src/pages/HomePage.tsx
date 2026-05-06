@@ -334,13 +334,14 @@ export function HomePage(): JSX.Element {
         })
       }
       await refresh()
+      loadHistory()
     } catch (err) {
       showToast?.(`Workflow action ${action} failed: ${(err as Error).message}`, 'error')
       await refresh()
     } finally {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
     }
-  }, [refresh, showToast, engineConfig])
+  }, [refresh, loadHistory, showToast, engineConfig])
 
   // Repo actions
   const removingRef = useRef<string | null>(null)
