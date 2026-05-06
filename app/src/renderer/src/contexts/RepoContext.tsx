@@ -140,14 +140,16 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
 
   // Poll repos during sync so the UI shows workflow progress
   const syncPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const syncPollCancelledRef = useRef(false)
 
   // Start polling repo status while sync is running (agent resolve can take minutes)
   const startSyncPoll = useCallback(() => {
     if (syncPollRef.current) return // already polling
+    syncPollCancelledRef.current = false
     syncPollRef.current = setInterval(async () => {
       try {
         const res = await engineApi.status()
-        if (res.success) {
+        if (res.success && !syncPollCancelledRef.current) {
           dispatch({ type: 'SET_REPOS_SILENT', repos: res.data.repos ?? [] })
         }
       } catch {
@@ -157,6 +159,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   }, [])
 
   const stopSyncPoll = useCallback(() => {
+    syncPollCancelledRef.current = true
     if (syncPollRef.current) {
       clearInterval(syncPollRef.current)
       syncPollRef.current = null

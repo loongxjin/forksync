@@ -68,7 +68,9 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	var wg stdsync.WaitGroup
 	sem := make(chan struct{}, types.DefaultMaxConcurrency)
 	for i := range repos {
-		if repos[i].Status == types.RepoStatusSyncing || repos[i].Status == types.RepoStatusResolving {
+		// Skip resolving repos — agent is actively working and we must not
+		// interfere with its workflow.
+		if repos[i].Status == types.RepoStatusResolving {
 			continue
 		}
 		if excludeSet[repos[i].Name] {
@@ -411,8 +413,17 @@ func rebuildWorkflow(r types.Repo, point workflowRebuildPoint, extraMsg ...strin
 
 // rebuildWorkflowForSyncingOrError rebuilds a workflow for repos that were in
 // syncing or error state before app restart.
+// It only acts if the workflow started more than 30 minutes ago,
+// to avoid interfering with an actively running sync.
 func rebuildWorkflowForSyncingOrError(ctx context.Context, repos []types.Repo, idx int, gitOps *git.Operations, store repo.Store) {
 	r := repos[idx]
+
+	// If the repo has an active workflow that started recently, assume sync
+	// is still running and do not touch it.
+	if r.Workflow != nil && !r.Workflow.StartedAt.IsZero() &&
+		time.Since(r.Workflow.StartedAt) < 30*time.Minute {
+		return
+	}
 
 	isMerging, unmergedFiles, err := gitOps.IsMergingState(ctx, r.Path)
 	if err != nil {
