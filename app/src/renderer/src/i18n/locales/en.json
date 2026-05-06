@@ -314,5 +314,34 @@
     "retry": "Retry",
     "expand": "Expand",
     "collapse": "Collapse"
+  },
+  "workflow": {
+    "viewLiveTerminal": "View Live Terminal",
+    "viewAgentLog": "View Agent Log",
+    "agentResolving": "Agent resolving conflicts...",
+    "viewLive": "View Live",
+    "acceptCommit": "Accept & Commit",
+    "viewDiff": "View Diff",
+    "reject": "Reject",
+    "retryCommit": "Retry Commit",
+    "openInIDE": "Open in IDE",
+    "abortMerge": "Abort Merge",
+    "completed": "Workflow completed successfully",
+    "failed": "Workflow failed",
+    "eventsCount": "{{count}} events"
+  },
+  "agentTerminal": {
+    "title": "Agent Resolve",
+    "waiting": "Waiting for agent output...",
+    "live": "Live",
+    "started": "Started {{agent}}",
+    "completed": "Completed",
+    "failed": "Failed",
+    "resumeScroll": "Resume auto-scroll",
+    "statusBar": "{{events}} events · {{tools}} tool calls",
+    "duration": "{{seconds}}s",
+    "filesCount": "{{count}} files",
+    "completedIn": "Completed in {{duration}}",
+    "failedIn": "Failed after {{duration}}"
   }
 }

@@ -1,9 +1,10 @@
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { StepItem } from '@/components/StepItem'
 import type { Repo, WorkflowStepRecord, AgentStreamEvent } from '@/types/engine'
 import { cn } from '@/lib/utils'
-import { Bot, Monitor, GitPullRequestClosed, RotateCcw, Terminal } from 'lucide-react'
+import { Bot, Monitor, GitPullRequestClosed, RotateCcw, Terminal, Eye, FileDiff, X } from 'lucide-react'
 
 interface WorkflowStepsProps {
   repo: Repo
@@ -46,6 +47,7 @@ export function WorkflowSteps({
   }
 
   const steps = workflow.steps
+  const eventsCount = streamEvents.length
 
   const getStepProps = (index: number) => {
     const step = steps[index]
@@ -75,16 +77,21 @@ export function WorkflowSteps({
             >
               {/* View Live Terminal button for agent_resolve running */}
               {isAgentResolveRunning && onViewTerminal && (
-                <div className="mt-2">
+                <div className="mt-2 flex items-center gap-2">
                   <Button
                     onClick={onViewTerminal}
                     size="sm"
                     variant="outline"
                     className="text-xs"
                   >
-                    <Terminal size={12} className="mr-1" />
-                    View Live Terminal
+                    <Terminal size={14} className="mr-1.5" />
+                    {t('workflow.viewLiveTerminal')}
                   </Button>
+                  {eventsCount > 0 && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      {t('workflow.eventsCount', { count: eventsCount })}
+                    </Badge>
+                  )}
                 </div>
               )}
 
@@ -97,8 +104,8 @@ export function WorkflowSteps({
                     variant="outline"
                     className="text-xs"
                   >
-                    <Terminal size={12} className="mr-1" />
-                    View Agent Log
+                    <Eye size={14} className="mr-1.5" />
+                    {t('workflow.viewAgentLog')}
                   </Button>
                 </div>
               )}
@@ -111,7 +118,7 @@ export function WorkflowSteps({
                       {isStreamLive ? (
                         <div className="flex items-center gap-2">
                           <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                          <span className="text-sm text-muted-foreground">Agent resolving conflicts...</span>
+                          <span className="text-sm text-muted-foreground">{t('workflow.agentResolving')}</span>
                           {onViewTerminal && (
                             <Button
                               onClick={onViewTerminal}
@@ -119,8 +126,8 @@ export function WorkflowSteps({
                               variant="outline"
                               className="text-xs ml-2"
                             >
-                              <Terminal size={12} className="mr-1" />
-                              View Live
+                              <Terminal size={14} className="mr-1.5" />
+                              {t('workflow.viewLive')}
                             </Button>
                           )}
                         </div>
@@ -133,7 +140,7 @@ export function WorkflowSteps({
                               size="sm"
                               variant="default"
                             >
-                              <Bot size={14} className="mr-1" />
+                              <Bot size={14} className="mr-1.5" />
                               {t('resolvePanel.resolveWithAgent')}
                             </Button>
                           )}
@@ -144,8 +151,8 @@ export function WorkflowSteps({
                               size="sm"
                               variant="outline"
                             >
-                              <Monitor size={14} className="mr-1" />
-                              Open in IDE
+                              <Monitor size={14} className="mr-1.5" />
+                              {t('workflow.openInIDE')}
                             </Button>
                           )}
                           {onAbort && (
@@ -155,8 +162,8 @@ export function WorkflowSteps({
                               size="sm"
                               variant="destructive"
                             >
-                              <GitPullRequestClosed size={14} className="mr-1" />
-                              Abort Merge
+                              <GitPullRequestClosed size={14} className="mr-1.5" />
+                              {t('workflow.abortMerge')}
                             </Button>
                           )}
                         </>
@@ -173,8 +180,8 @@ export function WorkflowSteps({
                           size="sm"
                           variant="default"
                         >
-                          <RotateCcw size={14} className="mr-1" />
-                          Accept & Commit
+                          <RotateCcw size={14} className="mr-1.5" />
+                          {t('workflow.acceptCommit')}
                         </Button>
                       )}
                       {onViewDiff && (
@@ -184,7 +191,8 @@ export function WorkflowSteps({
                           size="sm"
                           variant="outline"
                         >
-                          View Diff
+                          <FileDiff size={14} className="mr-1.5" />
+                          {t('workflow.viewDiff')}
                         </Button>
                       )}
                       {onReject && (
@@ -194,7 +202,8 @@ export function WorkflowSteps({
                           size="sm"
                           variant="destructive"
                         >
-                          Reject
+                          <X size={14} className="mr-1.5" />
+                          {t('workflow.reject')}
                         </Button>
                       )}
                     </>
@@ -209,8 +218,8 @@ export function WorkflowSteps({
                           size="sm"
                           variant="default"
                         >
-                          <RotateCcw size={14} className="mr-1" />
-                          Retry Commit
+                          <RotateCcw size={14} className="mr-1.5" />
+                          {t('workflow.retryCommit')}
                         </Button>
                       )}
                       {onOpenIDE && (
@@ -220,8 +229,8 @@ export function WorkflowSteps({
                           size="sm"
                           variant="outline"
                         >
-                          <Monitor size={14} className="mr-1" />
-                          Open in IDE
+                          <Monitor size={14} className="mr-1.5" />
+                          {t('workflow.openInIDE')}
                         </Button>
                       )}
                       {onAbort && (
@@ -231,8 +240,8 @@ export function WorkflowSteps({
                           size="sm"
                           variant="destructive"
                         >
-                          <GitPullRequestClosed size={14} className="mr-1" />
-                          Abort Merge
+                          <GitPullRequestClosed size={14} className="mr-1.5" />
+                          {t('workflow.abortMerge')}
                         </Button>
                       )}
                     </>
@@ -246,10 +255,10 @@ export function WorkflowSteps({
 
       {/* Workflow overall status */}
       {workflow.status === 'success' && (
-        <p className="text-xs text-success mt-2">Workflow completed successfully</p>
+        <p className="text-xs text-success mt-2">{t('workflow.completed')}</p>
       )}
       {workflow.status === 'failed' && (
-        <p className="text-xs text-error mt-2">Workflow failed</p>
+        <p className="text-xs text-error mt-2">{t('workflow.failed')}</p>
       )}
     </div>
   )

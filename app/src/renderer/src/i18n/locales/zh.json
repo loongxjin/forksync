@@ -314,5 +314,34 @@
     "retry": "重试",
     "expand": "展开",
     "collapse": "收起"
+  },
+  "workflow": {
+    "viewLiveTerminal": "查看实时终端",
+    "viewAgentLog": "查看 Agent 日志",
+    "agentResolving": "Agent 正在解决冲突...",
+    "viewLive": "查看实时",
+    "acceptCommit": "接受并提交",
+    "viewDiff": "查看 Diff",
+    "reject": "拒绝",
+    "retryCommit": "重试提交",
+    "openInIDE": "在 IDE 中打开",
+    "abortMerge": "中止合并",
+    "completed": "工作流已完成",
+    "failed": "工作流失败",
+    "eventsCount": "{{count}} 条事件"
+  },
+  "agentTerminal": {
+    "title": "Agent 解决",
+    "waiting": "等待 Agent 输出...",
+    "live": "实时",
+    "started": "已启动 {{agent}}",
+    "completed": "已完成",
+    "failed": "失败",
+    "resumeScroll": "恢复自动滚动",
+    "statusBar": "{{events}} 条事件 · {{tools}} 次工具调用",
+    "duration": "{{seconds}}秒",
+    "filesCount": "{{count}} 个文件",
+    "completedIn": "完成，耗时 {{duration}}",
+    "failedIn": "失败，耗时 {{duration}}"
   }
 }

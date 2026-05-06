@@ -5,8 +5,8 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  Circle,
-  PauseCircle,
+  CircleDot,
+  Clock,
   SkipForward
 } from 'lucide-react'
 
@@ -50,15 +50,16 @@ export function StepItem({
       case 'failed':
         return <XCircle size={16} className="text-error" />
       case 'waiting':
-        return <PauseCircle size={16} className="text-warning" />
+        return <Clock size={16} className="text-warning animate-pulse" />
       case 'skipped':
         return <SkipForward size={14} className="text-muted-foreground opacity-50" />
       default:
-        return <Circle size={14} className="text-muted-foreground opacity-40" />
+        return <CircleDot size={16} className="text-muted-foreground/55" />
     }
   })()
 
   const lineColor = (() => {
+    if (status === 'running') return 'bg-warning/60 animate-pulse'
     if (status === 'success') return 'bg-success'
     if (status === 'failed') return 'bg-error'
     if (status === 'skipped') return 'bg-muted-foreground/30'
@@ -70,14 +71,14 @@ export function StepItem({
       {/* Left column: icon + connector */}
       <div className="flex flex-col items-center w-5 shrink-0">
         {/* Icon */}
-        <div className="relative z-10 h-5 w-5 flex items-center justify-center">
+        <div className="relative z-10 h-5 w-5 flex items-center justify-center transition-all duration-200">
           {icon}
         </div>
         {/* Connector line */}
         {!isLast && (
           <div
             className={cn(
-              'w-[2px] flex-1 transition-colors',
+              'w-[3px] flex-1 transition-colors duration-300',
               lineColor,
               isNextActive && status === 'success' && 'bg-success'
             )}
@@ -90,8 +91,8 @@ export function StepItem({
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              'text-sm font-medium',
-              status === 'pending' && 'text-muted-foreground opacity-60',
+              'text-sm font-medium transition-colors duration-200',
+              status === 'pending' && 'text-muted-foreground/60',
               status === 'skipped' && 'text-muted-foreground opacity-50',
               status === 'running' && 'text-foreground',
               status === 'success' && 'text-foreground',
@@ -122,4 +123,3 @@ export function StepItem({
     </div>
   )
 }
-
