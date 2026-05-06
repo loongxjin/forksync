@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/git"
+	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -181,6 +182,7 @@ func handleWorkflowAccept(ctx context.Context, r types.Repo, store repo.Store) e
 	if err := store.Update(r); err != nil {
 		logger.Error("workflow: failed to update repo", "repo", r.Name, "error", err)
 	}
+	updateWorkflowHistoryToUpToDate(r.ID)
 	outputWorkflowResult(r)
 	return nil
 }
@@ -289,6 +291,7 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 		now2 := types.Time{Time: time.Now()}
 		r.LastSync = &now2
 		_ = store.Update(r)
+		updateWorkflowHistoryToUpToDate(r.ID)
 		outputWorkflowResult(r)
 		return nil
 	}
@@ -332,8 +335,40 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 	if err := store.Update(r); err != nil {
 		logger.Error("workflow: failed to update repo", "repo", r.Name, "error", err)
 	}
+	updateWorkflowHistoryToUpToDate(r.ID)
 	outputWorkflowResult(r)
 	return nil
+}
+
+// updateWorkflowHistoryToUpToDate updates the latest history record for a repo to up_to_date.
+// Called after manual or workflow accept resolution completes successfully.
+func updateWorkflowHistoryToUpToDate(repoID string) {
+	_, cfgMgr := getSharedConfig()
+	histStore, err := history.NewStore(cfgMgr.ConfigDir())
+	if err != nil {
+		logger.Error("[workflow] open history store", "error", err)
+		return
+	}
+	defer histStore.Close()
+
+	record, err := histStore.LatestByRepo(repoID)
+	if err != nil {
+		logger.Error("[workflow] find history record", "error", err)
+		return
+	}
+	if record.Status == string(types.RepoStatusUpToDate) {
+		return
+	}
+	if updateErr := histStore.UpdateStatus(record.ID, string(types.RepoStatusUpToDate)); updateErr != nil {
+		logger.Error("[workflow] update history status", "error", updateErr)
+	}
+
+	cfg, _ := getSharedConfig()
+	if cfg != nil && cfg.Sync.AutoSummary && record.SummaryStatus == "" {
+		if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusPending)); updateErr != nil {
+			logger.Error("[workflow] update summary status", "error", updateErr)
+		}
+	}
 }
 
 func outputWorkflowResult(r types.Repo) {

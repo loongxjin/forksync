@@ -820,7 +820,7 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 		return 0
 	}
 	// Don't record to history if there were no actual changes
-	if result.CommitsPulled == 0 && result.Status != string(types.RepoStatusConflict) && result.Status != string(types.RepoStatusError) && result.Status != string(types.RepoStatusResolved) {
+	if result.CommitsPulled == 0 && result.Status != string(types.RepoStatusConflict) && result.Status != string(types.RepoStatusError) && result.Status != string(types.RepoStatusResolved) && result.Status != string(types.RepoStatusWaiting) {
 		return 0
 	}
 

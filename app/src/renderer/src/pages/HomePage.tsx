@@ -327,6 +327,11 @@ export function HomePage(): JSX.Element {
       const res = await engineApi.workflowContinue(repoName, action)
       if (!res.success) {
         showToast?.(res.error ?? `Workflow action ${action} failed`, 'error')
+      } else if (engineConfig?.Sync?.AutoSummary && (action === 'accept' || action === 'continue_manual')) {
+        // Fire-and-forget AI summarization after resolving conflicts via workflow
+        engineApi.summarize(repoName).catch(() => {
+          // ignore background summary errors
+        })
       }
       await refresh()
     } catch (err) {
@@ -335,7 +340,7 @@ export function HomePage(): JSX.Element {
     } finally {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
     }
-  }, [refresh, showToast])
+  }, [refresh, showToast, engineConfig])
 
   // Repo actions
   const removingRef = useRef<string | null>(null)
