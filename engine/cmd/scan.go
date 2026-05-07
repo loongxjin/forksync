@@ -24,6 +24,19 @@ func init() {
 	rootCmd.AddCommand(scanCmd)
 }
 
+// skipScanDirs lists directory names that should be skipped during repository scanning.
+var skipScanDirs = []string{"node_modules", "vendor"}
+
+// isSkipDir reports whether a directory name should be skipped during scanning.
+func isSkipDir(name string) bool {
+	for _, d := range skipScanDirs {
+		if name == d {
+			return true
+		}
+	}
+	return false
+}
+
 func runScan(cmd *cobra.Command, args []string) error {
 	dir := args[0]
 
@@ -56,7 +69,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 		// Skip hidden directories and common non-project dirs
 		name := d.Name()
-		if d.IsDir() && (len(name) == 0 || name[0] == '.' || name == "node_modules" || name == "vendor") {
+		if d.IsDir() && (len(name) == 0 || name[0] == '.' || isSkipDir(name)) {
 			return filepath.SkipDir
 		}
 		// Check if this is a git repo

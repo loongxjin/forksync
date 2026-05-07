@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/loongxjin/forksync/engine/internal/logger"
-	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -25,9 +24,9 @@ func init() {
 func runSync(cmd *cobra.Command, args []string) error {
 	cfg, cfgMgr := getSharedConfig()
 
-	store := repo.NewJSONStore(cfgMgr.ConfigDir())
-	if err := store.Load(); err != nil {
-		return fmt.Errorf("load repo store: %w", err)
+	store, err := loadRepoStore()
+	if err != nil {
+		return err
 	}
 
 	syncer, cleanup := setupSyncerWithNotifier(cfg, cfgMgr, store)

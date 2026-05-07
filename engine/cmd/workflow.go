@@ -55,10 +55,9 @@ type workflowContinueResult struct {
 }
 
 func runWorkflowContinue(cmd *cobra.Command, args []string) error {
-	_, cfgMgr := getSharedConfig()
-	store := repo.NewJSONStore(cfgMgr.ConfigDir())
-	if err := store.Load(); err != nil {
-		return fmt.Errorf("load repo store: %w", err)
+	store, err := loadRepoStore()
+	if err != nil {
+		return err
 	}
 
 	r, ok := store.GetByName(args[0])
@@ -73,11 +72,11 @@ func runWorkflowContinue(cmd *cobra.Command, args []string) error {
 	case "resolve_with_agent":
 		return handleResolveWithAgent(ctx, r, store)
 	case "abort":
-		return handleWorkflowAbort(ctx, r, store)
+		return handleWorkflowAbortOrReject(ctx, r, store)
 	case "accept":
 		return handleWorkflowAccept(ctx, r, store)
 	case "reject":
-		return handleWorkflowReject(ctx, r, store)
+		return handleWorkflowAbortOrReject(ctx, r, store)
 	case "retry_commit":
 		return handleWorkflowRetryCommit(ctx, r, store)
 	case "continue_manual":
@@ -114,7 +113,9 @@ func handleResolveWithAgent(_ context.Context, r types.Repo, store repo.Store) e
 	return nil
 }
 
-func handleWorkflowAbort(ctx context.Context, r types.Repo, store repo.Store) error {
+// handleWorkflowAbortOrReject handles both abort and reject actions which share
+// the same logic: abort the merge, clear the workflow, and reset status.
+func handleWorkflowAbortOrReject(ctx context.Context, r types.Repo, store repo.Store) error {
 	gitOps := git.NewOperations()
 	if err := gitOps.AbortMerge(ctx, r.Path); err != nil {
 		logger.Warn("workflow: merge --abort failed", "repo", r.Name, "error", err)
@@ -131,7 +132,7 @@ func handleWorkflowAbort(ctx context.Context, r types.Repo, store repo.Store) er
 			wf.Steps[i].EndedAt = &now
 		}
 	}
-	// User explicitly aborted — clear the workflow entirely rather than leaving
+	// User explicitly aborted/rejected — clear the workflow entirely rather than leaving
 	// a failed record behind. The git state has already been rolled back.
 	r.Workflow = nil
 	r.Status = types.RepoStatusSyncNeeded
@@ -141,123 +142,31 @@ func handleWorkflowAbort(ctx context.Context, r types.Repo, store repo.Store) er
 	}
 	outputWorkflowResult(r)
 	return nil
+}
+
+// commitWorkflowResult contains the parameters for the commit-with-workflow pattern.
+type commitWorkflowParams struct {
+	commitMsg         string // fallback commit message
+	skipAgentAndAccept bool   // whether to mark agent_resolve and accept_changes as skipped
+	recordHistory     bool   // whether to record workflow completion history
 }
 
 func handleWorkflowAccept(ctx context.Context, r types.Repo, store repo.Store) error {
 	gitOps := git.NewOperations()
-	if err := gitOps.StageAll(ctx, r.Path); err != nil {
-		logger.Warn("workflow: stage all failed", "repo", r.Name, "error", err)
-	}
-	if err := gitOps.CommitNoEdit(ctx, r.Path); err != nil {
-		if err2 := gitOps.Commit(ctx, r.Path, "Merge upstream changes (agent-resolved conflicts)"); err2 != nil {
-			wf := r.Workflow
-			if wf == nil {
-				wf = newWorkflowFromRepo(r)
-			}
-			advanceWorkflowStep(wf, types.StepCommit, types.StepStatusFailed, fmt.Sprintf("commit failed: %v", err2))
-			wf.Status = types.WorkflowFailed
-			now := types.Time{Time: time.Now()}
-			wf.FinishedAt = &now
-			r.Workflow = wf
-			r.Status = types.RepoStatusError
-			r.ErrorMessage = fmt.Sprintf("commit failed: %v", err2)
-			_ = store.Update(r)
-			outputWorkflowResult(r)
-			return nil
-		}
-	}
-	wf := r.Workflow
-	if wf == nil {
-		wf = newWorkflowFromRepo(r)
-	}
-	advanceWorkflowStep(wf, types.StepAcceptChanges, types.StepStatusSuccess, "")
-	advanceWorkflowStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-	wf.Status = types.WorkflowSuccess
-	now := types.Time{Time: time.Now()}
-	wf.FinishedAt = &now
-	r.Workflow = wf
-	r.Status = types.RepoStatusUpToDate
-	r.ErrorMessage = ""
-	now2 := types.Time{Time: time.Now()}
-	r.LastSync = &now2
-	if err := store.Update(r); err != nil {
-		logger.Error("workflow: failed to update repo", "repo", r.Name, "error", err)
-	}
-	autoResolved, conflictsFound, agentUsed, oldHEAD := workflowCompletionInfo(wf)
-	recordWorkflowComplete(r.ID, r.Name, 0, autoResolved, conflictsFound, agentUsed, oldHEAD, r.Path)
-	outputWorkflowResult(r)
-	return nil
-}
-
-func handleWorkflowReject(ctx context.Context, r types.Repo, store repo.Store) error {
-	gitOps := git.NewOperations()
-	if err := gitOps.AbortMerge(ctx, r.Path); err != nil {
-		logger.Warn("workflow: merge --abort failed", "repo", r.Name, "error", err)
-	}
-	wf := r.Workflow
-	if wf == nil {
-		wf = newWorkflowFromRepo(r)
-	}
-	for i := range wf.Steps {
-		if wf.Steps[i].Status == types.StepStatusPending {
-			wf.Steps[i].Status = types.StepStatusSkipped
-			now := types.Time{Time: time.Now()}
-			wf.Steps[i].EndedAt = &now
-		}
-	}
-	// User explicitly rejected — clear the workflow entirely rather than leaving
-	// a failed record behind. The git state has already been rolled back.
-	r.Workflow = nil
-	r.Status = types.RepoStatusSyncNeeded
-	r.ErrorMessage = ""
-	if err := store.Update(r); err != nil {
-		logger.Error("workflow: failed to update repo", "repo", r.Name, "error", err)
-	}
-	outputWorkflowResult(r)
-	return nil
+	return finalizeCommitWithWorkflow(ctx, r, store, gitOps, commitWorkflowParams{
+		commitMsg:         "Merge upstream changes (agent-resolved conflicts)",
+		skipAgentAndAccept: false,
+		recordHistory:     true,
+	})
 }
 
 func handleWorkflowRetryCommit(ctx context.Context, r types.Repo, store repo.Store) error {
 	gitOps := git.NewOperations()
-	if err := gitOps.StageAll(ctx, r.Path); err != nil {
-		logger.Warn("workflow: stage all failed", "repo", r.Name, "error", err)
-	}
-	if err := gitOps.CommitNoEdit(ctx, r.Path); err != nil {
-		if err2 := gitOps.Commit(ctx, r.Path, "Merge upstream changes (agent-resolved conflicts)"); err2 != nil {
-			wf := r.Workflow
-			if wf == nil {
-				wf = newWorkflowFromRepo(r)
-			}
-			advanceWorkflowStep(wf, types.StepCommit, types.StepStatusFailed, fmt.Sprintf("commit failed: %v", err2))
-			wf.Status = types.WorkflowFailed
-			now := types.Time{Time: time.Now()}
-			wf.FinishedAt = &now
-			r.Workflow = wf
-			r.Status = types.RepoStatusError
-			r.ErrorMessage = fmt.Sprintf("commit failed: %v", err2)
-			_ = store.Update(r)
-			outputWorkflowResult(r)
-			return nil
-		}
-	}
-	wf := r.Workflow
-	if wf == nil {
-		wf = newWorkflowFromRepo(r)
-	}
-	advanceWorkflowStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-	wf.Status = types.WorkflowSuccess
-	now := types.Time{Time: time.Now()}
-	wf.FinishedAt = &now
-	r.Workflow = wf
-	r.Status = types.RepoStatusUpToDate
-	r.ErrorMessage = ""
-	now2 := types.Time{Time: time.Now()}
-	r.LastSync = &now2
-	if err := store.Update(r); err != nil {
-		logger.Error("workflow: failed to update repo", "repo", r.Name, "error", err)
-	}
-	outputWorkflowResult(r)
-	return nil
+	return finalizeCommitWithWorkflow(ctx, r, store, gitOps, commitWorkflowParams{
+		commitMsg:         "Merge upstream changes (agent-resolved conflicts)",
+		skipAgentAndAccept: false,
+		recordHistory:     false,
+	})
 }
 
 func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.Store, gitOps *git.Operations) error {
@@ -277,6 +186,7 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 
 	mergeHead := filepath.Join(r.Path, ".git", "MERGE_HEAD")
 	if _, err := os.Stat(mergeHead); err != nil {
+		// No merge in progress — already clean
 		wf := r.Workflow
 		if wf == nil {
 			wf = newWorkflowFromRepo(r)
@@ -299,11 +209,23 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 		return nil
 	}
 
+	// MERGE_HEAD exists — stage and commit
+	return finalizeCommitWithWorkflow(ctx, r, store, gitOps, commitWorkflowParams{
+		commitMsg:         "Merge upstream changes (manual resolution)",
+		skipAgentAndAccept: true,
+		recordHistory:     true,
+	})
+}
+
+// finalizeCommitWithWorkflow handles the common pattern: stage → CommitNoEdit → fallback Commit →
+// update workflow → update status. This is the shared implementation for accept, retry_commit,
+// and continue_manual actions.
+func finalizeCommitWithWorkflow(ctx context.Context, r types.Repo, store repo.Store, gitOps *git.Operations, params commitWorkflowParams) error {
 	if err := gitOps.StageAll(ctx, r.Path); err != nil {
 		logger.Warn("workflow: stage all failed", "repo", r.Name, "error", err)
 	}
 	if err := gitOps.CommitNoEdit(ctx, r.Path); err != nil {
-		if err2 := gitOps.Commit(ctx, r.Path, "Merge upstream changes (manual resolution)"); err2 != nil {
+		if err2 := gitOps.Commit(ctx, r.Path, params.commitMsg); err2 != nil {
 			wf := r.Workflow
 			if wf == nil {
 				wf = newWorkflowFromRepo(r)
@@ -320,12 +242,18 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 			return nil
 		}
 	}
+
+	// Success path
 	wf := r.Workflow
 	if wf == nil {
 		wf = newWorkflowFromRepo(r)
 	}
-	markStepSkippedInWorkflow(wf, types.StepAgentResolve)
-	markStepSkippedInWorkflow(wf, types.StepAcceptChanges)
+	if params.skipAgentAndAccept {
+		markStepSkippedInWorkflow(wf, types.StepAgentResolve)
+		markStepSkippedInWorkflow(wf, types.StepAcceptChanges)
+	} else {
+		advanceWorkflowStep(wf, types.StepAcceptChanges, types.StepStatusSuccess, "")
+	}
 	advanceWorkflowStep(wf, types.StepCommit, types.StepStatusSuccess, "")
 	wf.Status = types.WorkflowSuccess
 	now := types.Time{Time: time.Now()}
@@ -338,8 +266,10 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 	if err := store.Update(r); err != nil {
 		logger.Error("workflow: failed to update repo", "repo", r.Name, "error", err)
 	}
-	autoResolved, conflictsFound, agentUsed, oldHEAD := workflowCompletionInfo(wf)
-	recordWorkflowComplete(r.ID, r.Name, 0, autoResolved, conflictsFound, agentUsed, oldHEAD, r.Path)
+	if params.recordHistory {
+		autoResolved, conflictsFound, agentUsed, oldHEAD := workflowCompletionInfo(wf)
+		recordWorkflowComplete(r.ID, r.Name, 0, autoResolved, conflictsFound, agentUsed, oldHEAD, r.Path)
+	}
 	outputWorkflowResult(r)
 	return nil
 }

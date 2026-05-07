@@ -10,7 +10,6 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/github"
 	"github.com/loongxjin/forksync/engine/internal/logger"
-	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -38,7 +37,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load config early for GitHub token
-	cfg, cfgMgr := getSharedConfig()
+	cfg, _ := getSharedConfig()
 
 	gitOps := git.NewOperations()
 
@@ -90,9 +89,9 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load store
-	store := repo.NewJSONStore(cfgMgr.ConfigDir())
-	if err := store.Load(); err != nil {
-		return fmt.Errorf("load repo store: %w", err)
+	store, err := loadRepoStore()
+	if err != nil {
+		return err
 	}
 
 	if err := store.Add(newRepo); err != nil {

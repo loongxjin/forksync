@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"path/filepath"
-
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
@@ -35,7 +33,7 @@ func newSessionManager(cfg *config.Config, cfgMgr *config.Manager) *session.Mana
 		return nil
 	}
 
-	sessionsDir := filepath.Join(cfgMgr.ConfigDir(), "sessions")
+	sessionsDir := sessionsDir(cfgMgr)
 	sessionStore := session.NewSessionStore(sessionsDir)
 	if initErr := sessionStore.Init(); initErr != nil {
 		logger.Warn("sync: failed to init session store", "error", initErr)

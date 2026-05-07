@@ -86,9 +86,9 @@ func init() {
 func runResolve(cmd *cobra.Command, args []string) error {
 	cfg, cfgMgr := getSharedConfig()
 
-	store := repo.NewJSONStore(cfgMgr.ConfigDir())
-	if err := store.Load(); err != nil {
-		return fmt.Errorf("load repo store: %w", err)
+	store, err := loadRepoStore()
+	if err != nil {
+		return err
 	}
 
 	r, ok := store.GetByName(args[0])
@@ -143,7 +143,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 
 	// Create session manager
 	cfgMgr := config.NewManager()
-	sessionsDir := filepath.Join(cfgMgr.ConfigDir(), "sessions")
+	sessionsDir := sessionsDir(cfgMgr)
 	sessionStore := session.NewSessionStore(sessionsDir)
 	sessionMgr := session.NewManager(sessionStore, provider)
 
@@ -568,13 +568,6 @@ func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
 // resolveStrategyOrDefault returns the resolve strategy from config, or the default.
 func resolveStrategyOrDefault(cfg *config.Config) string {
 	return config.ResolveStrategyOrDefault(cfg)
-}
-
-// updateRepoWithLog updates the repo in the store and logs any error.
-func updateRepoWithLog(r types.Repo, store repo.Store, action string) {
-	if updateErr := store.Update(r); updateErr != nil {
-		logger.Error("resolve: failed to update repo", "repo", r.Name, "action", action, "error", updateErr)
-	}
 }
 
 // outputResult outputs data either as JSON or text depending on the output mode.

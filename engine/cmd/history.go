@@ -6,7 +6,6 @@ import (
 
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/history"
-	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -49,9 +48,9 @@ func runHistory(cmd *cobra.Command, args []string) error {
 
 	if len(args) > 0 {
 		// Look up repo by name to get ID
-		repoStore := repo.NewJSONStore(cfgMgr.ConfigDir())
-		if loadErr := repoStore.Load(); loadErr != nil {
-			return fmt.Errorf("load repo store: %w", loadErr)
+		repoStore, err := loadRepoStore()
+		if err != nil {
+			return err
 		}
 		r, ok := repoStore.GetByName(args[0])
 		if !ok {
@@ -130,9 +129,9 @@ func runHistoryCleanup(cmd *cobra.Command, args []string, store *history.Store, 
 
 	if len(args) > 0 {
 		// Clean up specific repo
-		repoStore := repo.NewJSONStore(cfgMgr.ConfigDir())
-		if loadErr := repoStore.Load(); loadErr != nil {
-			return fmt.Errorf("load repo store: %w", loadErr)
+		repoStore, loadErr := loadRepoStore()
+		if loadErr != nil {
+			return loadErr
 		}
 		r, ok := repoStore.GetByName(args[0])
 		if !ok {

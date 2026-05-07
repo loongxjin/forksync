@@ -316,7 +316,10 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 	}
 
 	// Ensure we are on the target branch before merging
-	currentBranch, _ := o.GetCurrentBranch(ctx, repo.Path)
+	currentBranch, branchErr := o.GetCurrentBranch(ctx, repo.Path)
+	if branchErr != nil {
+		return nil, fmt.Errorf("get current branch: %w", branchErr)
+	}
 	if currentBranch != "" && currentBranch != branch {
 		if _, err := o.runGitCombined(ctx, repo.Path, "checkout", branch); err != nil {
 			return nil, fmt.Errorf("checkout %s: %w", branch, err)

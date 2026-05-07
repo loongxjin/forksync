@@ -2,6 +2,7 @@ package sync
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -91,18 +92,19 @@ func workflowFromResult(result *Result) *types.SyncWorkflow {
 	advanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
 	advanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
 
-	if result.Status == string(types.RepoStatusUpToDate) && result.CommitsPulled == 0 {
-		// No-op: fetch found nothing to sync
-		markStepSkipped(wf, types.StepCheckConflicts)
-		markStepSkipped(wf, types.StepResolveStrategy)
-		markStepSkipped(wf, types.StepAgentResolve)
-		markStepSkipped(wf, types.StepAcceptChanges)
-		advanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-		markWorkflowDone(wf, types.WorkflowSuccess)
-		return wf
-	}
+	switch result.Status {
+	case string(types.RepoStatusUpToDate):
+		if result.CommitsPulled == 0 {
+			// No-op: fetch found nothing to sync
+			markStepSkipped(wf, types.StepCheckConflicts)
+			markStepSkipped(wf, types.StepResolveStrategy)
+			markStepSkipped(wf, types.StepAgentResolve)
+			markStepSkipped(wf, types.StepAcceptChanges)
+			advanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
+			markWorkflowDone(wf, types.WorkflowSuccess)
+			return wf
+		}
 
-	if result.Status == string(types.RepoStatusUpToDate) && result.CommitsPulled > 0 {
 		// Success with commits
 		advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
 		markStepSkipped(wf, types.StepResolveStrategy)
@@ -111,9 +113,8 @@ func workflowFromResult(result *Result) *types.SyncWorkflow {
 		advanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
 		markWorkflowDone(wf, types.WorkflowSuccess)
 		return wf
-	}
 
-	if result.Status == string(types.RepoStatusConflict) {
+	case string(types.RepoStatusConflict):
 		advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
 			fmt.Sprintf("%d files have conflicts", len(result.ConflictFiles)))
 		advanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
@@ -121,18 +122,16 @@ func workflowFromResult(result *Result) *types.SyncWorkflow {
 		markStepSkipped(wf, types.StepAcceptChanges)
 		wf.Status = types.WorkflowWaiting
 		return wf
-	}
 
-	if result.Status == string(types.RepoStatusResolving) {
+	case string(types.RepoStatusResolving):
 		advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
 			fmt.Sprintf("%d files have conflicts", result.ConflictsFound))
 		advanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
 		advanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
 		markStepSkipped(wf, types.StepAcceptChanges)
 		return wf
-	}
 
-	if result.Status == string(types.RepoStatusResolved) {
+	case string(types.RepoStatusResolved):
 		advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
 			fmt.Sprintf("%d files have conflicts", result.ConflictsFound))
 		advanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
@@ -141,17 +140,16 @@ func workflowFromResult(result *Result) *types.SyncWorkflow {
 		advanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
 		wf.Status = types.WorkflowWaiting
 		return wf
-	}
 
-	if result.Status == string(types.RepoStatusError) {
+	case string(types.RepoStatusError):
 		// Determine which step failed based on error message
 		if result.ErrorMessage != "" {
-			if contains(result.ErrorMessage, "fetch failed") {
+			if strings.Contains(result.ErrorMessage, "fetch failed") {
 				advanceStep(wf, types.StepFetch, types.StepStatusFailed, result.ErrorMessage)
-			} else if contains(result.ErrorMessage, "merge failed") {
+			} else if strings.Contains(result.ErrorMessage, "merge failed") {
 				advanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
 				advanceStep(wf, types.StepMerge, types.StepStatusFailed, result.ErrorMessage)
-			} else if contains(result.ErrorMessage, "commit") {
+			} else if strings.Contains(result.ErrorMessage, "commit") {
 				advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
 				markStepSkipped(wf, types.StepResolveStrategy)
 				markStepSkipped(wf, types.StepAgentResolve)
@@ -170,15 +168,3 @@ func workflowFromResult(result *Result) *types.SyncWorkflow {
 	return wf
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) > 0 && findSubstring(s, substr))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

@@ -9,12 +9,13 @@ import (
 	"syscall"
 
 	"github.com/loongxjin/forksync/engine/internal/logger"
-	"github.com/loongxjin/forksync/engine/internal/repo"
 	sched "github.com/loongxjin/forksync/engine/internal/scheduler"
 	"github.com/spf13/cobra"
 )
 
 var serveInterval string
+
+const defaultServeInterval = "30m"
 
 var serveCmd = &cobra.Command{
 	Use:   "serve",
@@ -49,9 +50,9 @@ func runServe(cmd *cobra.Command, args []string) error {
 		cfg = &cfgCopy
 	}
 
-	store := repo.NewJSONStore(cfgMgr.ConfigDir())
-	if err := store.Load(); err != nil {
-		return fmt.Errorf("load repo store: %w", err)
+	store, err := loadRepoStore()
+	if err != nil {
+		return err
 	}
 
 	// Create syncer with all dependencies
@@ -73,7 +74,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	defer signal.Stop(sigCh)
 
 	// Determine interval string for output
-	intervalStr := "30m"
+	intervalStr := defaultServeInterval
 	if cfg != nil && cfg.Sync.DefaultInterval != "" {
 		intervalStr = cfg.Sync.DefaultInterval
 	}

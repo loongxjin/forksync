@@ -5,7 +5,6 @@ import (
 
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
-	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/spf13/cobra"
 )
 
@@ -23,12 +22,12 @@ func init() {
 }
 
 func runRemove(cmd *cobra.Command, args []string) error {
-	_, cfgMgr := getSharedConfig()
-
-	store := repo.NewJSONStore(cfgMgr.ConfigDir())
-	if err := store.Load(); err != nil {
-		return fmt.Errorf("load repo store: %w", err)
+	store, err := loadRepoStore()
+	if err != nil {
+		return err
 	}
+
+	_, cfgMgr := getSharedConfig()
 
 	r, ok := store.GetByName(args[0])
 	if !ok {

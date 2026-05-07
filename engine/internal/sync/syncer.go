@@ -25,6 +25,7 @@ import (
 
 const (
 	defaultTimeout         = 5 * time.Minute
+	defaultAgentTimeout    = 10 * time.Minute
 	postSyncCommandTimeout = 60 * time.Second
 )
 
@@ -260,6 +261,23 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 	return false
 }
 
+// failSync is a helper that populates a failed sync result with consistent workflow/bookkeeping updates.
+// It advances the given step to failed, marks the workflow done, sets the result status/message,
+// updates repo status, optionally notifies, saves workflow, and finalizes the result.
+func (s *Syncer) failSync(r types.Repo, result *Result, wf *types.SyncWorkflow, step types.WorkflowStep, errMsg string, notify bool) *Result {
+	advanceStep(wf, step, types.StepStatusFailed, errMsg)
+	markWorkflowDone(wf, types.WorkflowFailed)
+	result.Status = string(types.RepoStatusError)
+	result.ErrorMessage = errMsg
+	s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
+	if notify {
+		s.notifyResult(r.Name, result)
+	}
+	s.saveWorkflow(r, wf)
+	s.finalizeResult(result)
+	return result
+}
+
 // executeSync performs the actual sync: fetch → status check → merge → post-sync commands.
 func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) *Result {
 	wf := result.Workflow
@@ -285,15 +303,7 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	advanceStep(wf, types.StepFetch, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 	if err := s.gitOps.Fetch(ctx, r); err != nil {
-		advanceStep(wf, types.StepFetch, types.StepStatusFailed, fmt.Sprintf("fetch failed: %v", err))
-		markWorkflowDone(wf, types.WorkflowFailed)
-		result.Status = string(types.RepoStatusError)
-		result.ErrorMessage = fmt.Sprintf("fetch failed: %v", err)
-		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
-		s.notifyResult(r.Name, result)
-		s.saveWorkflow(r, wf)
-		s.finalizeResult(result)
-		return result
+		return s.failSync(r, result, wf, types.StepFetch, fmt.Sprintf("fetch failed: %v", err), true)
 	}
 	advanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
 	s.saveWorkflow(r, wf)
@@ -301,14 +311,7 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	// Step 2: Check ahead/behind
 	statusResult, err := s.gitOps.Status(ctx, r)
 	if err != nil {
-		advanceStep(wf, types.StepMerge, types.StepStatusFailed, fmt.Sprintf("status check failed: %v", err))
-		markWorkflowDone(wf, types.WorkflowFailed)
-		result.Status = string(types.RepoStatusError)
-		result.ErrorMessage = fmt.Sprintf("status check failed: %v", err)
-		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
-		s.saveWorkflow(r, wf)
-		s.finalizeResult(result)
-		return result
+		return s.failSync(r, result, wf, types.StepMerge, fmt.Sprintf("status check failed: %v", err), false)
 	}
 
 	if statusResult.BehindBy == 0 {
@@ -340,15 +343,7 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	s.saveWorkflow(r, wf)
 	mergeResult, err := s.gitOps.Merge(ctx, r)
 	if err != nil {
-		advanceStep(wf, types.StepMerge, types.StepStatusFailed, fmt.Sprintf("merge failed: %v", err))
-		markWorkflowDone(wf, types.WorkflowFailed)
-		result.Status = string(types.RepoStatusError)
-		result.ErrorMessage = fmt.Sprintf("merge failed: %v", err)
-		s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
-		s.notifyResult(r.Name, result)
-		s.saveWorkflow(r, wf)
-		s.finalizeResult(result)
-		return result
+		return s.failSync(r, result, wf, types.StepMerge, fmt.Sprintf("merge failed: %v", err), true)
 	}
 	advanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
 	s.saveWorkflow(r, wf)
@@ -592,14 +587,14 @@ func (s *Syncer) saveWorkflow(r types.Repo, wf *types.SyncWorkflow) {
 }
 
 // agentResolveTimeout returns the timeout for agent conflict resolution.
-// Falls back to 10 minutes if no config is available.
+// Falls back to defaultAgentTimeout if no config is available.
 func agentResolveTimeout(cfg *config.Config) time.Duration {
 	if cfg != nil && cfg.Agent.Timeout != "" {
 		if d, err := time.ParseDuration(cfg.Agent.Timeout); err == nil && d > 0 {
 			return d
 		}
 	}
-	return 10 * time.Minute
+	return defaultAgentTimeout
 }
 
 // verifyAndStageResolvedFiles checks that resolved files have no conflict markers and stages them.
@@ -688,17 +683,14 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 	for i, r := range targetRepos {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(idx int, repo types.Repo) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			timeout := defaultTimeout
-			if s.shouldUseAgentResolve(repo) {
-				timeout = agentResolveTimeout(s.cfg)
-			}
-			repoCtx, cancel := context.WithTimeout(ctx, timeout)
-			defer cancel()
-			results[idx] = s.SyncRepo(repoCtx, repo)
-		}(i, r)
+			go func(idx int, repo types.Repo) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				// Note: executeSync already sets its own timeout based on agent config,
+				// so we don't add a second timeout layer here to avoid unpredictable
+				// interactions between the two.
+				results[idx] = s.SyncRepo(ctx, repo)
+			}(i, r)
 	}
 	wg.Wait()
 

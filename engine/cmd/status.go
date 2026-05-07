@@ -32,15 +32,18 @@ func init() {
 // when there are many repos, but each individual operation is bounded.
 const statusTimeout = 30 * time.Second
 
+// staleWorkflowThreshold is the age after which an active workflow is considered stale.
+const staleWorkflowThreshold = 30 * time.Minute
+
 func runStatus(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), statusTimeout)
 	defer cancel()
 
-	cfg, cfgMgr := getSharedConfig()
+	cfg, _ := getSharedConfig()
 
-	store := repo.NewJSONStore(cfgMgr.ConfigDir())
-	if err := store.Load(); err != nil {
-		return fmt.Errorf("load repo store: %w", err)
+	store, err := loadRepoStore()
+	if err != nil {
+		return err
 	}
 
 	repos, err := store.List()
@@ -146,7 +149,7 @@ func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps 
 					workflowRebuildFromConflict,
 					fmt.Sprintf("%d files have conflicts", len(unmergedFiles)),
 				)
-				safeUpdateRepo(store, repos[idx], r.Name)
+				updateRepoWithLog(repos[idx], store, "status-update")
 				return
 			}
 			// MERGE_HEAD exists but all files resolved → resolved state
@@ -154,7 +157,7 @@ func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps 
 			repos[idx].Workflow = rebuildWorkflow(r,
 				workflowRebuildFromAcceptChanges,
 			)
-			safeUpdateRepo(store, repos[idx], r.Name)
+			updateRepoWithLog(repos[idx], store, "status-update")
 			return
 		}
 	}
@@ -179,19 +182,19 @@ func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps 
 	// Transition unconfigured repos to up_to_date
 	if repos[idx].Status == types.RepoStatusUnconfigured {
 		repos[idx].Status = types.RepoStatusUpToDate
-		safeUpdateRepo(store, repos[idx], r.Name)
+		updateRepoWithLog(repos[idx], store, "status-update")
 	}
 
 	// Detect sync_needed: upstream has new commits
 	if isSyncNeeded(repos[idx]) {
 		repos[idx].Status = types.RepoStatusSyncNeeded
 		repos[idx].ErrorMessage = ""
-		safeUpdateRepo(store, repos[idx], r.Name)
+		updateRepoWithLog(repos[idx], store, "status-update")
 	} else if repos[idx].BehindBy == 0 && repos[idx].Status == types.RepoStatusSyncNeeded {
 		// Previously sync_needed but now up-to-date (e.g. user synced externally)
 		repos[idx].Status = types.RepoStatusUpToDate
 		repos[idx].ErrorMessage = ""
-		safeUpdateRepo(store, repos[idx], r.Name)
+		updateRepoWithLog(repos[idx], store, "status-update")
 	}
 }
 
@@ -255,7 +258,7 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 		repos[idx].Status = types.RepoStatusUpToDate
 		repos[idx].ErrorMessage = ""
 		repos[idx].Workflow = nil
-		safeUpdateRepo(store, repos[idx], r.Name)
+		updateRepoWithLog(repos[idx], store, "status-update")
 		return
 	}
 
@@ -266,7 +269,7 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 		repos[idx].Workflow = rebuildWorkflow(r,
 			workflowRebuildFromAcceptChanges,
 		)
-		safeUpdateRepo(store, repos[idx], r.Name)
+		updateRepoWithLog(repos[idx], store, "status-update")
 		return
 	}
 
@@ -278,7 +281,7 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 		repos[idx].Workflow = rebuildWorkflow(r,
 			workflowRebuildFromAgentResolve,
 		)
-		safeUpdateRepo(store, repos[idx], r.Name)
+		updateRepoWithLog(repos[idx], store, "status-update")
 		return
 	}
 
@@ -288,7 +291,7 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 		workflowRebuildFromConflict,
 		fmt.Sprintf("%d files have conflicts", len(unmergedFiles)),
 	)
-	safeUpdateRepo(store, repos[idx], r.Name)
+	updateRepoWithLog(repos[idx], store, "status-update")
 }
 
 // isSyncNeeded returns true if upstream has new commits and the repo is in a
@@ -304,13 +307,6 @@ func isSyncNeeded(r types.Repo) bool {
 		return false
 	}
 	return true
-}
-
-// safeUpdateRepo updates the repo in the store and logs any error.
-func safeUpdateRepo(store repo.Store, r types.Repo, repoName string) {
-	if updateErr := store.Update(r); updateErr != nil {
-		logger.Error("status: failed to update repo", "repo", repoName, "error", updateErr)
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -421,7 +417,7 @@ func rebuildWorkflowForSyncingOrError(ctx context.Context, repos []types.Repo, i
 	// If the repo has an active workflow that started recently, assume sync
 	// is still running and do not touch it.
 	if r.Workflow != nil && !r.Workflow.StartedAt.IsZero() &&
-		time.Since(r.Workflow.StartedAt) < 30*time.Minute {
+		time.Since(r.Workflow.StartedAt) < staleWorkflowThreshold {
 		return
 	}
 
@@ -449,7 +445,7 @@ func rebuildWorkflowForSyncingOrError(ctx context.Context, repos []types.Repo, i
 			repos[idx].Workflow = rebuildWorkflow(r, workflowRebuildFromMerge)
 			repos[idx].Status = types.RepoStatusSyncing
 		}
-		safeUpdateRepo(store, repos[idx], r.Name)
+		updateRepoWithLog(repos[idx], store, "status-update")
 		return
 	}
 
@@ -463,7 +459,7 @@ func rebuildWorkflowForSyncingOrError(ctx context.Context, repos []types.Repo, i
 			repos[idx].Status = types.RepoStatusSyncNeeded
 			repos[idx].ErrorMessage = ""
 		}
-		safeUpdateRepo(store, repos[idx], r.Name)
+		updateRepoWithLog(repos[idx], store, "status-update")
 	}
 }
 func printStatusText(repos []types.Repo, agents []types.AgentInfo, preferredAgent string) {

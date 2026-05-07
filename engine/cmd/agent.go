@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
@@ -125,7 +124,7 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 
 func runAgentSessions(cmd *cobra.Command, args []string) error {
 	_, cfgMgr := getSharedConfig()
-	sessionDir := filepath.Join(cfgMgr.ConfigDir(), "sessions")
+	sessionDir := sessionsDir(cfgMgr)
 
 	store := session.NewSessionStore(sessionDir)
 	mgr := session.NewManager(store, nil) // provider not needed for listing
@@ -169,7 +168,7 @@ func runAgentSessions(cmd *cobra.Command, args []string) error {
 
 func runAgentCleanup(cmd *cobra.Command, args []string) error {
 	_, cfgMgr := getSharedConfig()
-	sessionDir := filepath.Join(cfgMgr.ConfigDir(), "sessions")
+	sessionDir := sessionsDir(cfgMgr)
 
 	store := session.NewSessionStore(sessionDir)
 	mgr := session.NewManager(store, nil)
@@ -192,7 +191,7 @@ func runAgentCleanup(cmd *cobra.Command, args []string) error {
 func runAgentReset(cmd *cobra.Command, args []string) error {
 	_, cfgMgr := getSharedConfig()
 
-	sessionDir := filepath.Join(cfgMgr.ConfigDir(), "sessions")
+	sessionDir := sessionsDir(cfgMgr)
 	sessionStore := session.NewSessionStore(sessionDir)
 	mgr := session.NewManager(sessionStore, nil)
 
