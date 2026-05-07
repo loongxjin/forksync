@@ -279,8 +279,14 @@ export function HomePage(): JSX.Element {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
       refresh().catch(() => {})
       loadHistory()
+      // Fire-and-forget AI summarization after streaming resolve completes
+      if (engineConfig?.Sync?.AutoSummary) {
+        engineApi.summarize(repoName).catch(() => {
+          // ignore background summary errors
+        })
+      }
     }
-  }, [streamResults, refresh, loadHistory])
+  }, [streamResults, refresh, loadHistory, engineConfig])
 
   const handleAccept = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
