@@ -279,8 +279,8 @@ export function HomePage(): JSX.Element {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
       refresh().catch(() => {})
       loadHistory()
-      // Fire-and-forget AI summarization after streaming resolve completes
-      if (engineConfig?.Sync?.AutoSummary) {
+      // Fire-and-forget AI summarization only on successful streaming resolve
+      if (result && engineConfig?.Sync?.AutoSummary) {
         engineApi.summarize(repoName).catch(() => {
           // ignore background summary errors
         })
