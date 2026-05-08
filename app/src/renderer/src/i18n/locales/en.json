@@ -326,6 +326,7 @@
     "retryCommit": "Retry Commit",
     "openInIDE": "Open in IDE",
     "abortMerge": "Abort Merge",
+    "retryResolve": "Retry Resolve",
     "completed": "Workflow completed successfully",
     "failed": "Workflow failed",
     "eventsCount": "{{count}} events"

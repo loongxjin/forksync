@@ -95,8 +95,8 @@ export function WorkflowSteps({
                 </div>
               )}
 
-              {/* View Agent Log button for agent_resolve success/failed */}
-              {stepRecord.step === 'agent_resolve' && (stepRecord.status === 'success' || stepRecord.status === 'failed') && onViewTerminal && (
+              {/* View Agent Log button for agent_resolve success */}
+              {stepRecord.step === 'agent_resolve' && stepRecord.status === 'success' && onViewTerminal && (
                 <div className="mt-1">
                   <Button
                     onClick={onViewTerminal}
@@ -107,6 +107,47 @@ export function WorkflowSteps({
                     <Eye size={14} className="mr-1.5" />
                     {t('workflow.viewAgentLog')}
                   </Button>
+                </div>
+              )}
+
+              {/* agent_resolve failed: show retry + abort */}
+              {stepRecord.step === 'agent_resolve' && stepRecord.status === 'failed' && (
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {onViewTerminal && (
+                    <Button
+                      onClick={onViewTerminal}
+                      size="sm"
+                      variant="outline"
+                      className="text-xs"
+                    >
+                      <Eye size={14} className="mr-1.5" />
+                      {t('workflow.viewAgentLog')}
+                    </Button>
+                  )}
+                  {onResolveWithAgent && (
+                    <Button
+                      onClick={onResolveWithAgent}
+                      disabled={loading}
+                      size="sm"
+                      variant="default"
+                      className="text-xs"
+                    >
+                      <RotateCcw size={14} className="mr-1.5" />
+                      {t('workflow.retryResolve')}
+                    </Button>
+                  )}
+                  {onAbort && (
+                    <Button
+                      onClick={onAbort}
+                      disabled={loading}
+                      size="sm"
+                      variant="destructive"
+                      className="text-xs"
+                    >
+                      <GitPullRequestClosed size={14} className="mr-1.5" />
+                      {t('workflow.abortMerge')}
+                    </Button>
+                  )}
                 </div>
               )}
 

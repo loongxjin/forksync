@@ -326,6 +326,7 @@
     "retryCommit": "重试提交",
     "openInIDE": "在 IDE 中打开",
     "abortMerge": "中止合并",
+    "retryResolve": "重试解决冲突",
     "completed": "工作流已完成",
     "failed": "工作流失败",
     "eventsCount": "{{count}} 条事件"

@@ -17,6 +17,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
+	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -168,6 +169,10 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		if !resolved.Load() {
 			r.Status = types.RepoStatusConflict
 			r.ErrorMessage = "agent process exited unexpectedly, conflict resolution incomplete"
+			if r.Workflow != nil {
+				syncpkg.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusFailed, "agent process exited unexpectedly")
+				r.Workflow.Status = types.WorkflowFailed
+			}
 			updateRepoWithLog(r, store, "defer-rollback")
 		}
 	}()
@@ -187,9 +192,21 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	logger.Info("[TRACE] resolve: sessionMgr.ResolveConflicts returned", "repo", r.Name, "err", err, "resultNil", result == nil)
 	if err != nil {
 		logger.Warn("resolve: agent resolve failed", "repo", r.Name, "error", err)
+		if streamWriter != nil {
+			_ = streamWriter.WriteEvent(agent.StreamEvent{
+				Type:      agent.StreamEventError,
+				Data:      fmt.Sprintf("agent resolve failed: %v", err),
+				Timestamp: time.Now().UTC(),
+				Success:   false,
+			})
+		}
 		resolved.Store(true) // agent finished (with error) — we handle the status
 		r.Status = types.RepoStatusConflict
 		r.ErrorMessage = fmt.Sprintf("agent resolve failed: %v", err)
+		if r.Workflow != nil {
+			syncpkg.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusFailed, err.Error())
+			r.Workflow.Status = types.WorkflowFailed
+		}
 		updateRepoWithLog(r, store, "agent-error")
 		return fmt.Errorf("agent resolve: %w", err)
 	}
@@ -280,6 +297,10 @@ func installSignalGuard(r *types.Repo, store repo.Store, resolved *atomic.Bool) 
 		if _, ok := <-sigCh; ok && !resolved.Load() {
 			r.Status = types.RepoStatusConflict
 			r.ErrorMessage = "agent process was terminated, conflict resolution incomplete"
+			if r.Workflow != nil {
+				syncpkg.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusFailed, "agent process was terminated")
+				r.Workflow.Status = types.WorkflowFailed
+			}
 			updateRepoWithLog(*r, store, "signal-rollback")
 		}
 	}()
