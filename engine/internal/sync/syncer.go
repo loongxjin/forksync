@@ -157,16 +157,11 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	}
 	s.active[r.ID] = true
 	defer func() {
-		RemoveSyncLock(r.ID)
 		s.mu.Lock()
 		delete(s.active, r.ID)
 		s.mu.Unlock()
 	}()
 	s.mu.Unlock()
-
-	if err := CreateSyncLock(r.ID); err != nil {
-		logger.Warn("syncer: failed to create sync lock", "repo", r.Name, "error", err)
-	}
 
 	// Initialize workflow
 	wf := newWorkflow(r.ID)

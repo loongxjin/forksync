@@ -10,7 +10,6 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
-	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -33,8 +32,8 @@ func init() {
 // when there are many repos, but each individual operation is bounded.
 const statusTimeout = 30 * time.Second
 
-// staleWorkflowThreshold is no longer used — replaced by PID-based lock file detection
-// (see sync/lock.go). Previously was 30 * time.Minute.
+// staleWorkflowThreshold is the age after which an active workflow is considered stale.
+const staleWorkflowThreshold = 30 * time.Minute
 
 // actionStatusUpdate is the log action label for repo status refresh updates.
 const actionStatusUpdate = "status-update"
@@ -273,14 +272,11 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 		return
 	}
 
-	// Still unmerged files + resolving state → check if resolve process is still alive
+	// Still unmerged files + resolving state → agent exited unexpectedly, roll back
 	if r.Status == types.RepoStatusResolving {
-		if alive, _ := syncpkg.IsSyncProcessAlive(r.ID); alive {
-			return // resolve process is still running, don't interfere
-		}
 		repos[idx].Status = types.RepoStatusConflict
 		repos[idx].ErrorMessage = "agent exited unexpectedly, conflict resolution incomplete"
-		// Rebuild workflow: fetch→merge→check_conflicts(success)→resolve_strategy(success)→agent_resolve(failed)
+		// Rebuild workflow: fetch→merge→check_conflicts(success)→resolve_strategy(success)→agent_resolve(running)
 		repos[idx].Workflow = rebuildWorkflow(r,
 			workflowRebuildFromAgentResolve,
 		)
@@ -417,10 +413,10 @@ func rebuildWorkflow(r types.Repo, point workflowRebuildPoint, extraMsg ...strin
 func rebuildWorkflowForSyncingOrError(ctx context.Context, repos []types.Repo, idx int, gitOps *git.Operations, store repo.Store) {
 	r := repos[idx]
 
-	// Check if a sync process is still running using PID lock file detection.
-	// This is more precise than the old time-based threshold — it immediately
-	// detects when a sync process has died.
-	if alive, _ := syncpkg.IsSyncProcessAlive(r.ID); alive {
+	// If the repo has an active workflow that started recently, assume sync
+	// is still running and do not touch it.
+	if r.Workflow != nil && !r.Workflow.StartedAt.IsZero() &&
+		time.Since(r.Workflow.StartedAt) < staleWorkflowThreshold {
 		return
 	}
 

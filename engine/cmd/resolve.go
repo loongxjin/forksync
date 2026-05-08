@@ -162,11 +162,6 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	// to roll back the status on unexpected exit.
 	var resolved atomic.Bool
 
-	// Create PID lock file so status command can detect if resolve is still alive
-	if err = syncpkg.CreateSyncLock(r.ID); err != nil {
-		logger.Warn("resolve: failed to create sync lock", "repo", r.Name, "error", err)
-	}
-
 	// Defer guard: if the function returns without the agent having
 	// produced a final state (resolved / conflict from verify), roll
 	// back to conflict so the repo doesn't get stuck in resolving.
@@ -180,7 +175,6 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 			}
 			updateRepoWithLog(r, store, "defer-rollback")
 		}
-		syncpkg.RemoveSyncLock(r.ID)
 	}()
 
 	stopSignalGuard := installSignalGuard(&r, store, &resolved)
