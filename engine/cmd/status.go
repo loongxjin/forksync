@@ -35,6 +35,9 @@ const statusTimeout = 30 * time.Second
 // staleWorkflowThreshold is the age after which an active workflow is considered stale.
 const staleWorkflowThreshold = 30 * time.Minute
 
+// actionStatusUpdate is the log action label for repo status refresh updates.
+const actionStatusUpdate = "status-update"
+
 func runStatus(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), statusTimeout)
 	defer cancel()
@@ -149,7 +152,7 @@ func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps 
 					workflowRebuildFromConflict,
 					fmt.Sprintf("%d files have conflicts", len(unmergedFiles)),
 				)
-				updateRepoWithLog(repos[idx], store, "status-update")
+				updateRepoWithLog(repos[idx], store, actionStatusUpdate)
 				return
 			}
 			// MERGE_HEAD exists but all files resolved → resolved state
@@ -157,7 +160,7 @@ func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps 
 			repos[idx].Workflow = rebuildWorkflow(r,
 				workflowRebuildFromAcceptChanges,
 			)
-			updateRepoWithLog(repos[idx], store, "status-update")
+			updateRepoWithLog(repos[idx], store, actionStatusUpdate)
 			return
 		}
 	}
@@ -182,19 +185,19 @@ func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps 
 	// Transition unconfigured repos to up_to_date
 	if repos[idx].Status == types.RepoStatusUnconfigured {
 		repos[idx].Status = types.RepoStatusUpToDate
-		updateRepoWithLog(repos[idx], store, "status-update")
+		updateRepoWithLog(repos[idx], store, actionStatusUpdate)
 	}
 
 	// Detect sync_needed: upstream has new commits
 	if isSyncNeeded(repos[idx]) {
 		repos[idx].Status = types.RepoStatusSyncNeeded
 		repos[idx].ErrorMessage = ""
-		updateRepoWithLog(repos[idx], store, "status-update")
+		updateRepoWithLog(repos[idx], store, actionStatusUpdate)
 	} else if repos[idx].BehindBy == 0 && repos[idx].Status == types.RepoStatusSyncNeeded {
 		// Previously sync_needed but now up-to-date (e.g. user synced externally)
 		repos[idx].Status = types.RepoStatusUpToDate
 		repos[idx].ErrorMessage = ""
-		updateRepoWithLog(repos[idx], store, "status-update")
+		updateRepoWithLog(repos[idx], store, actionStatusUpdate)
 	}
 }
 
@@ -258,7 +261,7 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 		repos[idx].Status = types.RepoStatusUpToDate
 		repos[idx].ErrorMessage = ""
 		repos[idx].Workflow = nil
-		updateRepoWithLog(repos[idx], store, "status-update")
+		updateRepoWithLog(repos[idx], store, actionStatusUpdate)
 		return
 	}
 
@@ -269,7 +272,7 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 		repos[idx].Workflow = rebuildWorkflow(r,
 			workflowRebuildFromAcceptChanges,
 		)
-		updateRepoWithLog(repos[idx], store, "status-update")
+		updateRepoWithLog(repos[idx], store, actionStatusUpdate)
 		return
 	}
 
@@ -281,7 +284,7 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 		repos[idx].Workflow = rebuildWorkflow(r,
 			workflowRebuildFromAgentResolve,
 		)
-		updateRepoWithLog(repos[idx], store, "status-update")
+		updateRepoWithLog(repos[idx], store, actionStatusUpdate)
 		return
 	}
 
@@ -291,7 +294,7 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 		workflowRebuildFromConflict,
 		fmt.Sprintf("%d files have conflicts", len(unmergedFiles)),
 	)
-	updateRepoWithLog(repos[idx], store, "status-update")
+	updateRepoWithLog(repos[idx], store, actionStatusUpdate)
 }
 
 // isSyncNeeded returns true if upstream has new commits and the repo is in a
@@ -445,7 +448,7 @@ func rebuildWorkflowForSyncingOrError(ctx context.Context, repos []types.Repo, i
 			repos[idx].Workflow = rebuildWorkflow(r, workflowRebuildFromMerge)
 			repos[idx].Status = types.RepoStatusSyncing
 		}
-		updateRepoWithLog(repos[idx], store, "status-update")
+		updateRepoWithLog(repos[idx], store, actionStatusUpdate)
 		return
 	}
 
@@ -459,7 +462,7 @@ func rebuildWorkflowForSyncingOrError(ctx context.Context, repos []types.Repo, i
 			repos[idx].Status = types.RepoStatusSyncNeeded
 			repos[idx].ErrorMessage = ""
 		}
-		updateRepoWithLog(repos[idx], store, "status-update")
+		updateRepoWithLog(repos[idx], store, actionStatusUpdate)
 	}
 }
 func printStatusText(repos []types.Repo, agents []types.AgentInfo, preferredAgent string) {

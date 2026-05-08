@@ -173,7 +173,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		}
 	}()
 
-	stopSignalGuard := installSignalGuard(r, store, &resolved)
+	stopSignalGuard := installSignalGuard(&r, store, &resolved)
 	defer stopSignalGuard()
 
 	// Set timeout context
@@ -274,16 +274,16 @@ func resolveAgentProvider(cfg *config.Config) (agent.AgentProvider, error) {
 // installSignalGuard listens for OS signals (SIGTERM/SIGINT) and rolls back
 // the repo status when the process is killed during agent resolution.
 // Returns a stop function that must be deferred by the caller.
-func installSignalGuard(r types.Repo, store repo.Store, resolved *atomic.Bool) func() {
+func installSignalGuard(r *types.Repo, store repo.Store, resolved *atomic.Bool) func() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, signalsToWatch...)
-	go func(repo types.Repo) {
+	go func() {
 		if _, ok := <-sigCh; ok && !resolved.Load() {
-			repo.Status = types.RepoStatusConflict
-			repo.ErrorMessage = "agent process was terminated, conflict resolution incomplete"
-			updateRepoWithLog(repo, store, "signal-rollback")
+			r.Status = types.RepoStatusConflict
+			r.ErrorMessage = "agent process was terminated, conflict resolution incomplete"
+			updateRepoWithLog(*r, store, "signal-rollback")
 		}
-	}(r)
+	}()
 	return func() { signal.Stop(sigCh) }
 }
 
@@ -429,8 +429,8 @@ func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveCon
 	updateWorkflowCommit(&rc.repo)
 	updateRepoWithLog(rc.repo, rc.store, "complete")
 
-	autoResolved, conflictsFound, agentUsed, oldHEAD := workflowCompletionInfo(rc.repo.Workflow)
-	recordWorkflowComplete(rc.repo.ID, rc.repo.Name, 0, autoResolved, conflictsFound, agentUsed, oldHEAD, rc.repo.Path)
+	info := workflowCompletionInfo(rc.repo.Workflow)
+	recordWorkflowComplete(rc.repo, 0, info)
 
 	if !resolveStream {
 		outputResult(types.AcceptData{RepoID: rc.repo.ID, Resolved: true}, "✅ Merge completed for %s (agent-resolved)", rc.repo.Name)
@@ -520,8 +520,8 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 	updateWorkflowCommit(&r)
 	updateRepoWithLog(r, store, "accept")
 
-	autoResolved, conflictsFound, agentUsed, oldHEAD := workflowCompletionInfo(r.Workflow)
-	recordWorkflowComplete(r.ID, r.Name, 0, autoResolved, conflictsFound, agentUsed, oldHEAD, r.Path)
+	info := workflowCompletionInfo(r.Workflow)
+	recordWorkflowComplete(r, 0, info)
 
 	outputResult(types.AcceptData{RepoID: r.ID, Resolved: true}, "✅ Merge completed for %s", r.Name)
 	return nil

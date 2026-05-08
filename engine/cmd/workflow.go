@@ -12,6 +12,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
+	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -91,8 +92,8 @@ func handleResolveWithAgent(_ context.Context, r types.Repo, store repo.Store) e
 	if wf == nil {
 		wf = newWorkflowFromRepo(r)
 	}
-	advanceWorkflowStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
-	advanceWorkflowStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
+	syncpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
+	syncpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
 	// Restore accept_changes from skipped to pending so it can be used later.
 	for i := range wf.Steps {
 		if wf.Steps[i].Step == types.StepAcceptChanges && wf.Steps[i].Status == types.StepStatusSkipped {
@@ -144,7 +145,7 @@ func handleWorkflowAbortOrReject(ctx context.Context, r types.Repo, store repo.S
 	return nil
 }
 
-// commitWorkflowResult contains the parameters for the commit-with-workflow pattern.
+// commitWorkflowParams contains the parameters for the commit-with-workflow pattern.
 type commitWorkflowParams struct {
 	commitMsg         string // fallback commit message
 	skipAgentAndAccept bool   // whether to mark agent_resolve and accept_changes as skipped
@@ -176,7 +177,7 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 		if wf == nil {
 			wf = newWorkflowFromRepo(r)
 		}
-		advanceWorkflowStep(wf, types.StepResolveStrategy, types.StepStatusWaiting,
+		syncpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting,
 			fmt.Sprintf("%d conflicts still unresolved", len(remaining)))
 		r.Workflow = wf
 		_ = store.Update(r)
@@ -191,20 +192,19 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 		if wf == nil {
 			wf = newWorkflowFromRepo(r)
 		}
-		markStepSkippedInWorkflow(wf, types.StepAgentResolve)
-		markStepSkippedInWorkflow(wf, types.StepAcceptChanges)
-		advanceWorkflowStep(wf, types.StepCommit, types.StepStatusSuccess, "")
+		syncpkg.MarkStepSkipped(wf, types.StepAgentResolve)
+		syncpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
+		syncpkg.AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
 		wf.Status = types.WorkflowSuccess
 		now := types.Time{Time: time.Now()}
 		wf.FinishedAt = &now
 		r.Workflow = wf
 		r.Status = types.RepoStatusUpToDate
 		r.ErrorMessage = ""
-		now2 := types.Time{Time: time.Now()}
-		r.LastSync = &now2
+		r.LastSync = &now
 		_ = store.Update(r)
-		autoResolved, conflictsFound, agentUsed, oldHEAD := workflowCompletionInfo(wf)
-		recordWorkflowComplete(r.ID, r.Name, 0, autoResolved, conflictsFound, agentUsed, oldHEAD, r.Path)
+		info := workflowCompletionInfo(wf)
+		recordWorkflowComplete(r, 0, info)
 		outputWorkflowResult(r)
 		return nil
 	}
@@ -230,7 +230,7 @@ func finalizeCommitWithWorkflow(ctx context.Context, r types.Repo, store repo.St
 			if wf == nil {
 				wf = newWorkflowFromRepo(r)
 			}
-			advanceWorkflowStep(wf, types.StepCommit, types.StepStatusFailed, fmt.Sprintf("commit failed: %v", err2))
+			syncpkg.AdvanceStep(wf, types.StepCommit, types.StepStatusFailed, fmt.Sprintf("commit failed: %v", err2))
 			wf.Status = types.WorkflowFailed
 			now := types.Time{Time: time.Now()}
 			wf.FinishedAt = &now
@@ -249,64 +249,69 @@ func finalizeCommitWithWorkflow(ctx context.Context, r types.Repo, store repo.St
 		wf = newWorkflowFromRepo(r)
 	}
 	if params.skipAgentAndAccept {
-		markStepSkippedInWorkflow(wf, types.StepAgentResolve)
-		markStepSkippedInWorkflow(wf, types.StepAcceptChanges)
+		syncpkg.MarkStepSkipped(wf, types.StepAgentResolve)
+		syncpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
 	} else {
-		advanceWorkflowStep(wf, types.StepAcceptChanges, types.StepStatusSuccess, "")
+		syncpkg.AdvanceStep(wf, types.StepAcceptChanges, types.StepStatusSuccess, "")
 	}
-	advanceWorkflowStep(wf, types.StepCommit, types.StepStatusSuccess, "")
+	syncpkg.AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
 	wf.Status = types.WorkflowSuccess
 	now := types.Time{Time: time.Now()}
 	wf.FinishedAt = &now
 	r.Workflow = wf
 	r.Status = types.RepoStatusUpToDate
 	r.ErrorMessage = ""
-	now2 := types.Time{Time: time.Now()}
-	r.LastSync = &now2
+	r.LastSync = &now
 	if err := store.Update(r); err != nil {
 		logger.Error("workflow: failed to update repo", "repo", r.Name, "error", err)
 	}
 	if params.recordHistory {
-		autoResolved, conflictsFound, agentUsed, oldHEAD := workflowCompletionInfo(wf)
-		recordWorkflowComplete(r.ID, r.Name, 0, autoResolved, conflictsFound, agentUsed, oldHEAD, r.Path)
+		info := workflowCompletionInfo(wf)
+		recordWorkflowComplete(r, 0, info)
 	}
 	outputWorkflowResult(r)
 	return nil
 }
 
 // workflowCompletionInfo extracts completion metadata from a workflow.
-func workflowCompletionInfo(wf *types.SyncWorkflow) (autoResolved int, conflictsFound int, agentUsed string, oldHEAD string) {
+func workflowCompletionInfo(wf *types.SyncWorkflow) (info workflowCompleteInfo) {
 	if wf == nil {
 		return
 	}
-	oldHEAD = wf.OldHEAD
+	info.oldHEAD = wf.OldHEAD
 	for _, s := range wf.Steps {
 		switch s.Step {
 		case types.StepCheckConflicts:
 			// Message format: "N files have conflicts"
-			fmt.Sscanf(s.Message, "%d files have conflicts", &conflictsFound)
+			fmt.Sscanf(s.Message, "%d files have conflicts", &info.conflictsFound)
 		case types.StepAgentResolve:
 			// Message format: "resolved by <agent>"
 			if s.Status == types.StepStatusSuccess && s.Message != "" {
-				agentUsed = strings.TrimPrefix(s.Message, "resolved by ")
-				if agentUsed == s.Message {
-					agentUsed = "" // not a "resolved by" message
+				info.agentUsed = strings.TrimPrefix(s.Message, "resolved by ")
+				if info.agentUsed == s.Message {
+					info.agentUsed = "" // not a "resolved by" message
 				}
 			}
 		}
 	}
 	// autoResolved equals conflictsFound when agent resolved all
-	if agentUsed != "" {
-		autoResolved = conflictsFound
+	if info.agentUsed != "" {
+		info.autoResolved = info.conflictsFound
 	}
 	return
 }
 
+// workflowCompleteInfo groups the metadata extracted from a completed workflow.
+type workflowCompleteInfo struct {
+	autoResolved   int
+	conflictsFound int
+	agentUsed      string
+	oldHEAD        string
+}
+
 // recordWorkflowComplete creates a new history record when a paused workflow is
-// completed by the user (accept or manual resolution). This replaces the old
-// updateWorkflowHistoryToUpToDate which modified an intermediate record that
-// no longer exists.
-func recordWorkflowComplete(repoID, repoName string, commitsPulled, autoResolved, conflictsFound int, agentUsed, oldHEAD string, repoPath string) {
+// completed by the user (accept or manual resolution).
+func recordWorkflowComplete(r types.Repo, commitsPulled int, info workflowCompleteInfo) {
 	_, cfgMgr := getSharedConfig()
 	histStore, err := history.NewStore(cfgMgr.ConfigDir())
 	if err != nil {
@@ -315,24 +320,25 @@ func recordWorkflowComplete(repoID, repoName string, commitsPulled, autoResolved
 	}
 	defer histStore.Close()
 
+	oldHEAD := info.oldHEAD
 	// If oldHEAD is missing (e.g. workflow created before the OldHEAD field was added),
 	// try to recover it from git reflog (the commit before the merge commit).
-	if oldHEAD == "" && repoPath != "" {
+	if oldHEAD == "" && r.Path != "" {
 		gitOps := git.NewOperations()
-		if head, err := gitOps.GetPreMergeHEAD(context.Background(), repoPath); err == nil && head != "" {
+		if head, err := gitOps.GetPreMergeHEAD(context.Background(), r.Path); err == nil && head != "" {
 			oldHEAD = head
-			logger.Debug("[workflow] recovered oldHEAD from reflog", "repo", repoName, "oldHEAD", oldHEAD)
+			logger.Debug("[workflow] recovered oldHEAD from reflog", "repo", r.Name, "oldHEAD", oldHEAD)
 		}
 	}
 
 	_, err = histStore.Record(history.Record{
-		RepoID:         repoID,
-		RepoName:       repoName,
+		RepoID:         r.ID,
+		RepoName:       r.Name,
 		Status:         string(types.RepoStatusUpToDate),
 		CommitsPulled:  commitsPulled,
-		AutoResolved:   autoResolved,
-		ConflictsFound: conflictsFound,
-		AgentUsed:      agentUsed,
+		AutoResolved:   info.autoResolved,
+		ConflictsFound: info.conflictsFound,
+		AgentUsed:      info.agentUsed,
 		OldHEAD:        oldHEAD,
 		CreatedAt:      time.Now(),
 	})
@@ -343,7 +349,7 @@ func recordWorkflowComplete(repoID, repoName string, commitsPulled, autoResolved
 
 	cfg, _ := getSharedConfig()
 	if cfg != nil && cfg.Sync.AutoSummary {
-		latest, err := histStore.LatestByRepo(repoID)
+		latest, err := histStore.LatestByRepo(r.ID)
 		if err == nil && latest.SummaryStatus == "" {
 			if updateErr := histStore.UpdateSummary(latest.ID, "", string(types.SummaryStatusPending)); updateErr != nil {
 				logger.Error("[workflow] update summary status", "error", updateErr)
@@ -381,28 +387,4 @@ func newWorkflowFromRepo(r types.Repo) *types.SyncWorkflow {
 			{Step: types.StepCommit, Status: types.StepStatusPending},
 		},
 	}
-}
-
-func advanceWorkflowStep(wf *types.SyncWorkflow, step types.WorkflowStep, status types.WorkflowStepStatus, message string) {
-	if wf == nil {
-		return
-	}
-	now := types.Time{Time: time.Now()}
-	for i := range wf.Steps {
-		if wf.Steps[i].Step == step {
-			wf.Steps[i].Status = status
-			wf.Steps[i].Message = message
-			if status == types.StepStatusRunning && wf.Steps[i].StartedAt == nil {
-				wf.Steps[i].StartedAt = &now
-			}
-			if status == types.StepStatusSuccess || status == types.StepStatusFailed || status == types.StepStatusSkipped {
-				wf.Steps[i].EndedAt = &now
-			}
-			break
-		}
-	}
-}
-
-func markStepSkippedInWorkflow(wf *types.SyncWorkflow, step types.WorkflowStep) {
-	advanceWorkflowStep(wf, step, types.StepStatusSkipped, "")
 }

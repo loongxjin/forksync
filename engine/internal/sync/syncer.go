@@ -149,7 +149,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		result.Status = string(types.RepoStatusError)
 		result.ErrorMessage = "sync already in progress"
 		result.Workflow = newWorkflow(r.ID)
-		advanceStep(result.Workflow, types.StepFetch, types.StepStatusFailed, "sync already in progress")
+		AdvanceStep(result.Workflow, types.StepFetch, types.StepStatusFailed, "sync already in progress")
 		markWorkflowDone(result.Workflow, types.WorkflowFailed)
 		s.finalizeResult(result)
 		return result
@@ -194,12 +194,12 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 			// All conflicts were resolved but not staged — now auto-staged.
 			// MERGE_HEAD still exists, transition to resolved state for user confirmation.
 			result.Status = string(types.RepoStatusResolved)
-			advanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
-			advanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
-			advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
-			advanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
-			markStepSkipped(wf, types.StepAgentResolve)
-			advanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
+			AdvanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
+			AdvanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
+			AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
+			AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
+			MarkStepSkipped(wf, types.StepAgentResolve)
+			AdvanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
 			wf.Status = types.WorkflowWaiting
 			s.updateRepoStatus(r.ID, types.RepoStatusResolved, "")
 			s.saveWorkflow(r, wf)
@@ -210,9 +210,9 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 		result.ConflictFiles = unmergedFiles
 		result.ErrorMessage = "repository has unresolved merge conflicts, please resolve conflicts before syncing"
 		result.ConflictsFound = len(unmergedFiles)
-		advanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
-		advanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
-		advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
+		AdvanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
+		AdvanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
+		AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
 			fmt.Sprintf("%d files have conflicts", len(unmergedFiles)))
 		// If a workflow exists and was waiting at resolve_strategy, preserve waiting status
 		if r.Workflow != nil && findStep(r.Workflow, types.StepResolveStrategy) != nil &&
@@ -222,9 +222,9 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 			s.updateRepoStatus(r.ID, types.RepoStatusWaiting, result.ErrorMessage)
 		} else {
 			result.Status = string(types.RepoStatusConflict)
-			advanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
-			markStepSkipped(wf, types.StepAgentResolve)
-			markStepSkipped(wf, types.StepAcceptChanges)
+			AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
+			MarkStepSkipped(wf, types.StepAgentResolve)
+			MarkStepSkipped(wf, types.StepAcceptChanges)
 			wf.Status = types.WorkflowWaiting
 			s.updateRepoStatus(r.ID, types.RepoStatusConflict, result.ErrorMessage)
 		}
@@ -239,7 +239,7 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 	if r.Status == types.RepoStatusConflict || r.Status == types.RepoStatusResolving || r.Status == types.RepoStatusResolved || r.Status == types.RepoStatusWaiting {
 		result.Status = string(types.RepoStatusConflict)
 		result.ErrorMessage = fmt.Sprintf("repository is in %s state, please resolve conflicts before syncing", r.Status)
-		advanceStep(wf, types.StepFetch, types.StepStatusFailed, result.ErrorMessage)
+		AdvanceStep(wf, types.StepFetch, types.StepStatusFailed, result.ErrorMessage)
 		markWorkflowDone(wf, types.WorkflowFailed)
 		s.saveWorkflow(r, wf)
 		// DO NOT call finalizeResult — this is not a real sync, don't pollute history
@@ -254,7 +254,7 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 // It advances the given step to failed, marks the workflow done, sets the result status/message,
 // updates repo status, optionally notifies, saves workflow, and finalizes the result.
 func (s *Syncer) failSync(r types.Repo, result *Result, wf *types.SyncWorkflow, step types.WorkflowStep, errMsg string, notify bool) *Result {
-	advanceStep(wf, step, types.StepStatusFailed, errMsg)
+	AdvanceStep(wf, step, types.StepStatusFailed, errMsg)
 	markWorkflowDone(wf, types.WorkflowFailed)
 	result.Status = string(types.RepoStatusError)
 	result.ErrorMessage = errMsg
@@ -289,12 +289,12 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	}
 
 	// Step 1: Fetch
-	advanceStep(wf, types.StepFetch, types.StepStatusRunning, "")
+	AdvanceStep(wf, types.StepFetch, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 	if err := s.gitOps.Fetch(ctx, r); err != nil {
 		return s.failSync(r, result, wf, types.StepFetch, fmt.Sprintf("fetch failed: %v", err), true)
 	}
-	advanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
+	AdvanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
 	s.saveWorkflow(r, wf)
 
 	// Step 2: Check ahead/behind
@@ -304,12 +304,12 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	}
 
 	if statusResult.BehindBy == 0 {
-		advanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
-		markStepSkipped(wf, types.StepCheckConflicts)
-		markStepSkipped(wf, types.StepResolveStrategy)
-		markStepSkipped(wf, types.StepAgentResolve)
-		markStepSkipped(wf, types.StepAcceptChanges)
-		advanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
+		AdvanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
+		MarkStepSkipped(wf, types.StepCheckConflicts)
+		MarkStepSkipped(wf, types.StepResolveStrategy)
+		MarkStepSkipped(wf, types.StepAgentResolve)
+		MarkStepSkipped(wf, types.StepAcceptChanges)
+		AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
 		markWorkflowDone(wf, types.WorkflowSuccess)
 		result.Status = string(types.RepoStatusUpToDate)
 		result.CommitsPulled = 0
@@ -328,31 +328,31 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 		wf.OldHEAD = head
 	}
 
-	advanceStep(wf, types.StepMerge, types.StepStatusRunning, "")
+	AdvanceStep(wf, types.StepMerge, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 	mergeResult, err := s.gitOps.Merge(ctx, r)
 	if err != nil {
 		return s.failSync(r, result, wf, types.StepMerge, fmt.Sprintf("merge failed: %v", err), true)
 	}
-	advanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
+	AdvanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
 	s.saveWorkflow(r, wf)
 
 	// Step 4: Check conflicts
-	advanceStep(wf, types.StepCheckConflicts, types.StepStatusRunning, "")
+	AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 	if mergeResult.HasConflicts {
-		advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
+		AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
 			fmt.Sprintf("%d files have conflicts", len(mergeResult.Conflicts)))
 		s.saveWorkflow(r, wf)
 		return s.handleMergeConflicts(ctx, r, result, mergeResult)
 	}
-	advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
-	markStepSkipped(wf, types.StepResolveStrategy)
-	markStepSkipped(wf, types.StepAgentResolve)
-	markStepSkipped(wf, types.StepAcceptChanges)
+	AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
+	MarkStepSkipped(wf, types.StepResolveStrategy)
+	MarkStepSkipped(wf, types.StepAgentResolve)
+	MarkStepSkipped(wf, types.StepAcceptChanges)
 
 	// Step 7: Commit (and post-sync)
-	advanceStep(wf, types.StepCommit, types.StepStatusRunning, "")
+	AdvanceStep(wf, types.StepCommit, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 	result.Status = string(types.RepoStatusUpToDate)
 	s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
@@ -361,7 +361,7 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 		result.ErrorMessage = postSyncErr
 		s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, result.ErrorMessage)
 	}
-	advanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
+	AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
 	markWorkflowDone(wf, types.WorkflowSuccess)
 	s.saveWorkflow(r, wf)
 	s.notifyResult(r.Name, result)
@@ -377,7 +377,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	result.ConflictFiles = mergeResult.Conflicts
 
 	// Step 5: Resolve strategy (decision point)
-	advanceStep(wf, types.StepResolveStrategy, types.StepStatusRunning, "")
+	AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 
 	// Determine auto-resolve strategy from global config
@@ -387,17 +387,17 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	}
 
 	if autoAgentResolve && s.sessionMgr != nil {
-		advanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
-		advanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
+		AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
+		AdvanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
 		s.saveWorkflow(r, wf)
 
 		resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)
 		if resolved {
 			// Agent resolved and auto-committed
-			advanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
+			AdvanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
 				fmt.Sprintf("resolved by %s", s.sessionMgr.ProviderName()))
-			markStepSkipped(wf, types.StepAcceptChanges)
-			advanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
+			MarkStepSkipped(wf, types.StepAcceptChanges)
+			AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
 			markWorkflowDone(wf, types.WorkflowSuccess)
 			result.Status = string(types.RepoStatusUpToDate)
 			result.AutoResolved = len(mergeResult.Conflicts)
@@ -409,9 +409,9 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 		}
 		if pending != nil {
 			// Agent resolved but needs confirmation
-			advanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
+			AdvanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
 				fmt.Sprintf("resolved by %s", pending.Agent))
-			advanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
+			AdvanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
 			wf.Status = types.WorkflowWaiting
 			result.Status = string(types.RepoStatusResolved)
 			result.AgentUsed = pending.Agent
@@ -432,7 +432,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 			return result
 		}
 		// Agent failed
-		advanceStep(wf, types.StepAgentResolve, types.StepStatusFailed, "agent failed to resolve conflicts")
+		AdvanceStep(wf, types.StepAgentResolve, types.StepStatusFailed, "agent failed to resolve conflicts")
 		markWorkflowDone(wf, types.WorkflowFailed)
 		result.Status = string(types.RepoStatusConflict)
 		s.updateRepoStatus(r.ID, types.RepoStatusConflict, "")
@@ -443,9 +443,9 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	}
 
 	// Manual resolve path: pause at resolve_strategy
-	advanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
-	markStepSkipped(wf, types.StepAgentResolve)
-	markStepSkipped(wf, types.StepAcceptChanges)
+	AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
+	MarkStepSkipped(wf, types.StepAgentResolve)
+	MarkStepSkipped(wf, types.StepAcceptChanges)
 	wf.Status = types.WorkflowWaiting
 	result.Status = string(types.RepoStatusWaiting)
 	s.updateRepoStatus(r.ID, types.RepoStatusWaiting, "")
