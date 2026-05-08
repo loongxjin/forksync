@@ -55,11 +55,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	var gitOps *git.Operations
-	if cfg != nil && cfg.Proxy.Enabled && cfg.Proxy.URL != "" {
-		gitOps = git.NewOperationsWithProxy(cfg.Proxy.URL)
-	} else {
-		gitOps = git.NewOperations()
-	}
+	gitOps = newGitOps(cfg)
 
 	// Build exclude set for quick lookup
 	excludeSet := make(map[string]bool, len(statusExclude))

@@ -132,7 +132,7 @@ func (s *Store) migrate() error {
 }
 
 // Record inserts a new sync history entry and returns the inserted row ID.
-func (s *Store) Record(r Record) (int64, error) {
+func (s *Store) Insert(r Record) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -325,53 +325,19 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-func scanRecords(rows *sql.Rows) ([]Record, error) {
-	var records []Record
-	for rows.Next() {
-		var r Record
-		var conflictFilesJSON string
-		var createdAtStr string
-
-		if err := rows.Scan(&r.ID, &r.RepoID, &r.RepoName, &r.Status, &r.CommitsPulled,
-			&conflictFilesJSON, &r.AgentUsed, &r.ConflictsFound, &r.AutoResolved,
-			&r.ErrorMessage, &r.Summary, &r.SummaryStatus, &r.OldHEAD, &createdAtStr); err != nil {
-			return nil, err
-		}
-
-		if err := json.Unmarshal([]byte(conflictFilesJSON), &r.ConflictFiles); err != nil {
-			r.ConflictFiles = []string{}
-		}
-
-		parsed, err := time.Parse(sqliteTimeFormat, createdAtStr)
-		if err != nil {
-			parsed, err = time.Parse(time.RFC3339, createdAtStr)
-			if err != nil {
-				parsed = time.Time{}
-			}
-		}
-		r.CreatedAt = parsed
-
-		records = append(records, r)
-	}
-	return records, rows.Err()
-}
-
-func scanRecord(row *sql.Row) (*Record, error) {
-	var r Record
+// scanRow is the shared implementation for scanning a single row from a query result.
+func scanRow(dest *Record, scanFn func(...interface{}) error) error {
 	var conflictFilesJSON string
 	var createdAtStr string
 
-	if err := row.Scan(&r.ID, &r.RepoID, &r.RepoName, &r.Status, &r.CommitsPulled,
-		&conflictFilesJSON, &r.AgentUsed, &r.ConflictsFound, &r.AutoResolved,
-		&r.ErrorMessage, &r.Summary, &r.SummaryStatus, &r.OldHEAD, &createdAtStr); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("record not found")
-		}
-		return nil, err
+	if err := scanFn(&dest.ID, &dest.RepoID, &dest.RepoName, &dest.Status, &dest.CommitsPulled,
+		&conflictFilesJSON, &dest.AgentUsed, &dest.ConflictsFound, &dest.AutoResolved,
+		&dest.ErrorMessage, &dest.Summary, &dest.SummaryStatus, &dest.OldHEAD, &createdAtStr); err != nil {
+		return err
 	}
 
-	if err := json.Unmarshal([]byte(conflictFilesJSON), &r.ConflictFiles); err != nil {
-		r.ConflictFiles = []string{}
+	if err := json.Unmarshal([]byte(conflictFilesJSON), &dest.ConflictFiles); err != nil {
+		dest.ConflictFiles = []string{}
 	}
 
 	parsed, err := time.Parse(sqliteTimeFormat, createdAtStr)
@@ -381,7 +347,30 @@ func scanRecord(row *sql.Row) (*Record, error) {
 			parsed = time.Time{}
 		}
 	}
-	r.CreatedAt = parsed
+	dest.CreatedAt = parsed
 
+	return nil
+}
+
+func scanRecords(rows *sql.Rows) ([]Record, error) {
+	var records []Record
+	for rows.Next() {
+		var r Record
+		if err := scanRow(&r, rows.Scan); err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+	return records, rows.Err()
+}
+
+func scanRecord(row *sql.Row) (*Record, error) {
+	var r Record
+	if err := scanRow(&r, row.Scan); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("record not found")
+		}
+		return nil, err
+	}
 	return &r, nil
 }

@@ -95,8 +95,6 @@ func TestClaudeAdapter_BuildArgs(t *testing.T) {
 }
 
 func TestOpenCodeAdapter_BuildArgs(t *testing.T) {
-	a := NewOpenCodeAdapter()
-
 	tests := []struct {
 		name      string
 		sessionID string
@@ -119,7 +117,7 @@ func TestOpenCodeAdapter_BuildArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args := a.buildArgs(tt.sessionID, tt.prompt)
+			args := OpenCodeBuildArgs(tt.sessionID, tt.prompt)
 			if len(args) != len(tt.wantArgs) {
 				t.Fatalf("args = %v; want %v", args, tt.wantArgs)
 			}
@@ -133,8 +131,6 @@ func TestOpenCodeAdapter_BuildArgs(t *testing.T) {
 }
 
 func TestDroidAdapter_BuildArgs(t *testing.T) {
-	a := NewDroidAdapter()
-
 	tests := []struct {
 		name      string
 		sessionID string
@@ -157,7 +153,7 @@ func TestDroidAdapter_BuildArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args := a.buildArgs(tt.sessionID, tt.prompt)
+			args := DroidBuildArgs(tt.sessionID, tt.prompt)
 			if len(args) != len(tt.wantArgs) {
 				t.Fatalf("args = %v; want %v", args, tt.wantArgs)
 			}
@@ -171,8 +167,6 @@ func TestDroidAdapter_BuildArgs(t *testing.T) {
 }
 
 func TestCodexAdapter_BuildArgs(t *testing.T) {
-	a := &CodexAdapter{baseAdapter{binary: "codex", name: "codex"}}
-
 	tests := []struct {
 		name      string
 		sessionID string
@@ -195,7 +189,7 @@ func TestCodexAdapter_BuildArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args := a.buildArgs(tt.sessionID, tt.prompt)
+			args := CodexBuildArgs(tt.sessionID, tt.prompt)
 			if len(args) != len(tt.wantArgs) {
 				t.Fatalf("args = %v; want %v", args, tt.wantArgs)
 			}

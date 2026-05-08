@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
@@ -67,19 +68,20 @@ func runWorkflowContinue(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := cmd.Context()
-	gitOps := git.NewOperations()
+	cfg, _ := getSharedConfig()
+	gitOps := newGitOps(cfg)
 
 	switch workflowAction {
 	case "resolve_with_agent":
 		return handleResolveWithAgent(ctx, r, store)
 	case "abort":
-		return handleWorkflowAbortOrReject(ctx, r, store)
+		return handleWorkflowAbortOrReject(ctx, r, store, cfg)
 	case "accept":
-		return handleWorkflowAccept(ctx, r, store)
+		return handleWorkflowAccept(ctx, r, store, cfg)
 	case "reject":
-		return handleWorkflowAbortOrReject(ctx, r, store)
+		return handleWorkflowAbortOrReject(ctx, r, store, cfg)
 	case "retry_commit":
-		return handleWorkflowRetryCommit(ctx, r, store)
+		return handleWorkflowRetryCommit(ctx, r, store, cfg)
 	case "continue_manual":
 		return handleWorkflowContinueManual(ctx, r, store, gitOps)
 	default:
@@ -116,8 +118,8 @@ func handleResolveWithAgent(_ context.Context, r types.Repo, store repo.Store) e
 
 // handleWorkflowAbortOrReject handles both abort and reject actions which share
 // the same logic: abort the merge, clear the workflow, and reset status.
-func handleWorkflowAbortOrReject(ctx context.Context, r types.Repo, store repo.Store) error {
-	gitOps := git.NewOperations()
+func handleWorkflowAbortOrReject(ctx context.Context, r types.Repo, store repo.Store, cfg *config.Config) error {
+	gitOps := newGitOps(cfg)
 	if err := gitOps.AbortMerge(ctx, r.Path); err != nil {
 		logger.Warn("workflow: merge --abort failed", "repo", r.Name, "error", err)
 	}
@@ -152,8 +154,8 @@ type commitWorkflowParams struct {
 	recordHistory     bool   // whether to record workflow completion history
 }
 
-func handleWorkflowAccept(ctx context.Context, r types.Repo, store repo.Store) error {
-	gitOps := git.NewOperations()
+func handleWorkflowAccept(ctx context.Context, r types.Repo, store repo.Store, cfg *config.Config) error {
+	gitOps := newGitOps(cfg)
 	return finalizeCommitWithWorkflow(ctx, r, store, gitOps, commitWorkflowParams{
 		commitMsg:         types.CommitMsgAgentResolved,
 		skipAgentAndAccept: false,
@@ -161,8 +163,8 @@ func handleWorkflowAccept(ctx context.Context, r types.Repo, store repo.Store) e
 	})
 }
 
-func handleWorkflowRetryCommit(ctx context.Context, r types.Repo, store repo.Store) error {
-	gitOps := git.NewOperations()
+func handleWorkflowRetryCommit(ctx context.Context, r types.Repo, store repo.Store, cfg *config.Config) error {
+	gitOps := newGitOps(cfg)
 	return finalizeCommitWithWorkflow(ctx, r, store, gitOps, commitWorkflowParams{
 		commitMsg:         types.CommitMsgAgentResolved,
 		skipAgentAndAccept: false,
@@ -324,14 +326,15 @@ func recordWorkflowComplete(r types.Repo, commitsPulled int, info workflowComple
 	// If oldHEAD is missing (e.g. workflow created before the OldHEAD field was added),
 	// try to recover it from git reflog (the commit before the merge commit).
 	if oldHEAD == "" && r.Path != "" {
-		gitOps := git.NewOperations()
+		cfg, _ := getSharedConfig()
+		gitOps := newGitOps(cfg)
 		if head, err := gitOps.GetPreMergeHEAD(context.Background(), r.Path); err == nil && head != "" {
 			oldHEAD = head
 			logger.Debug("[workflow] recovered oldHEAD from reflog", "repo", r.Name, "oldHEAD", oldHEAD)
 		}
 	}
 
-	_, err = histStore.Record(history.Record{
+	_, err = histStore.Insert(history.Record{
 		RepoID:         r.ID,
 		RepoName:       r.Name,
 		Status:         string(types.RepoStatusUpToDate),

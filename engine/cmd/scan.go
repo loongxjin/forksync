@@ -56,7 +56,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		ghToken = cfg.GitHub.Token
 	}
 
-	gitOps := git.NewOperations()
+	gitOps := newGitOps(cfg)
 	ghClient := github.NewClient(ghToken)
 
 	scannedRepos := make([]types.ScannedRepo, 0)

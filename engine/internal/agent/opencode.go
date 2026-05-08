@@ -1,9 +1,5 @@
 package agent
 
-import (
-	"context"
-)
-
 // OpenCodeAdapter implements AgentProvider for OpenCode CLI.
 //
 // Invocation: opencode run [--session <id>] <message>
@@ -15,23 +11,15 @@ type OpenCodeAdapter struct {
 }
 
 func NewOpenCodeAdapter() *OpenCodeAdapter {
-	return &OpenCodeAdapter{baseAdapter{binary: "opencode", name: "opencode"}}
+	return &OpenCodeAdapter{baseAdapter{
+		binary:    "opencode",
+		name:      "opencode",
+		buildArgs: OpenCodeBuildArgs,
+	}}
 }
 
-func (a *OpenCodeAdapter) StartSession(ctx context.Context, opts SessionOptions) (*Session, error) {
-	return a.baseAdapter.StartSession(ctx, opts, a.buildArgs)
-}
-
-func (a *OpenCodeAdapter) ResolveConflicts(ctx context.Context, session *Session, prompt string) (*AgentResult, error) {
-	return a.baseAdapter.ResolveConflicts(ctx, session, prompt, a.buildArgs)
-}
-
-func (a *OpenCodeAdapter) ResolveConflictsWithStream(ctx context.Context, session *Session, prompt string, sw *StreamWriter) (*AgentResult, error) {
-	return a.baseAdapter.ResolveConflictsWithStream(ctx, session, prompt, a.buildArgs, sw)
-}
-
-// buildArgs constructs the CLI arguments for an OpenCode invocation.
-func (a *OpenCodeAdapter) buildArgs(sessionID, prompt string) []string {
+// OpenCodeBuildArgs constructs the CLI arguments for an OpenCode invocation.
+func OpenCodeBuildArgs(sessionID, prompt string) []string {
 	args := []string{"run"}
 	if sessionID != "" {
 		args = append(args, "--session", sessionID)

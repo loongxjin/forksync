@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/loongxjin/forksync/engine/internal/config"
-	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/github"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -39,7 +38,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	// Load config early for GitHub token
 	cfg, _ := getSharedConfig()
 
-	gitOps := git.NewOperations()
+	gitOps := newGitOps(cfg)
 
 	// Verify it's a git repo
 	if !gitOps.IsGitRepo(cmd.Context(), repoPath) {

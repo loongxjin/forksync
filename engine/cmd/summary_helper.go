@@ -6,7 +6,6 @@ import (
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/config"
-	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/summarizer"
@@ -56,7 +55,7 @@ func generateSummary(
 	}
 
 	// Get commits (oldHEAD..upstreamRef)
-	gitOps := git.NewOperations()
+	gitOps := newGitOps(cfg)
 	upstreamRef := gitOps.ResolveUpstreamRef(ctx, r)
 	gitCommits, err := gitOps.GetCommitLog(ctx, r.Path, record.OldHEAD, upstreamRef)
 	if err != nil || len(gitCommits) == 0 {

@@ -27,6 +27,7 @@ const (
 	defaultTimeout         = 5 * time.Minute
 	defaultAgentTimeout    = 10 * time.Minute
 	postSyncCommandTimeout = 60 * time.Second
+	maxDiffSize            = 100 * 1024 // 100KB limit for diff output
 )
 
 // Syncer handles repository synchronization.
@@ -531,8 +532,8 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		return s.buildPendingInfo(ctx, r, result)
 	}
 
-	// Complete the merge with a commit
-	commitMsg := fmt.Sprintf("Merge upstream (auto-resolved by %s)", s.sessionMgr.ProviderName())
+		// Complete the merge with a commit
+		commitMsg := fmt.Sprintf("Merge upstream changes (auto-resolved by %s)", s.sessionMgr.ProviderName())
 	if err := s.gitOps.Commit(ctx, r.Path, commitMsg); err != nil {
 		logger.Warn("sync: auto-commit failed after agent resolution, falling back to confirmation",
 			"repo", r.Name,
@@ -633,9 +634,9 @@ func (s *Syncer) buildPendingInfo(ctx context.Context, r types.Repo, result *age
 	diff := ""
 	if diffErr == nil {
 		diff = string(diffBytes)
-		const maxDiffSize = 100 * 1024 // 100KB limit
-		if len(diff) > maxDiffSize {
-			diff = diff[:maxDiffSize] + "\n\n... (diff truncated)"
+		const limit = maxDiffSize
+		if len(diff) > limit {
+			diff = diff[:limit] + "\n\n... (diff truncated)"
 		}
 	}
 
@@ -794,6 +795,20 @@ func (s *Syncer) notifyResult(repoName string, result *Result) {
 	}
 }
 
+// shouldRecordHistory returns true if the sync result is worth recording.
+// Skip no-op syncs (up_to_date with 0 commits) to avoid polluting the log.
+func shouldRecordHistory(result *Result) bool {
+	if result.CommitsPulled > 0 {
+		return true
+	}
+	switch types.RepoStatus(result.Status) {
+	case types.RepoStatusConflict, types.RepoStatusError,
+		types.RepoStatusResolved, types.RepoStatusWaiting:
+		return true
+	}
+	return false
+}
+
 // recordHistory saves the sync result to the history store.
 // Skips recording for 'up_to_date' status as it's just a check, not an actual sync.
 // Returns the history record ID if recording succeeded.
@@ -801,8 +816,7 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 	if s.historyStore == nil {
 		return 0
 	}
-	// Don't record to history if there were no actual changes
-	if result.CommitsPulled == 0 && result.Status != string(types.RepoStatusConflict) && result.Status != string(types.RepoStatusError) && result.Status != string(types.RepoStatusResolved) && result.Status != string(types.RepoStatusWaiting) {
+	if !shouldRecordHistory(result) {
 		return 0
 	}
 
@@ -813,7 +827,7 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 		summaryStatus = string(types.SummaryStatusPending)
 	}
 
-	id, err := s.historyStore.Record(history.Record{
+	id, err := s.historyStore.Insert(history.Record{
 		RepoID:         result.RepoID,
 		RepoName:       result.RepoName,
 		Status:         result.Status,

@@ -1,9 +1,5 @@
 package agent
 
-import (
-	"context"
-)
-
 // DroidAdapter implements AgentProvider for Droid CLI (Factory).
 //
 // Invocation: droid exec --auto high [--session-id <id>] <prompt>
@@ -16,23 +12,15 @@ type DroidAdapter struct {
 }
 
 func NewDroidAdapter() *DroidAdapter {
-	return &DroidAdapter{baseAdapter{binary: "droid", name: "droid"}}
+	return &DroidAdapter{baseAdapter{
+		binary:    "droid",
+		name:      "droid",
+		buildArgs: DroidBuildArgs,
+	}}
 }
 
-func (a *DroidAdapter) StartSession(ctx context.Context, opts SessionOptions) (*Session, error) {
-	return a.baseAdapter.StartSession(ctx, opts, a.buildArgs)
-}
-
-func (a *DroidAdapter) ResolveConflicts(ctx context.Context, session *Session, prompt string) (*AgentResult, error) {
-	return a.baseAdapter.ResolveConflicts(ctx, session, prompt, a.buildArgs)
-}
-
-func (a *DroidAdapter) ResolveConflictsWithStream(ctx context.Context, session *Session, prompt string, sw *StreamWriter) (*AgentResult, error) {
-	return a.baseAdapter.ResolveConflictsWithStream(ctx, session, prompt, a.buildArgs, sw)
-}
-
-// buildArgs constructs the CLI arguments for a Droid exec invocation.
-func (a *DroidAdapter) buildArgs(sessionID, prompt string) []string {
+// DroidBuildArgs constructs the CLI arguments for a Droid exec invocation.
+func DroidBuildArgs(sessionID, prompt string) []string {
 	args := []string{"exec", "--auto", "high"}
 	if sessionID != "" {
 		args = append(args, "--session-id", sessionID)

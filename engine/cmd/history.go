@@ -80,7 +80,7 @@ func runHistory(cmd *cobra.Command, args []string) error {
 				ErrorMessage:   r.ErrorMessage,
 				Summary:        r.Summary,
 				SummaryStatus:  r.SummaryStatus,
-				CreatedAt:      r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				CreatedAt:      r.CreatedAt.Format(time.RFC3339),
 			})
 		}
 		outputJSON(types.HistoryData{Records: records}, nil)

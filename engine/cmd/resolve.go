@@ -15,7 +15,6 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/conflict"
-	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -103,7 +102,7 @@ func runResolve(cmd *cobra.Command, args []string) error {
 
 	// Handle --reject: rollback to pre-resolution state
 	if resolveReject {
-		return runResolveReject(cmd, r, store)
+		return runResolveReject(cmd, r, store, cfg)
 	}
 
 	// Not in a conflict-related state
@@ -118,7 +117,7 @@ func runResolve(cmd *cobra.Command, args []string) error {
 	}
 
 	// Detect conflict files
-	gitOps := git.NewOperations()
+	gitOps := newGitOps(cfg)
 	conflictPaths := gitOps.DetectConflicts(cmd.Context(), r.Path)
 	if len(conflictPaths) == 0 {
 		if isJSON() {
@@ -197,14 +196,14 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	logger.Info("resolve: agent resolve completed", "repo", r.Name, "success", result != nil && result.Success)
 
 	// Verify: check for remaining conflict markers
-	gitOps := git.NewOperations()
-	trulyUnresolved := verifyAgentResolution(ctx, r, gitOps.DetectConflicts(ctx, r.Path))
+	gitOps := newGitOps(cfg)
+	trulyUnresolved := verifyAgentResolution(ctx, r, gitOps.DetectConflicts(ctx, r.Path), cfg)
 	if len(trulyUnresolved) > 0 {
 		return handleUnresolvedConflicts(conflictResolution{repo: r, store: store, agentResult: result, provider: provider, resolvedFlag: &resolved}, trulyUnresolved)
 	}
 
 	// Get diff for user confirmation
-	diffBytes, _ := git.NewOperations().Diff(ctx, r.Path)
+	diffBytes, _ := newGitOps(cfg).Diff(ctx, r.Path)
 	diff := string(diffBytes)
 
 	result.Diff = diff
@@ -300,12 +299,12 @@ func resolveTimeout(cfg *config.Config) time.Duration {
 
 // verifyAgentResolution checks remaining conflict files and auto-stages those
 // that have been resolved (no conflict markers). Returns the list of truly unresolved files.
-func verifyAgentResolution(ctx context.Context, r types.Repo, remaining []string) []string {
+func verifyAgentResolution(ctx context.Context, r types.Repo, remaining []string, cfg *config.Config) []string {
 	if len(remaining) == 0 {
 		return nil
 	}
 
-	gitOps := git.NewOperations()
+	gitOps := newGitOps(cfg)
 	var trulyUnresolved []string
 	for _, f := range remaining {
 		content, err := gitOps.GetConflictedContent(ctx, r.Path, f)
@@ -397,7 +396,7 @@ func showResolutionDiff(r types.Repo, diff string, result *agent.AgentResult, pr
 // completeAgentResolve stages files and completes the merge.
 func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveContext, result *agent.AgentResult) error {
 	// Stage all resolved files
-	gitOps := git.NewOperations()
+	gitOps := newGitOps(rc.cfg)
 	for _, f := range result.ResolvedFiles {
 		if err := gitOps.StageFile(ctx, rc.repo.Path, f); err != nil {
 			return fmt.Errorf("git add %s: %w", f, err)
@@ -442,9 +441,9 @@ func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveCon
 
 // runResolveReject rolls back the merge using git merge --abort,
 // restoring the repository to its pre-merge state.
-func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error {
+func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config) error {
 	ctx := cmd.Context()
-	gitOps := git.NewOperations()
+	gitOps := newGitOps(cfg)
 
 	err := gitOps.AbortMerge(ctx, r.Path)
 	if err != nil {
@@ -474,7 +473,7 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store) error 
 
 // runResolveAccept checks for remaining conflicts and completes the merge.
 func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, cfgMgr *config.Manager) error {
-	remaining := git.NewOperations().DetectConflicts(cmd.Context(), r.Path)
+	remaining := newGitOps(cfg).DetectConflicts(cmd.Context(), r.Path)
 
 	if len(remaining) > 0 {
 		if isJSON() {
@@ -502,7 +501,7 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 		return nil
 	}
 
-	gitOps := git.NewOperations()
+	gitOps := newGitOps(cfg)
 	// Stage all resolved files before committing.
 	if err := gitOps.StageAll(cmd.Context(), r.Path); err != nil {
 		return fmt.Errorf("git add: %w", err)

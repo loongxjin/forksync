@@ -1,9 +1,5 @@
 package agent
 
-import (
-	"context"
-)
-
 // CodexAdapter implements AgentProvider for Codex CLI (OpenAI).
 //
 // Invocation:
@@ -16,29 +12,21 @@ type CodexAdapter struct {
 }
 
 func NewCodexAdapter() *CodexAdapter {
-	return &CodexAdapter{baseAdapter{binary: "codex", name: "codex"}}
+	return &CodexAdapter{baseAdapter{
+		binary:    "codex",
+		name:      "codex",
+		buildArgs: CodexBuildArgs,
+	}}
 }
 
-func (a *CodexAdapter) StartSession(ctx context.Context, opts SessionOptions) (*Session, error) {
-	return a.baseAdapter.StartSession(ctx, opts, a.buildArgs)
-}
-
-func (a *CodexAdapter) ResolveConflicts(ctx context.Context, session *Session, prompt string) (*AgentResult, error) {
-	return a.baseAdapter.ResolveConflicts(ctx, session, prompt, a.buildArgs)
-}
-
-func (a *CodexAdapter) ResolveConflictsWithStream(ctx context.Context, session *Session, prompt string, sw *StreamWriter) (*AgentResult, error) {
-	return a.baseAdapter.ResolveConflictsWithStream(ctx, session, prompt, a.buildArgs, sw)
-}
-
-// buildArgs constructs the CLI arguments for a Codex invocation.
+// CodexBuildArgs constructs the CLI arguments for a Codex invocation.
 // Uses "codex exec" for non-interactive execution.
 // sessionID is non-empty when resuming an existing session.
 //
 // TODO: Codex CLI currently only supports "resume --last" which resumes the
 // most recent session, not a specific session ID. This can be unreliable when
 // multiple sessions are active simultaneously.
-func (a *CodexAdapter) buildArgs(sessionID, prompt string) []string {
+func CodexBuildArgs(sessionID, prompt string) []string {
 	args := []string{"exec"}
 	if sessionID != "" {
 		_ = sessionID // reserved for future use when Codex CLI supports targeting a specific session

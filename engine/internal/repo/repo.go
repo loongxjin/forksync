@@ -79,7 +79,7 @@ func (s *JSONStore) Load() error {
 
 	// Persist migration if any repos were updated
 	if migrated {
-		if err := s.saveUnsafe(); err != nil {
+		if err := s.saveLocked(); err != nil {
 			// Non-fatal: migration was applied in memory; save failure means
 			// it will be re-applied on next load.
 		}
@@ -93,7 +93,7 @@ func (s *JSONStore) Save() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.saveUnsafe()
+	return s.saveLocked()
 }
 
 func (s *JSONStore) List() ([]types.Repo, error) {
@@ -159,7 +159,7 @@ func (s *JSONStore) Add(repo types.Repo) error {
 
 	s.repos[repo.ID] = repo
 	s.nameIndex[repo.Name] = repo.ID
-	return s.saveUnsafe()
+	return s.saveLocked()
 }
 
 func (s *JSONStore) Update(repo types.Repo) error {
@@ -185,7 +185,7 @@ func (s *JSONStore) Update(repo types.Repo) error {
 	}
 
 	s.repos[repo.ID] = repo
-	return s.saveUnsafe()
+	return s.saveLocked()
 }
 
 func (s *JSONStore) Remove(id string) error {
@@ -199,12 +199,12 @@ func (s *JSONStore) Remove(id string) error {
 
 	delete(s.repos, id)
 	delete(s.nameIndex, r.Name)
-	return s.saveUnsafe()
+	return s.saveLocked()
 }
 
-// saveUnsafe persists repos to disk atomically via temp file + rename.
+// saveLocked persists repos to disk atomically via temp file + rename.
 // Must be called with write lock held.
-func (s *JSONStore) saveUnsafe() error {
+func (s *JSONStore) saveLocked() error {
 	repos := make([]types.Repo, 0, len(s.repos))
 	for _, r := range s.repos {
 		repos = append(repos, r)

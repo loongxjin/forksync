@@ -20,12 +20,13 @@ import (
 //
 // ClaudeAdapter is NOT based on this because it uses JSON structured output.
 //
-// Each adapter embeds baseAdapter and implements buildArgs to provide
-// the agent-specific CLI arguments. The sessionID parameter is used
+// Each adapter embeds baseAdapter and sets buildArgs in the constructor to
+// provide agent-specific CLI arguments. The sessionID parameter is used
 // to decide whether to include session resumption flags.
 type baseAdapter struct {
-	binary string
-	name   string
+	binary    string
+	name      string
+	buildArgs func(sessionID, prompt string) []string
 }
 
 func (a *baseAdapter) Name() string { return a.name }
@@ -35,8 +36,8 @@ func (a *baseAdapter) IsAvailable() bool {
 	return err == nil
 }
 
-func (a *baseAdapter) StartSession(ctx context.Context, opts SessionOptions, buildArgs func(sessionID, prompt string) []string) (*Session, error) {
-	args := buildArgs("", "ok")
+func (a *baseAdapter) StartSession(ctx context.Context, opts SessionOptions) (*Session, error) {
+	args := a.buildArgs("", "ok")
 	output, err := a.execCLI(ctx, opts.RepoPath, args)
 	if err != nil {
 		return nil, fmt.Errorf("%s start session: %w", a.name, err)
@@ -51,8 +52,8 @@ func (a *baseAdapter) StartSession(ctx context.Context, opts SessionOptions, bui
 	}, nil
 }
 
-func (a *baseAdapter) ResolveConflicts(ctx context.Context, session *Session, prompt string, buildArgs func(sessionID, prompt string) []string) (*AgentResult, error) {
-	args := buildArgs(session.ID, prompt)
+func (a *baseAdapter) ResolveConflicts(ctx context.Context, session *Session, prompt string) (*AgentResult, error) {
+	args := a.buildArgs(session.ID, prompt)
 	output, err := a.execCLI(ctx, session.RepoPath, args)
 	if err != nil {
 		return &AgentResult{
@@ -77,8 +78,8 @@ func (a *baseAdapter) ResolveConflicts(ctx context.Context, session *Session, pr
 // ResolveConflictsWithStream runs the agent with real-time streaming output.
 // This is NOT part of the AgentProvider interface; it is called by session.Manager
 // when a StreamWriter is provided.
-func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *Session, prompt string, buildArgs func(sessionID, prompt string) []string, sw *StreamWriter) (*AgentResult, error) {
-	args := buildArgs(session.ID, prompt)
+func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *Session, prompt string, sw *StreamWriter) (*AgentResult, error) {
+	args := a.buildArgs(session.ID, prompt)
 	logger.Info("[TRACE] baseAdapter: ResolveConflictsWithStream START", "agent", a.name, "repo", session.RepoPath, "session", session.ID, "args", args)
 
 	cmd := exec.CommandContext(ctx, a.binary, args...)

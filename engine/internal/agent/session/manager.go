@@ -89,11 +89,7 @@ func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*ag
 // If resuming an existing session fails (e.g. the agent CLI lost it),
 // it transparently creates a new session and retries.
 // An optional streamWriter enables real-time NDJSON streaming of agent output.
-func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string, conflictFiles []string, strategy string, streamWriter ...*agent.StreamWriter) (*agent.AgentResult, error) {
-	var sw *agent.StreamWriter
-	if len(streamWriter) > 0 {
-		sw = streamWriter[0]
-	}
+func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string, conflictFiles []string, strategy string, sw *agent.StreamWriter) (*agent.AgentResult, error) {
 	logger.Info("[TRACE] session: ResolveConflicts ENTRY", "repo", repoID, "strategy", strategy, "streaming", sw != nil, "conflictFiles", conflictFiles)
 
 	// Ensure session exists — reuse active or create new
