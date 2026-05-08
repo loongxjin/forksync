@@ -330,7 +330,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
     const unsubError = engineApi.onResolveStreamError((repoName, error) => {
       console.error('[AgentContext] stream error received', repoName, error)
       dispatch({ type: 'STREAM_EVENT', repoName, event: { t: 'error', d: error, ts: new Date().toISOString() } })
-      dispatch({ type: 'STREAM_DONE', repoName })
+      dispatch({ type: 'STREAM_DONE', repoName, result: null })
     })
 
     return () => {
