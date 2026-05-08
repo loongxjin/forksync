@@ -56,8 +56,8 @@ func generateSummary(
 	}
 
 	// Get commits (oldHEAD..upstreamRef)
-	upstreamRef := resolveUpstreamRef(ctx, r)
 	gitOps := git.NewOperations()
+	upstreamRef := gitOps.ResolveUpstreamRef(ctx, r)
 	gitCommits, err := gitOps.GetCommitLog(ctx, r.Path, record.OldHEAD, upstreamRef)
 	if err != nil || len(gitCommits) == 0 {
 		if updateErr := histStore.UpdateSummary(record.ID, "", string(types.SummaryStatusFailed)); updateErr != nil {

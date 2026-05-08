@@ -11,4 +11,8 @@ const (
 
 	// DefaultSummaryLanguage is the default language for AI-generated summaries.
 	DefaultSummaryLanguage = "zh"
+
+	// Commit message templates for automated merge commits.
+	CommitMsgAgentResolved = "Merge upstream changes (agent-resolved conflicts)"
+	CommitMsgManualResolved = "Merge upstream changes (manual resolution)"
 )

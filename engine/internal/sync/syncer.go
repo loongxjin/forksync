@@ -133,18 +133,7 @@ func (r *Result) ToSyncResult() types.SyncResult {
 
 // SyncRepo syncs a single repository.
 func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
-	// Compute upstream ref for summarizer
-	remoteName := r.RemoteName()
-	branch := r.Branch
-	if branch == "" {
-		if b, err := s.gitOps.GetCurrentBranch(ctx, r.Path); err == nil {
-			branch = b
-		}
-	}
-	if branch == "" {
-		branch = types.DefaultBranch
-	}
-	upstreamRef := fmt.Sprintf("%s/%s", remoteName, r.GetRemoteBranchForLocal(branch))
+	upstreamRef := s.gitOps.ResolveUpstreamRef(ctx, r)
 
 	result := &Result{
 		RepoID:      r.ID,

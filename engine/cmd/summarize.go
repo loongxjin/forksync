@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
@@ -99,20 +97,4 @@ func runSummarize(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-// resolveUpstreamRef computes the upstream remote/branch ref for a repo.
-func resolveUpstreamRef(ctx context.Context, r types.Repo) string {
-	remoteName := r.RemoteName()
-	branch := r.Branch
-	if branch == "" {
-		gitOps := git.NewOperations()
-		if b, err := gitOps.GetCurrentBranch(ctx, r.Path); err == nil {
-			branch = b
-		}
-	}
-	if branch == "" {
-		branch = types.DefaultBranch
-	}
-	return fmt.Sprintf("%s/%s", remoteName, r.GetRemoteBranchForLocal(branch))
 }

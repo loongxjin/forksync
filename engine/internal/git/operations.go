@@ -702,3 +702,18 @@ func (o *Operations) GetPreMergeHEAD(ctx context.Context, repoPath string) (stri
 	}
 	return parents[0], nil
 }
+
+// ResolveUpstreamRef returns the upstream remote/branch ref for a repo (e.g. "upstream/main").
+func (o *Operations) ResolveUpstreamRef(ctx context.Context, r types.Repo) string {
+	remoteName := r.RemoteName()
+	branch := r.Branch
+	if branch == "" {
+		if b, err := o.GetCurrentBranch(ctx, r.Path); err == nil {
+			branch = b
+		}
+	}
+	if branch == "" {
+		branch = types.DefaultBranch
+	}
+	return fmt.Sprintf("%s/%s", remoteName, r.GetRemoteBranchForLocal(branch))
+}

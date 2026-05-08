@@ -13,6 +13,13 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/logger"
 )
 
+const (
+	// scannerInitBufSize is the initial buffer size for scanner that reads stream-json lines.
+	scannerInitBufSize = 64 * 1024
+	// scannerMaxBufSize is the maximum buffer size for long stream-json lines.
+	scannerMaxBufSize = 1024 * 1024
+)
+
 // ClaudeAdapter implements AgentProvider for Claude Code CLI.
 //
 // Invocation patterns:
@@ -133,7 +140,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 		defer wg.Done()
 		scanner := bufio.NewScanner(stdoutPipe)
 		// Increase buffer size for long lines
-		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		scanner.Buffer(make([]byte, 0, scannerInitBufSize), scannerMaxBufSize)
 		for scanner.Scan() {
 			line := scanner.Text()
 			if strings.TrimSpace(line) == "" {
@@ -309,19 +316,11 @@ func (a *ClaudeAdapter) processAssistantEvent(sw *StreamWriter, ev map[string]an
 		case "tool_use":
 			name, _ := cb["name"].(string)
 			input, _ := cb["input"].(map[string]any)
-			var path string
-			if input != nil {
-				if p, ok := input["file_path"].(string); ok {
-					path = p
-				} else if p, ok := input["path"].(string); ok {
-					path = p
-				}
-			}
 			_ = sw.WriteEvent(StreamEvent{
 				Type:      StreamEventTool,
 				Timestamp: time.Now().UTC(),
 				ToolName:  name,
-				ToolPath:  path,
+				ToolPath:  extractToolPath(input),
 			})
 		}
 	}
@@ -331,19 +330,11 @@ func (a *ClaudeAdapter) processAssistantEvent(sw *StreamWriter, ev map[string]an
 func (a *ClaudeAdapter) processToolUseEvent(sw *StreamWriter, ev map[string]any) {
 	name, _ := ev["name"].(string)
 	input, _ := ev["input"].(map[string]any)
-	var path string
-	if input != nil {
-		if p, ok := input["file_path"].(string); ok {
-			path = p
-		} else if p, ok := input["path"].(string); ok {
-			path = p
-		}
-	}
 	_ = sw.WriteEvent(StreamEvent{
 		Type:      StreamEventTool,
 		Timestamp: time.Now().UTC(),
 		ToolName:  name,
-		ToolPath:  path,
+		ToolPath:  extractToolPath(input),
 	})
 }
 
@@ -399,6 +390,20 @@ func (a *ClaudeAdapter) processStreamEvent(sw *StreamWriter, ev map[string]any, 
 			})
 		}
 	}
+}
+
+// extractToolPath extracts the file path from a tool use input map.
+func extractToolPath(input map[string]any) string {
+	if input == nil {
+		return ""
+	}
+	if p, ok := input["file_path"].(string); ok {
+		return p
+	}
+	if p, ok := input["path"].(string); ok {
+		return p
+	}
+	return ""
 }
 
 func (a *ClaudeAdapter) EndSession(ctx context.Context, sessionID string) error {

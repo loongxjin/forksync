@@ -154,7 +154,7 @@ type commitWorkflowParams struct {
 func handleWorkflowAccept(ctx context.Context, r types.Repo, store repo.Store) error {
 	gitOps := git.NewOperations()
 	return finalizeCommitWithWorkflow(ctx, r, store, gitOps, commitWorkflowParams{
-		commitMsg:         "Merge upstream changes (agent-resolved conflicts)",
+		commitMsg:         types.CommitMsgAgentResolved,
 		skipAgentAndAccept: false,
 		recordHistory:     true,
 	})
@@ -163,7 +163,7 @@ func handleWorkflowAccept(ctx context.Context, r types.Repo, store repo.Store) e
 func handleWorkflowRetryCommit(ctx context.Context, r types.Repo, store repo.Store) error {
 	gitOps := git.NewOperations()
 	return finalizeCommitWithWorkflow(ctx, r, store, gitOps, commitWorkflowParams{
-		commitMsg:         "Merge upstream changes (agent-resolved conflicts)",
+		commitMsg:         types.CommitMsgAgentResolved,
 		skipAgentAndAccept: false,
 		recordHistory:     false,
 	})
@@ -211,7 +211,7 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 
 	// MERGE_HEAD exists — stage and commit
 	return finalizeCommitWithWorkflow(ctx, r, store, gitOps, commitWorkflowParams{
-		commitMsg:         "Merge upstream changes (manual resolution)",
+		commitMsg:         types.CommitMsgManualResolved,
 		skipAgentAndAccept: true,
 		recordHistory:     true,
 	})

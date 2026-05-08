@@ -106,16 +106,16 @@ func runResolve(cmd *cobra.Command, args []string) error {
 		return runResolveReject(cmd, r, store)
 	}
 
-		// Not in a conflict-related state
-		if r.Status != types.RepoStatusConflict && r.Status != types.RepoStatusResolved &&
-			r.Status != types.RepoStatusResolving && r.Status != types.RepoStatusWaiting {
-			if isJSON() {
-				outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
-			} else {
-				outputText("No conflicts to resolve for %s", r.Name)
-			}
-			return nil
+	// Not in a conflict-related state
+	if r.Status != types.RepoStatusConflict && r.Status != types.RepoStatusResolved &&
+		r.Status != types.RepoStatusResolving && r.Status != types.RepoStatusWaiting {
+		if isJSON() {
+			outputJSON(types.AcceptData{RepoID: r.ID, Resolved: true}, nil)
+		} else {
+			outputText("No conflicts to resolve for %s", r.Name)
 		}
+		return nil
+	}
 
 	// Detect conflict files
 	gitOps := git.NewOperations()
@@ -173,45 +173,15 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		}
 	}()
 
-	// Signal guard: listen for SIGTERM / SIGINT (e.g. Electron timeout
-	// killing the Go process). When received, roll back status before
-	// the process exits.
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, signalsToWatch...)
-	defer signal.Stop(sigCh)
-	go func(repo types.Repo) {
-		if _, ok := <-sigCh; ok && !resolved.Load() {
-			repo.Status = types.RepoStatusConflict
-			repo.ErrorMessage = "agent process was terminated, conflict resolution incomplete"
-			updateRepoWithLog(repo, store, "signal-rollback")
-		}
-	}(r)
+	stopSignalGuard := installSignalGuard(r, store, &resolved)
+	defer stopSignalGuard()
 
 	// Set timeout context
 	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 	defer cancel()
 
-	// Resolve conflicts
-	var streamWriter *agent.StreamWriter
-	if resolveStream {
-		logger.Info("[TRACE] resolve: streaming mode enabled", "repo", r.Name)
-
-		// Write to stdout for real-time Electron consumption
-		stdoutSW := agent.NewStreamWriter(os.Stdout)
-
-		// Also write to disk log for later replay
-		lw, lwErr := agent.NewLogWriter(cfgMgr.ConfigDir(), r.Name)
-		if lwErr != nil {
-			logger.Warn("resolve: failed to create log writer, using stdout only", "repo", r.Name, "error", lwErr)
-			streamWriter = stdoutSW
-		} else {
-			defer lw.Close()
-			msw := agent.NewMultiStreamWriter(stdoutSW, lw.StreamWriter())
-			// Use a wrapper StreamWriter that delegates to MultiStreamWriter
-			streamWriter = msw.StreamWriter()
-			logger.Info("resolve: streaming to stdout + disk log", "repo", r.Name)
-		}
-	}
+	streamWriter, closeLogWriter := setupResolveStreamWriter(cfgMgr.ConfigDir(), r.Name)
+	defer closeLogWriter()
 
 	logger.Info("[TRACE] resolve: calling sessionMgr.ResolveConflicts", "repo", r.Name, "hasStreamWriter", streamWriter != nil, "isJSON", isJSON())
 	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy, streamWriter)
@@ -265,17 +235,17 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		return completeAgentResolve(ctx, cmd, resolveContext{repo: r, store: store, cfg: cfg, cfgMgr: cfgMgr}, result)
 	}
 
-		// Show diff and wait for confirmation
-		// In --stream mode, skip outputJSON() since the NDJSON stream on stdout is
-		// being consumed by the Electron process. The final result is already
-		// delivered via the done stream event.
-		if !resolveStream {
-			logger.Info("[TRACE] resolve: calling showResolutionDiff (non-stream)", "repo", r.Name)
-			showResolutionDiff(r, diff, result, provider)
-		} else {
-			logger.Info("[TRACE] resolve: skipping showResolutionDiff (stream mode — result already sent via done event)", "repo", r.Name)
-		}
-		return nil
+	// Show diff and wait for confirmation
+	// In --stream mode, skip outputJSON() since the NDJSON stream on stdout is
+	// being consumed by the Electron process. The final result is already
+	// delivered via the done stream event.
+	if !resolveStream {
+		logger.Info("[TRACE] resolve: calling showResolutionDiff (non-stream)", "repo", r.Name)
+		showResolutionDiff(r, diff, result, provider)
+	} else {
+		logger.Info("[TRACE] resolve: skipping showResolutionDiff (stream mode — result already sent via done event)", "repo", r.Name)
+	}
+	return nil
 }
 
 // resolveAgentProvider determines the agent provider to use for conflict resolution.
@@ -299,6 +269,22 @@ func resolveAgentProvider(cfg *config.Config) (agent.AgentProvider, error) {
 		return nil, fmt.Errorf("no agent available: %w", err)
 	}
 	return provider, nil
+}
+
+// installSignalGuard listens for OS signals (SIGTERM/SIGINT) and rolls back
+// the repo status when the process is killed during agent resolution.
+// Returns a stop function that must be deferred by the caller.
+func installSignalGuard(r types.Repo, store repo.Store, resolved *atomic.Bool) func() {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, signalsToWatch...)
+	go func(repo types.Repo) {
+		if _, ok := <-sigCh; ok && !resolved.Load() {
+			repo.Status = types.RepoStatusConflict
+			repo.ErrorMessage = "agent process was terminated, conflict resolution incomplete"
+			updateRepoWithLog(repo, store, "signal-rollback")
+		}
+	}(r)
+	return func() { signal.Stop(sigCh) }
 }
 
 // resolveTimeout returns the agent resolution timeout from config or the default.
@@ -357,13 +343,13 @@ func handleUnresolvedConflicts(cr conflictResolution, trulyUnresolved []string) 
 		"resolved_files", cr.agentResult.ResolvedFiles,
 	)
 
-		if isJSON() && !resolveStream {
-			outputJSON(types.ResolveData{
-				RepoID:      cr.repo.ID,
-				Conflicts:   toConflictFiles(trulyUnresolved),
-				AgentResult: agentResultToTypes(cr.agentResult),
-			}, fmt.Errorf("agent did not resolve all conflicts"))
-		} else if !isJSON() {
+	if isJSON() && !resolveStream {
+		outputJSON(types.ResolveData{
+			RepoID:      cr.repo.ID,
+			Conflicts:   toConflictFiles(trulyUnresolved),
+			AgentResult: agentResultToTypes(cr.agentResult),
+		}, fmt.Errorf("agent did not resolve all conflicts"))
+	} else if !isJSON() {
 		outputText("⚠️  Agent could not resolve all conflicts (%d remaining)", len(trulyUnresolved))
 		outputText("   Unresolved: %s", strings.Join(trulyUnresolved, ", "))
 		if len(cr.agentResult.ResolvedFiles) > 0 {
@@ -419,18 +405,18 @@ func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveCon
 	}
 
 	// Commit — skip pre-commit hooks since this is an automated merge commit
-	commitMsg := "Merge upstream (agent-resolved conflicts)"
+	commitMsg := types.CommitMsgAgentResolved
 	if err := gitOps.Commit(ctx, rc.repo.Path, commitMsg); err != nil {
 		logger.Warn("resolve: commit failed after agent resolution, keeping resolved state for manual confirmation",
 			"repo", rc.repo.Name, "error", err)
 		if isJSON() && !resolveStream {
-				outputJSON(types.ResolveData{
-					RepoID:      rc.repo.ID,
-					Conflicts:   []types.ConflictFile{},
-					AgentResult: agentResultToTypes(result),
-					CommitError: fmt.Sprintf("auto-commit failed: %v", err),
-				}, nil)
-			} else if !isJSON() {
+			outputJSON(types.ResolveData{
+				RepoID:      rc.repo.ID,
+				Conflicts:   []types.ConflictFile{},
+				AgentResult: agentResultToTypes(result),
+				CommitError: fmt.Sprintf("auto-commit failed: %v", err),
+			}, nil)
+		} else if !isJSON() {
 			outputText("Agent resolved conflicts but commit failed: %v", err)
 			outputText("Please fix the issue and run 'forksync resolve %s --accept' to complete the merge.", rc.repo.Name)
 		}
@@ -524,7 +510,7 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 
 	// Complete the merge.
 	if err := gitOps.CommitNoEdit(cmd.Context(), r.Path); err != nil {
-		if err := gitOps.Commit(cmd.Context(), r.Path, "Merge upstream changes (agent-resolved conflicts)"); err != nil {
+		if err := gitOps.Commit(cmd.Context(), r.Path, types.CommitMsgAgentResolved); err != nil {
 			return fmt.Errorf("git commit: %w", err)
 		}
 	}
@@ -563,6 +549,25 @@ func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
 		SessionID:     r.SessionID,
 		AgentName:     r.AgentName,
 	}
+}
+
+// setupResolveStreamWriter creates a stream writer for agent resolution output.
+// In stream mode, writes to both stdout (real-time Electron consumption) and disk
+// (later replay). Returns nil and a no-op cleanup when streaming is disabled.
+func setupResolveStreamWriter(configDir, repoName string) (*agent.StreamWriter, func()) {
+	if !resolveStream {
+		return nil, func() {}
+	}
+	logger.Info("[TRACE] resolve: streaming mode enabled", "repo", repoName)
+	stdoutSW := agent.NewStreamWriter(os.Stdout)
+	lw, lwErr := agent.NewLogWriter(configDir, repoName)
+	if lwErr != nil {
+		logger.Warn("resolve: failed to create log writer, using stdout only", "repo", repoName, "error", lwErr)
+		return stdoutSW, func() {}
+	}
+	msw := agent.NewMultiStreamWriter(stdoutSW, lw.StreamWriter())
+	logger.Info("resolve: streaming to stdout + disk log", "repo", repoName)
+	return msw.StreamWriter(), func() { lw.Close() }
 }
 
 // resolveStrategyOrDefault returns the resolve strategy from config, or the default.
