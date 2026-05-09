@@ -20,7 +20,7 @@ interface StatusItem {
 }
 
 // Conflict-family statuses are grouped under the "conflict" bar item.
-export const CONFLICT_FAMILY: RepoStatus[] = ['conflict', 'resolving', 'resolved']
+export const CONFLICT_FAMILY: RepoStatus[] = ['conflict', 'resolving', 'resolved', 'waiting']
 
 const STATUS_ITEMS: StatusItem[] = [
   {
@@ -43,13 +43,6 @@ const STATUS_ITEMS: StatusItem[] = [
     colorClass: 'text-warning',
     activeClass: 'bg-warning-muted text-warning border-warning/20',
     icon: <Loader2 size={14} className="animate-spin" />
-  },
-  {
-    key: 'waiting',
-    labelKey: 'status.waiting',
-    colorClass: 'text-warning',
-    activeClass: 'bg-warning-muted text-warning border-warning/20',
-    icon: <PauseCircle size={14} />
   },
   {
     key: 'conflict',
