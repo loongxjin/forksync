@@ -278,20 +278,29 @@ export function HomePage(): JSX.Element {
   }, [resolveStream, preferred, updateRepo, refresh, engineConfig, showToast])
 
   // Listen for streaming resolve results
+  // Use a processed set to avoid re-handling results that were already consumed.
+  const processedStreamResultsRef = useRef<Set<string>>(new Set())
   useEffect(() => {
+    let hasNew = false
     for (const [repoName, result] of Object.entries(streamResults)) {
+      if (processedStreamResultsRef.current.has(repoName)) continue
+      processedStreamResultsRef.current.add(repoName)
+      hasNew = true
       if (result) {
         setResolveResults((prev) => ({ ...prev, [repoName]: result }))
       }
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
-      refresh().catch(() => {})
-      loadHistory()
       // Fire-and-forget AI summarization only on successful streaming resolve
       if (result && engineConfig?.Sync?.AutoSummary) {
         engineApi.summarize(repoName).catch(() => {
           // ignore background summary errors
         })
       }
+    }
+    // Only call refresh/loadHistory once per batch, not per repo.
+    if (hasNew) {
+      refresh().catch(() => {})
+      loadHistory()
     }
   }, [streamResults, refresh, loadHistory, engineConfig])
 
