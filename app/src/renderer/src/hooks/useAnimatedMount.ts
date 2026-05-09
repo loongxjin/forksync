@@ -11,11 +11,11 @@ export function useAnimatedMount(open: boolean, delayMs = 200): boolean {
   useEffect(() => {
     if (open) {
       setMounted(true)
-    } else if (mounted) {
+    } else {
       const timer = setTimeout(() => setMounted(false), delayMs)
       return () => clearTimeout(timer)
     }
-  }, [open, mounted, delayMs])
+  }, [open, delayMs])
 
   return mounted
 }
