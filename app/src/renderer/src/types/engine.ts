@@ -174,7 +174,7 @@ export interface AgentSessionInfo {
   id: string
   repoId: string
   agentName: string
-  status: string
+  status: AgentSessionStatus
   createdAt: string
   lastUsedAt: string
 }
@@ -290,7 +290,7 @@ export interface SyncHistoryRecord {
   id: number
   repoId: string
   repoName: string
-  status: string
+  status: RepoStatus
   commitsPulled: number
   conflictFiles: string[]
   agentUsed: string
