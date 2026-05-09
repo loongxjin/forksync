@@ -42,14 +42,17 @@ export function CollapsibleContent({
     if (contentRef.current) {
       if (open) {
         // Measure after a frame to ensure layout is settled
+        let timer: ReturnType<typeof setTimeout> | undefined
         const raf = requestAnimationFrame(() => {
           if (contentRef.current) {
             setHeight(contentRef.current.scrollHeight)
-            const timer = setTimeout(() => setHeight(undefined), 300)
-            return () => clearTimeout(timer)
+            timer = setTimeout(() => setHeight(undefined), 300)
           }
         })
-        return () => cancelAnimationFrame(raf)
+        return () => {
+          cancelAnimationFrame(raf)
+          if (timer !== undefined) clearTimeout(timer)
+        }
       } else {
         setHeight(contentRef.current.scrollHeight)
         const raf = requestAnimationFrame(() => {
