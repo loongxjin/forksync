@@ -11,23 +11,23 @@ interface RepoStatusBadgeProps {
   className?: string
 }
 
+const VARIANT_MAP: Record<string, 'success' | 'warning' | 'error' | 'info' | 'muted'> = {
+  up_to_date: 'success',
+  sync_needed: 'warning',
+  syncing: 'warning',
+  waiting: 'warning',
+  conflict: 'error',
+  resolving: 'info',
+  resolved: 'info',
+  error: 'error',
+  unconfigured: 'muted'
+}
+
 export function RepoStatusBadge({ status, className }: RepoStatusBadgeProps): JSX.Element {
   const config = useStatusConfig(status)
 
-  const variantMap: Record<string, 'success' | 'warning' | 'error' | 'info' | 'muted'> = {
-    up_to_date: 'success',
-    sync_needed: 'warning',
-    syncing: 'warning',
-    waiting: 'warning',
-    conflict: 'error',
-    resolving: 'info',
-    resolved: 'info',
-    error: 'error',
-    unconfigured: 'muted'
-  }
-
   return (
-    <Badge variant={variantMap[status] ?? 'muted'} className={className}>
+    <Badge variant={VARIANT_MAP[status] ?? 'muted'} className={className}>
       {config.label}
     </Badge>
   )
