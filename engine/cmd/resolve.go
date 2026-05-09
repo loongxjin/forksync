@@ -153,18 +153,12 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	// Determine resolve sub-strategy for the agent prompt
 	resolveStrategy := resolveStrategyOrDefault(cfg)
 
-	// Update repo status to resolving
-	r.Status = types.RepoStatusResolving
-	updateRepoWithLog(r, store, "resolving")
-
 	// resolved tracks whether the agent finished successfully.
-	// Used by the defer guard and signal handler to decide whether
-	// to roll back the status on unexpected exit.
 	var resolved atomic.Bool
 
-	// Defer guard: if the function returns without the agent having
-	// produced a final state (resolved / conflict from verify), roll
-	// back to conflict so the repo doesn't get stuck in resolving.
+	// Install guards BEFORE setting status to resolving. Otherwise a kill
+	// between the status write and guard registration leaves a permanent
+	// "resolving" deadlock on disk.
 	defer func() {
 		if !resolved.Load() {
 			r.Status = types.RepoStatusConflict
@@ -179,6 +173,10 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 
 	stopSignalGuard := installSignalGuard(&r, store, &resolved)
 	defer stopSignalGuard()
+
+	// Update repo status to resolving
+	r.Status = types.RepoStatusResolving
+	updateRepoWithLog(r, store, "resolving")
 
 	// Set timeout context
 	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)

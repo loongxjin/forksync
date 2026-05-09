@@ -271,34 +271,35 @@ export function HomePage(): JSX.Element {
     }
   }, [resolveStream, preferred, updateRepo, refresh, engineConfig, showToast, clearStream])
 
+  // Keep refresh in a ref to avoid the effect re-triggering when repos change
+  // (refresh depends on state.repos, which changes after refresh() itself runs).
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
+
   // Listen for streaming resolve results.
   useEffect(() => {
     let hasNew = false
     for (const [repoName, result] of Object.entries(streamResults)) {
       hasNew = true
-      console.log('[HomePage] stream result for', repoName, 'result:', result ? 'non-null' : 'null', 'repos status:', (repos.find(r => r.name === repoName)?.status ?? 'not-found'))
+      console.log('[HomePage] stream result for', repoName, 'result:', result ? 'non-null' : 'null')
       if (result) {
         setResolveResults((prev) => ({ ...prev, [repoName]: result }))
       }
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
-      // Fire-and-forget AI summarization only on successful streaming resolve
       if (result && engineConfig?.Sync?.AutoSummary) {
-        engineApi.summarize(repoName).catch(() => {
-          // ignore background summary errors
-        })
+        engineApi.summarize(repoName).catch(() => {})
       }
     }
-    // Only call refresh/loadHistory once per batch, not per repo.
     if (hasNew) {
       console.log('[HomePage] calling refresh after stream done')
-      refresh().then(() => {
+      refreshRef.current().then(() => {
         console.log('[HomePage] refresh completed after stream done')
       }).catch((e) => {
         console.error('[HomePage] refresh failed after stream done', e)
       })
       loadHistory()
     }
-  }, [streamResults, refresh, loadHistory, engineConfig, repos])
+  }, [streamResults, loadHistory, engineConfig])
 
   const handleAccept = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))

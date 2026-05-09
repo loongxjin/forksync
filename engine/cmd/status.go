@@ -35,6 +35,10 @@ const statusTimeout = 30 * time.Second
 // staleWorkflowThreshold is the age after which an active workflow is considered stale.
 const staleWorkflowThreshold = 30 * time.Minute
 
+// resolvingStaleThreshold is the age after which a "resolving" status is considered
+// stale and safe to recover. Must be longer than the max agent resolve timeout.
+const resolvingStaleThreshold = 10 * time.Minute
+
 // actionStatusUpdate is the log action label for repo status refresh updates.
 const actionStatusUpdate = "status-update"
 
@@ -70,11 +74,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	var wg stdsync.WaitGroup
 	sem := make(chan struct{}, types.DefaultMaxConcurrency)
 	for i := range repos {
-		// Skip resolving repos — agent is actively working and we must not
-		// interfere with its workflow.
-		if repos[i].Status == types.RepoStatusResolving {
-			continue
-		}
 		if excludeSet[repos[i].Name] {
 			continue
 		}
@@ -247,6 +246,17 @@ func isAbortedWorkflow(wf *types.SyncWorkflow) bool {
 // before app restart (see spec §7.2).
 func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, gitOps *git.Operations, store repo.Store) {
 	r := repos[idx]
+
+	// If the agent is actively resolving, do not interfere at all.
+	// IsMergingState below auto-stages files (git add), which would corrupt
+	// the agent's working state. Only recover if the resolving state is stale
+	// (agent process likely crashed).
+	if r.Status == types.RepoStatusResolving {
+		if r.Workflow != nil && time.Since(r.Workflow.StartedAt) < resolvingStaleThreshold {
+			return
+		}
+	}
+
 	isMerging, unmergedFiles, err := gitOps.IsMergingState(ctx, r.Path)
 	if err != nil {
 		return
@@ -284,6 +294,13 @@ func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, g
 		return
 	}
 
+	// Still have unmerged files — conflict state.
+	// If the workflow already has a definitive failure (e.g. agent_resolve failed),
+	// preserve it rather than blindly rebuilding.
+	if r.Workflow != nil && r.Workflow.Status == types.WorkflowFailed {
+		return
+	}
+
 	// Still have unmerged files — conflict state
 	// Rebuild workflow: fetch→merge→check_conflicts(success with msg)→resolve_strategy(waiting)
 	repos[idx].Workflow = rebuildWorkflow(r,
@@ -316,11 +333,11 @@ type workflowRebuildPoint int
 
 const (
 	workflowRebuildFromFetch         workflowRebuildPoint = iota // syncing, no MERGE_HEAD
-	workflowRebuildFromMerge                                       // syncing, MERGE_HEAD exists
-	workflowRebuildFromConflict                                    // conflict: check_conflicts success, resolve_strategy waiting
-	workflowRebuildFromAgentResolve                                // resolving: agent_resolve running
-	workflowRebuildFromAcceptChanges                               // resolved: accept_changes waiting
-	workflowRebuildFromCommitFailed                                // error: commit failed
+	workflowRebuildFromMerge                                     // syncing, MERGE_HEAD exists
+	workflowRebuildFromConflict                                  // conflict: check_conflicts success, resolve_strategy waiting
+	workflowRebuildFromAgentResolve                              // resolving: agent_resolve running
+	workflowRebuildFromAcceptChanges                             // resolved: accept_changes waiting
+	workflowRebuildFromCommitFailed                              // error: commit failed
 )
 
 // rebuildWorkflow creates a lightweight workflow for a repo that was in an active
