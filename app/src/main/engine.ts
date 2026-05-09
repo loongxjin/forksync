@@ -14,6 +14,27 @@ import { existsSync, readdirSync, readFileSync, appendFileSync, mkdirSync, statS
 import { homedir } from 'os'
 import { promisify } from 'util'
 
+/**
+ * Kill a child process and its entire process group.
+ * Uses `detached: true` on non-Windows to create a new process group,
+ * then signals the entire group with `process.kill(-pid)`.
+ * On Windows, uses `taskkill /T /F /PID` for tree kill.
+ */
+function killProcessGroup(child: ChildProcess): void {
+  try {
+    if (process.platform === 'win32') {
+      // Windows: use taskkill to kill the process tree
+      exec(`taskkill /pid ${child.pid} /T /F`)
+    } else if (child.pid) {
+      // Unix: kill the entire process group
+      process.kill(-child.pid, 'SIGTERM')
+    }
+  } catch {
+    // Fallback to regular kill if process group kill fails
+    child.kill()
+  }
+}
+
 const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
 import type {
@@ -157,7 +178,8 @@ export class EngineClient {
     const child: ChildProcess = spawn(this.binaryPath, fullArgs, {
       cwd: app.isPackaged ? undefined : this.engineDir,
       env: { ...process.env },
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32' // create new process group on Unix
     })
     console.log('[engine:resolveStream] spawned', name, 'pid:', child.pid, 'args:', fullArgs)
 
@@ -284,7 +306,7 @@ export class EngineClient {
       onError: (cb) => { errorCbs.push(cb) },
       kill: () => {
         killed = true
-        child.kill()
+        killProcessGroup(child)
       }
     }
   }
@@ -496,7 +518,8 @@ export class EngineClient {
       const child: ChildProcess = spawn(this.binaryPath, fullArgs, {
         cwd: app.isPackaged ? undefined : this.engineDir,
         env: { ...process.env },
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: process.platform !== 'win32'
       })
 
       let stdout = ''
@@ -512,7 +535,7 @@ export class EngineClient {
 
       // Timeout handler
       const timer = setTimeout(() => {
-        child.kill()
+        killProcessGroup(child)
         reject(new EngineTimeoutError(`Engine command timed out after ${timeout}ms`))
       }, timeout)
 
