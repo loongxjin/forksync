@@ -136,6 +136,16 @@ func ReadLogFile(path string) ([]StreamEvent, error) {
 	return events, nil
 }
 
+// DeleteAllLogs removes all agent log files for the given repoID.
+func DeleteAllLogs(baseDir, repoID string) error {
+	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
+	if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete agent logs for %s: %w", repoID, err)
+	}
+	logger.Debug("agent: deleted all logs", "repo", repoID)
+	return nil
+}
+
 // CleanupOldLogs removes log files older than maxAge for the given repoID.
 func CleanupOldLogs(baseDir, repoID string, maxAge time.Duration) error {
 	if maxAge <= 0 {

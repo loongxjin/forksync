@@ -571,8 +571,8 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		return s.buildPendingInfo(ctx, r, result)
 	}
 
-		// Complete the merge with a commit
-		commitMsg := fmt.Sprintf("Merge upstream changes (auto-resolved by %s)", s.sessionMgr.ProviderName())
+	// Complete the merge with a commit
+	commitMsg := fmt.Sprintf("Merge upstream changes (auto-resolved by %s)", s.sessionMgr.ProviderName())
 	if err := s.gitOps.Commit(ctx, r.Path, commitMsg); err != nil {
 		logger.Warn("sync: auto-commit failed after agent resolution, falling back to confirmation",
 			"repo", r.Name,
@@ -583,6 +583,9 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		pending.CommitError = fmt.Sprintf("auto-commit failed: %v", err)
 		return false, pending
 	}
+
+	// Agent logs are meaningless once auto-resolved and committed.
+	agent.DeleteAllLogs(s.configDir, r.Name)
 
 	return true, nil
 }
@@ -712,14 +715,14 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 	for i, r := range targetRepos {
 		wg.Add(1)
 		sem <- struct{}{}
-			go func(idx int, repo types.Repo) {
-				defer wg.Done()
-				defer func() { <-sem }()
-				// Note: executeSync already sets its own timeout based on agent config,
-				// so we don't add a second timeout layer here to avoid unpredictable
-				// interactions between the two.
-				results[idx] = s.SyncRepo(ctx, repo)
-			}(i, r)
+		go func(idx int, repo types.Repo) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			// Note: executeSync already sets its own timeout based on agent config,
+			// so we don't add a second timeout layer here to avoid unpredictable
+			// interactions between the two.
+			results[idx] = s.SyncRepo(ctx, repo)
+		}(i, r)
 	}
 	wg.Wait()
 

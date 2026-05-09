@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
@@ -50,9 +51,9 @@ func init() {
 
 // workflowContinueResult is the response for workflow continue.
 type workflowContinueResult struct {
-	RepoID   string             `json:"repoId"`
-	RepoName string             `json:"repoName"`
-	Status   types.RepoStatus   `json:"status"`
+	RepoID   string              `json:"repoId"`
+	RepoName string              `json:"repoName"`
+	Status   types.RepoStatus    `json:"status"`
 	Workflow *types.SyncWorkflow `json:"workflow,omitempty"`
 }
 
@@ -119,6 +120,9 @@ func handleResolveWithAgent(_ context.Context, r types.Repo, store repo.Store) e
 // handleWorkflowAbortOrReject handles both abort and reject actions which share
 // the same logic: abort the merge, clear the workflow, and reset status.
 func handleWorkflowAbortOrReject(ctx context.Context, r types.Repo, store repo.Store, cfg *config.Config) error {
+	_, cfgMgr := getSharedConfig()
+	agent.DeleteAllLogs(cfgMgr.ConfigDir(), r.Name)
+
 	gitOps := newGitOps(cfg)
 	if err := gitOps.AbortMerge(ctx, r.Path); err != nil {
 		logger.Warn("workflow: merge --abort failed", "repo", r.Name, "error", err)
@@ -149,26 +153,26 @@ func handleWorkflowAbortOrReject(ctx context.Context, r types.Repo, store repo.S
 
 // commitWorkflowParams contains the parameters for the commit-with-workflow pattern.
 type commitWorkflowParams struct {
-	commitMsg         string // fallback commit message
+	commitMsg          string // fallback commit message
 	skipAgentAndAccept bool   // whether to mark agent_resolve and accept_changes as skipped
-	recordHistory     bool   // whether to record workflow completion history
+	recordHistory      bool   // whether to record workflow completion history
 }
 
 func handleWorkflowAccept(ctx context.Context, r types.Repo, store repo.Store, cfg *config.Config) error {
 	gitOps := newGitOps(cfg)
 	return finalizeCommitWithWorkflow(ctx, r, store, gitOps, commitWorkflowParams{
-		commitMsg:         types.CommitMsgAgentResolved,
+		commitMsg:          types.CommitMsgAgentResolved,
 		skipAgentAndAccept: false,
-		recordHistory:     true,
+		recordHistory:      true,
 	})
 }
 
 func handleWorkflowRetryCommit(ctx context.Context, r types.Repo, store repo.Store, cfg *config.Config) error {
 	gitOps := newGitOps(cfg)
 	return finalizeCommitWithWorkflow(ctx, r, store, gitOps, commitWorkflowParams{
-		commitMsg:         types.CommitMsgAgentResolved,
+		commitMsg:          types.CommitMsgAgentResolved,
 		skipAgentAndAccept: false,
-		recordHistory:     false,
+		recordHistory:      false,
 	})
 }
 
@@ -213,9 +217,9 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 
 	// MERGE_HEAD exists — stage and commit
 	return finalizeCommitWithWorkflow(ctx, r, store, gitOps, commitWorkflowParams{
-		commitMsg:         types.CommitMsgManualResolved,
+		commitMsg:          types.CommitMsgManualResolved,
 		skipAgentAndAccept: true,
-		recordHistory:     true,
+		recordHistory:      true,
 	})
 }
 
@@ -264,6 +268,11 @@ func finalizeCommitWithWorkflow(ctx context.Context, r types.Repo, store repo.St
 	r.Status = types.RepoStatusUpToDate
 	r.ErrorMessage = ""
 	r.LastSync = &now
+
+	// Workflow completed — agent logs are no longer needed.
+	_, cfgMgr := getSharedConfig()
+	agent.DeleteAllLogs(cfgMgr.ConfigDir(), r.Name)
+
 	if err := store.Update(r); err != nil {
 		logger.Error("workflow: failed to update repo", "repo", r.Name, "error", err)
 	}

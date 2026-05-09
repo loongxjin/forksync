@@ -416,6 +416,8 @@ func showResolutionDiff(r types.Repo, diff string, result *agent.AgentResult, pr
 
 // completeAgentResolve stages files and completes the merge.
 func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveContext, result *agent.AgentResult) error {
+	// Agent logs are meaningless once the workflow is complete — clean them up.
+	agent.DeleteAllLogs(rc.cfgMgr.ConfigDir(), rc.repo.Name)
 	// Stage all resolved files
 	gitOps := newGitOps(rc.cfg)
 	for _, f := range result.ResolvedFiles {
@@ -463,6 +465,8 @@ func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveCon
 // runResolveReject rolls back the merge using git merge --abort,
 // restoring the repository to its pre-merge state.
 func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config) error {
+	_, cfgMgr := getSharedConfig()
+	agent.DeleteAllLogs(cfgMgr.ConfigDir(), r.Name)
 	ctx := cmd.Context()
 	gitOps := newGitOps(cfg)
 
@@ -494,6 +498,8 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 
 // runResolveAccept checks for remaining conflicts and completes the merge.
 func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, cfgMgr *config.Manager) error {
+	agent.DeleteAllLogs(cfgMgr.ConfigDir(), r.Name)
+
 	remaining := newGitOps(cfg).DetectConflicts(cmd.Context(), r.Path)
 
 	if len(remaining) > 0 {
