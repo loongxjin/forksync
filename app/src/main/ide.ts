@@ -87,12 +87,15 @@ function getWhichCommand(): string {
 
 function execAsync(cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('timeout')), 3000)
-    execFile(cmd, args, (err, stdout) => {
+    const child = execFile(cmd, args, (err, stdout) => {
       clearTimeout(timeout)
       if (err) reject(err)
       else resolve(stdout.trim())
     })
+    const timeout = setTimeout(() => {
+      child.kill()
+      reject(new Error('timeout'))
+    }, 3000)
   })
 }
 
