@@ -8,11 +8,44 @@
 import { ipcMain, dialog, app, BrowserWindow } from 'electron'
 import { t } from './i18n'
 import { existsSync, mkdirSync, writeFileSync, unlinkSync, appendFileSync } from 'fs'
-import { join } from 'path'
+import { join, resolve, normalize } from 'path'
 import { homedir } from 'os'
 import { EngineClient } from './engine'
 import { notifySyncResults, updateNotificationConfig } from './notify'
 import type { AgentStreamEvent } from '../renderer/src/types/engine'
+
+// --- Input validation helpers ---
+
+function assertString(value: unknown, name: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`Invalid ${name}: expected non-empty string`)
+  }
+  if (value.length > 4096) {
+    throw new Error(`Invalid ${name}: exceeds maximum length`)
+  }
+  return value
+}
+
+function assertOptionalString(value: unknown, name: string): string | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'string') {
+    throw new Error(`Invalid ${name}: expected string`)
+  }
+  if (value.length > 4096) {
+    throw new Error(`Invalid ${name}: exceeds maximum length`)
+  }
+  return value
+}
+
+function assertSafePath(value: unknown, name: string): string {
+  const str = assertString(value, name)
+  const resolved = resolve(normalize(str))
+  // Block obvious traversal attempts
+  if (str.includes('..')) {
+    throw new Error(`Invalid ${name}: path traversal detected`)
+  }
+  return resolved
+}
 
 let engine: EngineClient | null = null
 
@@ -47,30 +80,30 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('engine:scan', async (_event, dir: string) => {
-    return e.scan(dir)
+    return e.scan(assertSafePath(dir, 'dir'))
   })
 
   ipcMain.handle('engine:add', async (_event, path: string, upstream?: string, branchMapping?: { localBranch: string; remoteBranch: string }) => {
-    return e.add(path, upstream, branchMapping)
+    return e.add(assertSafePath(path, 'path'), assertOptionalString(upstream, 'upstream'), branchMapping)
   })
 
   ipcMain.handle('engine:remove', async (_event, name: string) => {
-    return e.remove(name)
+    return e.remove(assertString(name, 'name'))
   })
 
   ipcMain.handle(
     'engine:resolve',
     async (_event, name: string, opts?: { agent?: string; noConfirm?: boolean }) => {
-      return e.resolve(name, opts)
+      return e.resolve(assertString(name, 'name'), opts)
     }
   )
 
   ipcMain.handle('engine:resolveAccept', async (_event, name: string) => {
-    return e.resolveAccept(name)
+    return e.resolveAccept(assertString(name, 'name'))
   })
 
   ipcMain.handle('engine:resolveReject', async (_event, name: string) => {
-    return e.resolveReject(name)
+    return e.resolveReject(assertString(name, 'name'))
   })
 
   ipcMain.handle('engine:agentList', async () => {
@@ -86,7 +119,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('engine:agentReset', async (_event, name: string) => {
-    return e.agentReset(name)
+    return e.agentReset(assertString(name, 'name'))
   })
 
   ipcMain.handle('engine:history', async (_event, repoName?: string, limit?: number) => {
@@ -102,7 +135,9 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('engine:configSet', async (_event, key: string, value: string) => {
-    const result = await e.configSet(key, value)
+    assertString(key, 'key')
+    const safeValue = assertString(value, 'value')
+    const result = await e.configSet(key, safeValue)
     // Refresh notification config if notification settings changed
     if (key.startsWith('notification.')) {
       await updateNotificationConfig(e)
@@ -111,27 +146,31 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('engine:postSyncList', async (_event, repoName: string) => {
-    return e.postSyncList(repoName)
+    return e.postSyncList(assertString(repoName, 'repoName'))
   })
 
   ipcMain.handle('engine:postSyncAdd', async (_event, repoName: string, cmdName: string, cmd: string) => {
-    return e.postSyncAdd(repoName, cmdName, cmd)
+    return e.postSyncAdd(assertString(repoName, 'repoName'), assertString(cmdName, 'cmdName'), assertString(cmd, 'cmd'))
   })
 
   ipcMain.handle('engine:postSyncRemove', async (_event, repoName: string, cmdId: string) => {
-    return e.postSyncRemove(repoName, cmdId)
+    return e.postSyncRemove(assertString(repoName, 'repoName'), assertString(cmdId, 'cmdId'))
   })
 
   ipcMain.handle('engine:summarize', async (_event, repoName: string) => {
-    return e.summarize(repoName)
+    return e.summarize(assertString(repoName, 'repoName'))
   })
 
   ipcMain.handle('engine:summarizeRetry', async (_event, repoName: string) => {
-    return e.summarizeRetry(repoName)
+    return e.summarizeRetry(assertString(repoName, 'repoName'))
   })
 
   ipcMain.handle('engine:workflowContinue', async (_event, name: string, action: string) => {
-    return e.workflowContinue(name, action)
+    const safeAction = assertString(action, 'action')
+    if (!['accept', 'reject', 'retry', 'abort', 'resolve', 'commit'].includes(safeAction)) {
+      throw new Error(`Invalid action: ${safeAction}`)
+    }
+    return e.workflowContinue(assertString(name, 'name'), safeAction)
   })
 
   // --- Agent resolve streaming (fire-and-forget start, push events) ---
@@ -144,6 +183,7 @@ export function registerIpcHandlers(): void {
   }
 
   ipcMain.on('engine:resolveStream:start', (event, name: string, opts?: { agent?: string; noConfirm?: boolean }) => {
+    assertString(name, 'name')
     ipcLog(`resolveStream:start name=${name} opts=${JSON.stringify(opts)}`)
     // Kill any existing stream for this repo
     const existing = activeStreams.get(name)
@@ -175,15 +215,17 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('engine:readAgentLog', async (_event, repoName: string) => {
-    console.log('[ipc:readAgentLog]', repoName)
-    const result = await e.readAgentLog(repoName)
+    const safeRepoName = assertString(repoName, 'repoName')
+    console.log('[ipc:readAgentLog]', safeRepoName)
+    const result = await e.readAgentLog(safeRepoName)
     console.log('[ipc:readAgentLog] result for', repoName, result.events.length, 'events, isRunning:', result.isRunning)
     return result
   })
 
   ipcMain.handle('engine:repoDiff', async (_event, repoName: string) => {
-    console.log('[ipc:repoDiff]', repoName)
-    return e.repoDiff(repoName)
+    const safeRepoName = assertString(repoName, 'repoName')
+    console.log('[ipc:repoDiff]', safeRepoName)
+    return e.repoDiff(safeRepoName)
   })
 
   ipcMain.handle('app:setAutoLaunch', async (_event, enabled: boolean) => {
@@ -247,7 +289,8 @@ X-KDE-autostart-after=panel
   })
 
   ipcMain.handle('fs:isGitRepo', async (_event, dirPath: string) => {
-    return existsSync(join(dirPath, '.git'))
+    const safePath = assertSafePath(dirPath, 'dirPath')
+    return existsSync(join(safePath, '.git'))
   })
 
   // Linux window control buttons (frameless window)
