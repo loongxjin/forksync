@@ -189,7 +189,7 @@ export class EngineClient {
       const ts = new Date().toISOString()
       const line = `[${ts}] ${msg}\n`
       console.log(`[engine:resolveStream] ${msg}`)
-      try { appendFileSync(debugLogPath, line) } catch {}
+      try { appendFileSync(debugLogPath, line) } catch (e) { console.warn('[engine:resolveStream] failed to write debug log:', e) }
     }
     debugLog(`START resolveStream name=${name} pid=${child.pid} args=${JSON.stringify(fullArgs)}`)
 

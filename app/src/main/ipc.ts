@@ -179,7 +179,7 @@ export function registerIpcHandlers(): void {
   const ipcLogPath = join(homedir(), '.forksync', 'logs', 'electron-resolve-stream.log')
   const ipcLog = (msg: string): void => {
     const ts = new Date().toISOString()
-    try { appendFileSync(ipcLogPath, `[${ts}] [IPC] ${msg}\n`) } catch {}
+    try { appendFileSync(ipcLogPath, `[${ts}] [IPC] ${msg}\n`) } catch (e) { console.warn('[ipc] failed to write IPC log:', e) }
   }
 
   ipcMain.on('engine:resolveStream:start', (event, name: string, opts?: { agent?: string; noConfirm?: boolean }) => {
