@@ -25,6 +25,7 @@ interface SettingsState {
   theme: Theme
   ideConfig: IDEConfig | null
   ideLoading: boolean
+  ideError: string | null
   engineConfig: EngineConfig | null
   configLoading: boolean
   configError: string | null
@@ -34,6 +35,7 @@ type SettingsAction =
   | { type: 'SET_THEME'; theme: Theme }
   | { type: 'SET_IDE_CONFIG'; config: IDEConfig }
   | { type: 'SET_IDE_LOADING'; loading: boolean }
+  | { type: 'SET_IDE_ERROR'; error: string }
   | { type: 'SET_ENGINE_CONFIG'; config: EngineConfig }
   | { type: 'SET_CONFIG_LOADING'; loading: boolean }
   | { type: 'SET_CONFIG_ERROR'; error: string | null }
@@ -42,6 +44,7 @@ const initialState: SettingsState = {
   theme: (localStorage.getItem('forksync-theme') as Theme) || 'dark',
   ideConfig: null,
   ideLoading: true,
+  ideError: null,
   engineConfig: null,
   configLoading: true,
   configError: null
@@ -55,6 +58,8 @@ function settingsReducer(state: SettingsState, action: SettingsAction): Settings
       return { ...state, ideConfig: action.config, ideLoading: false }
     case 'SET_IDE_LOADING':
       return { ...state, ideLoading: action.loading }
+    case 'SET_IDE_ERROR':
+      return { ...state, ideError: action.error, ideLoading: false }
     case 'SET_ENGINE_CONFIG':
       return { ...state, engineConfig: action.config, configLoading: false, configError: null }
     case 'SET_CONFIG_LOADING':
@@ -114,8 +119,8 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
     try {
       const config = await engineApi.ideGetConfig()
       dispatch({ type: 'SET_IDE_CONFIG', config })
-    } catch {
-      dispatch({ type: 'SET_IDE_LOADING', loading: false })
+    } catch (err) {
+      dispatch({ type: 'SET_IDE_ERROR', error: (err as Error).message })
     }
   }, [])
 
