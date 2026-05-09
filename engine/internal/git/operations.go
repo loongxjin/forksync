@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/conflict"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	git "github.com/go-git/go-git/v5"
 	gitConfig "github.com/go-git/go-git/v5/config"
@@ -56,16 +57,49 @@ func (o *Operations) proxyEnv() []string {
 
 // runGit runs a git command in the repo directory and returns stdout.
 func (o *Operations) runGit(ctx context.Context, repoPath string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repoPath}, args...)...)
+	start := time.Now()
+	fullArgs := append([]string{"-C", repoPath}, args...)
+	cmd := exec.CommandContext(ctx, "git", fullArgs...)
 	cmd.Env = o.proxyEnv()
-	return cmd.Output()
+	output, err := cmd.Output()
+	elapsed := time.Since(start)
+	if err != nil {
+		logger.Debug("git command failed",
+			"args", strings.Join(fullArgs, " "),
+			"elapsed", elapsed,
+			"error", err,
+		)
+	} else {
+		logger.Debug("git command",
+			"args", strings.Join(fullArgs, " "),
+			"elapsed", elapsed,
+		)
+	}
+	return output, err
 }
 
 // runGitCombined runs a git command and returns combined stdout+stderr.
 func (o *Operations) runGitCombined(ctx context.Context, repoPath string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repoPath}, args...)...)
+	start := time.Now()
+	fullArgs := append([]string{"-C", repoPath}, args...)
+	cmd := exec.CommandContext(ctx, "git", fullArgs...)
 	cmd.Env = o.proxyEnv()
-	return cmd.CombinedOutput()
+	output, err := cmd.CombinedOutput()
+	elapsed := time.Since(start)
+	if err != nil {
+		logger.Debug("git command failed",
+			"args", strings.Join(fullArgs, " "),
+			"elapsed", elapsed,
+			"output", string(output),
+			"error", err,
+		)
+	} else {
+		logger.Debug("git command",
+			"args", strings.Join(fullArgs, " "),
+			"elapsed", elapsed,
+		)
+	}
+	return output, err
 }
 
 // IsGitRepo checks if the given path is a valid git repository.
@@ -82,6 +116,11 @@ func (o *Operations) Fetch(ctx context.Context, repo types.Repo) error {
 		return nil
 	}
 	// Fallback to CLI
+	logger.Debug("git: go-git fetch failed, falling back to CLI",
+		"repo", repo.Name,
+		"path", repo.Path,
+		"error", err,
+	)
 	return o.fetchCLI(ctx, repo)
 }
 
@@ -100,11 +139,17 @@ func (o *Operations) fetchGoGit(ctx context.Context, repo types.Repo) error {
 	}
 
 	remoteName := repo.RemoteName()
+	logger.Debug("git: fetchGoGit starting", "repo", repo.Name, "remote", remoteName)
 
 	remote, err := r.Remote(remoteName)
 	if err != nil {
 		// If upstream remote doesn't exist, try to add it
 		if repo.Upstream != "" {
+			logger.Debug("git: remote not found, creating upstream remote",
+				"repo", repo.Name,
+				"remote", remoteName,
+				"upstream", repo.Upstream,
+			)
 			_, err = r.CreateRemote(&gitConfig.RemoteConfig{
 				Name: "upstream",
 				URLs: []string{repo.Upstream},
@@ -127,6 +172,10 @@ func (o *Operations) fetchGoGit(ctx context.Context, repo types.Repo) error {
 	if err != nil && err != git.NoErrAlreadyUpToDate {
 		return fmt.Errorf("fetch: %w", err)
 	}
+	logger.Debug("git: fetchGoGit completed",
+		"repo", repo.Name,
+		"already_up_to_date", err == git.NoErrAlreadyUpToDate,
+	)
 	return nil
 }
 
@@ -143,6 +192,7 @@ func (o *Operations) fetchCLI(ctx context.Context, repo types.Repo) error {
 		}
 	}
 	if !remoteExists && repo.Upstream != "" {
+		logger.Debug("git: CLI creating remote", "repo", repo.Name, "remote", remoteName, "url", repo.Upstream)
 		if _, err := o.runGit(ctx, repo.Path, "remote", "add", remoteName, repo.Upstream); err != nil {
 			return fmt.Errorf("git remote add %s: %w", remoteName, err)
 		}
@@ -170,6 +220,11 @@ func (o *Operations) Status(ctx context.Context, repo types.Repo) (*StatusResult
 		return result, nil
 	}
 	// Fallback to CLI
+	logger.Debug("git: go-git status failed, falling back to CLI",
+		"repo", repo.Name,
+		"path", repo.Path,
+		"error", err,
+	)
 	return o.statusCLI(ctx, repo)
 }
 
@@ -187,6 +242,9 @@ func (o *Operations) statusGoGit(ctx context.Context, repo types.Repo) (*StatusR
 			return nil, fmt.Errorf("get HEAD: %w", err)
 		}
 		branch = head.Name().Short()
+		logger.Debug("git: statusGoGit branch from HEAD", "repo", repo.Name, "branch", branch)
+	} else {
+		logger.Debug("git: statusGoGit using stored branch", "repo", repo.Name, "branch", branch)
 	}
 
 	// Resolve local ref for the stored branch
@@ -199,6 +257,10 @@ func (o *Operations) statusGoGit(ctx context.Context, repo types.Repo) (*StatusR
 		}
 		branch = head.Name().Short()
 		localRef = head
+		logger.Debug("git: statusGoGit branch ref not found, fell back to HEAD",
+			"repo", repo.Name,
+			"branch", branch,
+		)
 	}
 
 	remoteBranchName := repo.GetRemoteBranchForLocal(branch)
@@ -206,6 +268,11 @@ func (o *Operations) statusGoGit(ctx context.Context, repo types.Repo) (*StatusR
 
 	remoteRef, err := r.Reference(plumbing.ReferenceName(remoteBranch), true)
 	if err != nil {
+		logger.Debug("git: statusGoGit remote ref not found, returning 0/0",
+			"repo", repo.Name,
+			"remote_branch", remoteBranch,
+			"error", err,
+		)
 		return &StatusResult{AheadBy: 0, BehindBy: 0, Branch: branch}, nil
 	}
 
@@ -213,6 +280,15 @@ func (o *Operations) statusGoGit(ctx context.Context, repo types.Repo) (*StatusR
 	if err != nil {
 		return nil, err
 	}
+
+	logger.Debug("git: statusGoGit result",
+		"repo", repo.Name,
+		"branch", branch,
+		"ahead", ahead,
+		"behind", behind,
+		"local_hash", localRef.Hash().String()[:8],
+		"remote_hash", remoteRef.Hash().String()[:8],
+	)
 
 	return &StatusResult{AheadBy: ahead, BehindBy: behind, Branch: branch}, nil
 }
@@ -245,6 +321,7 @@ func (o *Operations) statusCLI(ctx context.Context, repo types.Repo) (*StatusRes
 			return nil, fmt.Errorf("get branch: %w", err)
 		}
 		branch = strings.TrimSpace(string(output))
+		logger.Debug("git: statusCLI branch from HEAD", "repo", repo.Name, "branch", branch)
 	}
 
 	// Verify the local branch exists
@@ -256,6 +333,10 @@ func (o *Operations) statusCLI(ctx context.Context, repo types.Repo) (*StatusRes
 			return nil, fmt.Errorf("get branch: %w", headErr)
 		}
 		branch = strings.TrimSpace(string(output))
+		logger.Debug("git: statusCLI branch ref not found, fell back to HEAD",
+			"repo", repo.Name,
+			"branch", branch,
+		)
 	}
 
 	remoteName := repo.RemoteName()
@@ -266,14 +347,32 @@ func (o *Operations) statusCLI(ctx context.Context, repo types.Repo) (*StatusRes
 	ahead, err := o.revListCount(ctx, repo.Path, upstreamRef, branch)
 	if err != nil {
 		// Upstream ref may not exist yet
+		logger.Debug("git: statusCLI ahead count failed (upstream ref may not exist)",
+			"repo", repo.Name,
+			"upstream_ref", upstreamRef,
+			"error", err,
+		)
 		ahead = 0
 	}
 
 	// Get behind count
 	behind, err := o.revListCount(ctx, repo.Path, branch, upstreamRef)
 	if err != nil {
+		logger.Debug("git: statusCLI behind count failed",
+			"repo", repo.Name,
+			"upstream_ref", upstreamRef,
+			"error", err,
+		)
 		behind = 0
 	}
+
+	logger.Debug("git: statusCLI result",
+		"repo", repo.Name,
+		"branch", branch,
+		"upstream_ref", upstreamRef,
+		"ahead", ahead,
+		"behind", behind,
+	)
 
 	return &StatusResult{AheadBy: ahead, BehindBy: behind, Branch: branch}, nil
 }
@@ -315,12 +414,24 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 		branch = strings.TrimSpace(string(output))
 	}
 
+	logger.Debug("git: mergeCLI starting",
+		"repo", repo.Name,
+		"path", repo.Path,
+		"branch", branch,
+		"remote", remoteName,
+	)
+
 	// Ensure we are on the target branch before merging
 	currentBranch, branchErr := o.GetCurrentBranch(ctx, repo.Path)
 	if branchErr != nil {
 		return nil, fmt.Errorf("get current branch: %w", branchErr)
 	}
 	if currentBranch != "" && currentBranch != branch {
+		logger.Debug("git: mergeCLI checkout before merge",
+			"repo", repo.Name,
+			"current_branch", currentBranch,
+			"target_branch", branch,
+		)
 		if _, err := o.runGitCombined(ctx, repo.Path, "checkout", branch); err != nil {
 			return nil, fmt.Errorf("checkout %s: %w", branch, err)
 		}
@@ -334,12 +445,25 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 	if err != nil {
 		if strings.Contains(outputStr, "CONFLICT") {
 			conflicts := o.DetectConflicts(ctx, repo.Path)
+			logger.Debug("git: mergeCLI detected CONFLICT",
+				"repo", repo.Name,
+				"upstream_ref", upstreamRef,
+				"raw_conflicts", conflicts,
+			)
 			// Filter out files that have been manually resolved but not yet staged.
 			// Auto-stage them so they don't appear as unresolved conflicts.
 			stillConflicted := o.FilterResolvedFiles(ctx, repo.Path, conflicts)
+			logger.Debug("git: mergeCLI after FilterResolvedFiles",
+				"repo", repo.Name,
+				"still_conflicted", stillConflicted,
+				"auto_staged_count", len(conflicts)-len(stillConflicted),
+			)
 			if len(stillConflicted) == 0 {
 				// All conflicts were auto-staged — no real conflicts remain.
 				// MERGE_HEAD still exists, caller should handle this state.
+				logger.Debug("git: mergeCLI all conflicts auto-staged, MERGE_HEAD remains",
+					"repo", repo.Name,
+				)
 				return &MergeResult{HasConflicts: false}, nil
 			}
 			return &MergeResult{HasConflicts: true, Conflicts: stillConflicted}, nil
@@ -347,6 +471,10 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 		return nil, fmt.Errorf("merge %s: %s: %w", upstreamRef, outputStr, err)
 	}
 
+	logger.Debug("git: mergeCLI completed successfully",
+		"repo", repo.Name,
+		"upstream_ref", upstreamRef,
+	)
 	return &MergeResult{HasConflicts: false}, nil
 }
 
@@ -354,6 +482,10 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 func (o *Operations) DetectConflicts(ctx context.Context, repoPath string) []string {
 	output, err := o.runGit(ctx, repoPath, "diff", "--name-only", "--diff-filter=U")
 	if err != nil {
+		logger.Debug("git: DetectConflicts error",
+			"path", repoPath,
+			"error", err,
+		)
 		return nil
 	}
 
@@ -397,15 +529,23 @@ func (o *Operations) IsMergingState(ctx context.Context, repoPath string) (bool,
 		return false, nil, nil
 	}
 
+	logger.Debug("git: MERGE_HEAD exists, checking unmerged files", "path", repoPath)
+
 	// MERGE_HEAD exists — check for unmerged files
 	unmergedFiles := o.DetectConflicts(ctx, repoPath)
 	if len(unmergedFiles) == 0 {
+		logger.Debug("git: MERGE_HEAD exists but no unmerged files", "path", repoPath)
 		return true, nil, nil
 	}
 
 	// Filter out files that have been manually resolved but not staged.
 	// Auto-stage them so they are counted as resolved.
 	stillConflicted := o.FilterResolvedFiles(ctx, repoPath, unmergedFiles)
+	logger.Debug("git: IsMergingState result",
+		"path", repoPath,
+		"unmerged_files", unmergedFiles,
+		"still_conflicted", stillConflicted,
+	)
 	return true, stillConflicted, nil
 }
 
@@ -418,14 +558,27 @@ func (o *Operations) FilterResolvedFiles(ctx context.Context, repoPath string, u
 		content, err := o.GetConflictedContent(ctx, repoPath, file)
 		if err != nil {
 			// Can't read file — assume it's still conflicted
+			logger.Debug("git: FilterResolvedFiles can't read file, assuming conflicted",
+				"file", file,
+				"error", err,
+			)
 			stillConflicted = append(stillConflicted, file)
 			continue
 		}
 		if conflict.HasConflictMarkers(content) {
+			logger.Debug("git: FilterResolvedFiles file still has conflict markers", "file", file)
 			stillConflicted = append(stillConflicted, file)
 		} else {
 			// File is resolved but not staged — auto-stage it
-			_ = o.StageFile(ctx, repoPath, file)
+			if stageErr := o.StageFile(ctx, repoPath, file); stageErr != nil {
+				logger.Warn("git: FilterResolvedFiles failed to auto-stage resolved file",
+					"file", file,
+					"error", stageErr,
+				)
+				stillConflicted = append(stillConflicted, file)
+			} else {
+				logger.Debug("git: FilterResolvedFiles auto-staged resolved file", "file", file)
+			}
 		}
 	}
 	return stillConflicted
@@ -650,24 +803,28 @@ func (o *Operations) StageAll(ctx context.Context, repoPath string) error {
 
 // Commit creates a new commit with the given message, skipping pre-commit hooks.
 func (o *Operations) Commit(ctx context.Context, repoPath, message string) error {
+	logger.Debug("git: Commit", "path", repoPath, "message", message)
 	_, err := o.runGitCombined(ctx, repoPath, "commit", "-m", message, "--no-verify")
 	return err
 }
 
 // CommitWithVerify creates a new commit with the given message, without --no-verify.
 func (o *Operations) CommitWithVerify(ctx context.Context, repoPath, message string) error {
+	logger.Debug("git: CommitWithVerify", "path", repoPath, "message", message)
 	_, err := o.runGitCombined(ctx, repoPath, "commit", "-m", message)
 	return err
 }
 
 // CommitNoEdit creates a commit using the default merge message, skipping pre-commit hooks.
 func (o *Operations) CommitNoEdit(ctx context.Context, repoPath string) error {
+	logger.Debug("git: CommitNoEdit", "path", repoPath)
 	_, err := o.runGitCombined(ctx, repoPath, "commit", "--no-edit", "--no-verify")
 	return err
 }
 
 // CommitNoEditWithVerify creates a commit using the default merge message, without --no-verify.
 func (o *Operations) CommitNoEditWithVerify(ctx context.Context, repoPath string) error {
+	logger.Debug("git: CommitNoEditWithVerify", "path", repoPath)
 	_, err := o.runGitCombined(ctx, repoPath, "commit", "--no-edit")
 	return err
 }

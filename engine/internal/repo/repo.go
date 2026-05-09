@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
@@ -48,6 +49,7 @@ func (s *JSONStore) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	logger.Debug("repo: loading store", "path", s.path)
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -76,6 +78,8 @@ func (s *JSONStore) Load() error {
 		s.repos[r.ID] = r
 		s.nameIndex[r.Name] = r.ID
 	}
+
+	logger.Debug("repo: store loaded", "repo_count", len(s.repos), "migrated", migrated)
 
 	// Persist migration if any repos were updated
 	if migrated {
@@ -172,8 +176,16 @@ func (s *JSONStore) Update(repo types.Repo) error {
 
 	old, ok := s.repos[repo.ID]
 	if !ok {
+		logger.Debug("repo: Update repo not found", "id", repo.ID, "name", repo.Name)
 		return ErrRepoNotFound
 	}
+
+	logger.Debug("repo: Update",
+		"id", repo.ID,
+		"name", repo.Name,
+		"old_status", string(old.Status),
+		"new_status", string(repo.Status),
+	)
 
 	if old.Name != repo.Name {
 		// Check new name doesn't collide with another repo

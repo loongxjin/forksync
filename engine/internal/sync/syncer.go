@@ -134,6 +134,15 @@ func (r *Result) ToSyncResult() types.SyncResult {
 
 // SyncRepo syncs a single repository.
 func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
+	logger.Debug("sync: SyncRepo started",
+		"repo", r.Name,
+		"id", r.ID,
+		"path", r.Path,
+		"status", string(r.Status),
+		"branch", r.Branch,
+		"upstream", r.Upstream,
+	)
+
 	upstreamRef := s.gitOps.ResolveUpstreamRef(ctx, r)
 
 	result := &Result{
@@ -169,6 +178,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	s.saveWorkflow(r, wf)
 
 	// Phase 1: Pre-checks (conflict state detection)
+	logger.Debug("sync: checking conflict state", "repo", r.Name)
 	if stopped := s.checkConflictState(ctx, r, result); stopped {
 		result.Workflow = workflowFromResult(result)
 		s.saveWorkflow(r, result.Workflow)
@@ -190,6 +200,12 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 	// Note: IsMergingState auto-stages files that have been manually resolved
 	// but not yet staged, so unmergedFiles only contains truly conflicted files.
 	isMerging, unmergedFiles, err := s.gitOps.IsMergingState(ctx, r.Path)
+	logger.Debug("sync: conflict state check result",
+		"repo", r.Name,
+		"isMerging", isMerging,
+		"unmergedFiles", unmergedFiles,
+		"error", err,
+	)
 	if err == nil && isMerging {
 		if len(unmergedFiles) == 0 {
 			// All conflicts were resolved but not staged — now auto-staged.
@@ -236,6 +252,8 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 		return true
 	}
 
+	logger.Debug("sync: no active merge, checking stored status", "repo", r.Name, "stored_status", string(r.Status))
+
 	// Also check if stored status indicates a conflict state that hasn't been resolved
 	if r.Status == types.RepoStatusConflict || r.Status == types.RepoStatusResolving || r.Status == types.RepoStatusResolved || r.Status == types.RepoStatusWaiting {
 		result.Status = string(types.RepoStatusConflict)
@@ -277,6 +295,11 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	if s.shouldUseAgentResolve(r) {
 		timeout = agentResolveTimeout(s.cfg)
 	}
+	logger.Debug("sync: executeSync starting",
+		"repo", r.Name,
+		"timeout", timeout,
+		"agent_resolve", s.shouldUseAgentResolve(r),
+	)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -303,6 +326,14 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	if err != nil {
 		return s.failSync(r, result, wf, types.StepMerge, fmt.Sprintf("status check failed: %v", err), false)
 	}
+
+	logger.Debug("sync: status result",
+		"repo", r.Name,
+		"branch", statusResult.Branch,
+		"ahead", statusResult.AheadBy,
+		"behind", statusResult.BehindBy,
+		"oldHEAD", result.OldHEAD,
+	)
 
 	if statusResult.BehindBy == 0 {
 		AdvanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
@@ -386,6 +417,14 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	if s.cfg != nil && s.cfg.Agent.ConflictStrategy == types.StrategyAgentResolve {
 		autoAgentResolve = true
 	}
+
+	logger.Debug("sync: handleMergeConflicts strategy decision",
+		"repo", r.Name,
+		"conflicts", len(mergeResult.Conflicts),
+		"conflict_strategy", s.resolveStrategyOrDefault(),
+		"autoAgentResolve", autoAgentResolve,
+		"sessionMgr_nil", s.sessionMgr == nil,
+	)
 
 	if autoAgentResolve && s.sessionMgr != nil {
 		AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
