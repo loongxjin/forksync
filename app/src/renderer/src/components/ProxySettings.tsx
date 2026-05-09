@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '@/contexts/SettingsContext'
+import { Label } from '@/components/ui/label'
 import { Toggle } from '@/components/ui/toggle'
 import { Input } from '@/components/ui/input'
 import { useTranslation } from 'react-i18next'

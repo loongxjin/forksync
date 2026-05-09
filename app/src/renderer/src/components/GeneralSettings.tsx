@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useAgents } from '@/contexts/AgentContext'
+import { Label } from '@/components/ui/label'
 import { Toggle } from '@/components/ui/toggle'
 import { Input } from '@/components/ui/input'
 import { IDEConfig } from '@/components/IDEConfig'
