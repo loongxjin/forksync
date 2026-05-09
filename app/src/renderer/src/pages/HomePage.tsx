@@ -279,6 +279,7 @@ export function HomePage(): JSX.Element {
       if (processedStreamResultsRef.current.has(repoName)) continue
       processedStreamResultsRef.current.add(repoName)
       hasNew = true
+      console.log('[HomePage] stream result for', repoName, 'result:', result ? 'non-null' : 'null', 'repos status:', (repos.find(r => r.name === repoName)?.status ?? 'not-found'))
       if (result) {
         setResolveResults((prev) => ({ ...prev, [repoName]: result }))
       }
@@ -292,10 +293,15 @@ export function HomePage(): JSX.Element {
     }
     // Only call refresh/loadHistory once per batch, not per repo.
     if (hasNew) {
-      refresh().catch(() => {})
+      console.log('[HomePage] calling refresh after stream done')
+      refresh().then(() => {
+        console.log('[HomePage] refresh completed after stream done')
+      }).catch((e) => {
+        console.error('[HomePage] refresh failed after stream done', e)
+      })
       loadHistory()
     }
-  }, [streamResults, refresh, loadHistory, engineConfig])
+  }, [streamResults, refresh, loadHistory, engineConfig, repos])
 
   const handleAccept = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
