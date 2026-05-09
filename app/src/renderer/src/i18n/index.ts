@@ -16,7 +16,7 @@ i18n.use(initReactI18next).init({
     en: { translation: en }
   },
   lng: savedLocale,
-  fallbackLng: 'en',
+  fallbackLng: 'zh',
   interpolation: {
     escapeValue: false // React already escapes
   }
