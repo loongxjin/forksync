@@ -82,13 +82,18 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
     case 'STREAM_START': {
       const nextLive = new Set(state.streamLive)
       nextLive.add(action.repoName)
+      // Clear both events AND previous results so stale data from a prior
+      // (failed) resolve attempt does not leak into the new session.
+      const nextResults = { ...state.streamResults }
+      delete nextResults[action.repoName]
       return {
         ...state,
         streamLive: nextLive,
         streamEvents: {
           ...state.streamEvents,
           [action.repoName]: []
-        }
+        },
+        streamResults: nextResults
       }
     }
     case 'STREAM_EVENT': {

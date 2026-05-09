@@ -238,6 +238,13 @@ export function HomePage(): JSX.Element {
   // Conflict resolution handlers
   const handleResolve = useCallback(async (repo: Repo) => {
     setLocalLoading((prev) => ({ ...prev, [repo.name]: true }))
+    // Clear any stale resolve result from a previous (failed) attempt so that
+    // the ConflictInlinePanel / WorkflowSteps do not show outdated data.
+    setResolveResults((prev) => {
+      const next = { ...prev }
+      delete next[repo.name]
+      return next
+    })
     try {
       const noConfirm = engineConfig?.Agent?.ConfirmBeforeCommit === false
 
