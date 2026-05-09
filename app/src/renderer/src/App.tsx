@@ -1,6 +1,5 @@
 import './assets/main.css'
 import './i18n'
-import { useEffect } from 'react'
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { RepoProvider } from './contexts/RepoContext'
 import { AgentProvider } from './contexts/AgentContext'
@@ -12,15 +11,6 @@ import { Layout } from './components/Layout'
 import { HomePage } from './pages/HomePage'
 
 function App(): JSX.Element {
-  useEffect(() => {
-    const saved = localStorage.getItem('forksync-theme')
-    if (saved === 'light') {
-      document.documentElement.classList.remove('dark')
-    } else {
-      document.documentElement.classList.add('dark')
-    }
-  }, [])
-
   return (
     <ErrorBoundary>
       <SettingsProvider>
