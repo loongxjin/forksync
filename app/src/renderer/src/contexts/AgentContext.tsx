@@ -297,8 +297,14 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
   const resolveStream = useCallback((name: string, opts?: { agent?: string; noConfirm?: boolean }) => {
     console.log('[AgentContext] resolveStream called', name, opts, 'ipcSetup:', ipcSetupRef.current)
     dispatch({ type: 'STREAM_START', repoName: name })
-    engineApi.resolveStreamStart(name, opts)
-    console.log('[AgentContext] resolveStreamStart sent')
+    try {
+      engineApi.resolveStreamStart(name, opts)
+      console.log('[AgentContext] resolveStreamStart sent')
+    } catch (err) {
+      console.error('[AgentContext] resolveStreamStart failed', name, err)
+      dispatch({ type: 'STREAM_EVENT', repoName: name, event: { t: 'error', d: `Failed to start resolve: ${(err as Error).message}`, ts: new Date().toISOString() } })
+      dispatch({ type: 'STREAM_DONE', repoName: name, result: null })
+    }
   }, [])
 
   const loadAgentLog = useCallback(async (name: string): Promise<void> => {
