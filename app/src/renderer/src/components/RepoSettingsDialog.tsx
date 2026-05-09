@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { PostSyncCommand } from '@/types/engine'
 import { engineApi } from '@/lib/api'
 import { Trash2, X } from 'lucide-react'
-import { useAnimatedMount } from '@/hooks/useAnimatedMount'
+import { Modal } from '@/components/ui/modal'
 
 interface RepoSettingsDialogProps {
   repoName: string
@@ -77,19 +77,8 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
     }
   }
 
-  const mounted = useAnimatedMount(open)
-
-  if (!mounted) return null
-
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center transition-[visibility] duration-200 ${!open && 'invisible'}`}>
-      {/* Backdrop */}
-      <div className={`absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0'}`} onClick={onClose} />
-
-      {/* Dialog */}
-      <div className={`relative z-10 w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl transition-all duration-200 ${
-        open ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-      }`}>
+    <Modal open={open} onClose={onClose} maxWidth="max-w-lg">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{t('postSync.title')}</h2>
           <button
@@ -170,7 +159,6 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
             + {t('postSync.addCommand')}
           </button>
         )}
-      </div>
-    </div>
+      </Modal>
   )
 }

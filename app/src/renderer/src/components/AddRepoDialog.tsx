@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { BranchMapping } from '@/types/engine'
 import { ArrowRight } from 'lucide-react'
-import { useAnimatedMount } from '@/hooks/useAnimatedMount'
+import { Modal } from '@/components/ui/modal'
 
 interface AddRepoDialogProps {
   open: boolean
@@ -16,19 +16,15 @@ interface AddRepoDialogProps {
 
 export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX.Element | null {
   const { t } = useTranslation()
+
   const [path, setPath] = useState('')
   const [upstream, setUpstream] = useState('')
   const [adding, setAdding] = useState(false)
-  
   const [localBranches, setLocalBranches] = useState<string[]>([])
   const [remoteBranches, setRemoteBranches] = useState<string[]>([])
   const [branchMapping, setBranchMapping] = useState<BranchMapping | undefined>(undefined)
   const [loadingBranches, setLoadingBranches] = useState(false)
   const [enableMapping, setEnableMapping] = useState(false)
-
-  const mounted = useAnimatedMount(open)
-
-  if (!mounted) return null
 
   const handleSelectDirectory = async (): Promise<void> => {
     try {
@@ -111,16 +107,7 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
   }
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center transition-[visibility] duration-200 ${!open && 'invisible'}`}>
-      <div
-        className={`absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0'}`}
-        onClick={handleClose}
-      />
-      <div
-        className={`w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-2xl transition-all duration-200 ${
-          open ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-        }`}
-      >
+    <Modal open={open} onClose={handleClose} maxWidth="max-w-lg" scrollable>
         <h3 className="text-lg font-semibold">{t('addRepo.title')}</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           {t('addRepo.description')}
@@ -277,7 +264,6 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
             </Button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   )
 }
