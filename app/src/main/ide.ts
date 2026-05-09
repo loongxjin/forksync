@@ -268,7 +268,10 @@ async function openInIDE(repoPath: string, ideId: string): Promise<IDEOpenResult
       })
       child.unref()
     } else if (process.platform === 'win32') {
-      const child = execFile('cmd', ['/c', 'start', '', ide.appName || ide.name, repoPath], (err) => {
+      // Use PowerShell Start-Process instead of cmd /c start to avoid shell
+      // injection via cmd.exe's metacharacter re-parsing (& | > < ^).
+      const appName = ide.appName || ide.name
+      const child = execFile('powershell', ['-Command', 'Start-Process', appName, repoPath], (err) => {
         if (err) {
           console.error(`Failed to open ${repoPath} with ${ide.name}:`, err)
         }
