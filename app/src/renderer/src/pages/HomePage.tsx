@@ -258,8 +258,6 @@ export function HomePage(): JSX.Element {
         updateRepo({ ...repo, status: wfRes.data.status ?? repo.status, workflow: wfRes.data.workflow })
       }
 
-      // Clear processed marker so a retry after failure is handled correctly
-      processedStreamResultsRef.current.delete(repo.name)
       clearStream(repo.name)
       // Start streaming resolve and open terminal drawer
       resolveStream(repo.name, { agent: preferred || undefined, noConfirm })
@@ -273,14 +271,10 @@ export function HomePage(): JSX.Element {
     }
   }, [resolveStream, preferred, updateRepo, refresh, engineConfig, showToast, clearStream])
 
-  // Listen for streaming resolve results
-  // Use a processed set to avoid re-handling results that were already consumed.
-  const processedStreamResultsRef = useRef<Set<string>>(new Set())
+  // Listen for streaming resolve results.
   useEffect(() => {
     let hasNew = false
     for (const [repoName, result] of Object.entries(streamResults)) {
-      if (processedStreamResultsRef.current.has(repoName)) continue
-      processedStreamResultsRef.current.add(repoName)
       hasNew = true
       console.log('[HomePage] stream result for', repoName, 'result:', result ? 'non-null' : 'null', 'repos status:', (repos.find(r => r.name === repoName)?.status ?? 'not-found'))
       if (result) {
