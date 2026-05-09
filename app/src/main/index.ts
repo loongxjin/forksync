@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, nativeImage } from 'electron'
+import { app, shell, BrowserWindow, nativeImage, session } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
@@ -54,6 +54,20 @@ function createWindow(): void {
       shell.openExternal(details.url)
     }
     return { action: 'deny' }
+  })
+
+  // Set Content-Security-Policy
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          is.dev
+            ? "default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ws://localhost:* http://localhost:*"
+            : "default-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'"
+        ]
+      }
+    })
   })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
