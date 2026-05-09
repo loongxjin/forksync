@@ -2,6 +2,52 @@ import { type RepoStatus } from '@/types/engine'
 import { useTranslation } from 'react-i18next'
 import { CheckCircle2, Loader2, AlertTriangle, Zap, XCircle, Circle, PauseCircle } from 'lucide-react'
 
+// ---------------------------------------------------------------------------
+// Single source of truth: status → color category
+// ---------------------------------------------------------------------------
+
+type ColorCategory = 'success' | 'warning' | 'error' | 'muted'
+
+const STATUS_COLOR_CATEGORY: Record<RepoStatus, ColorCategory> = {
+  up_to_date: 'success',
+  sync_needed: 'warning',
+  syncing: 'warning',
+  conflict: 'error',
+  resolving: 'warning',
+  resolved: 'success',
+  waiting: 'warning',
+  error: 'error',
+  unconfigured: 'muted'
+}
+
+/** Map color category to HSL CSS variable */
+const CATEGORY_HSL: Record<ColorCategory, string> = {
+  success: 'hsl(var(--success))',
+  warning: 'hsl(var(--warning))',
+  error: 'hsl(var(--error))',
+  muted: 'hsl(var(--muted-foreground))'
+}
+
+/** Map color category to Tailwind text class */
+const CATEGORY_TEXT_CLASS: Record<ColorCategory, string> = {
+  success: 'text-success',
+  warning: 'text-warning',
+  error: 'text-error',
+  muted: 'text-muted-foreground'
+}
+
+// ---------------------------------------------------------------------------
+// Status color utility
+// ---------------------------------------------------------------------------
+
+export function getStatusColor(status: RepoStatus): string {
+  return CATEGORY_HSL[STATUS_COLOR_CATEGORY[status]] ?? CATEGORY_HSL.muted
+}
+
+// ---------------------------------------------------------------------------
+// StatusCard component
+// ---------------------------------------------------------------------------
+
 interface StatusCardProps {
   icon: React.ReactNode
   label: string
@@ -28,49 +74,28 @@ export function StatusCard({ icon, label, count, color }: StatusCardProps): JSX.
 // ---------------------------------------------------------------------------
 
 export function StatusIcon({ status, size = 16 }: { status: RepoStatus; size?: number }): JSX.Element {
+  const colorClass = CATEGORY_TEXT_CLASS[STATUS_COLOR_CATEGORY[status]] ?? CATEGORY_TEXT_CLASS.muted
   switch (status) {
     case 'up_to_date':
-      return <CheckCircle2 size={size} className="text-success" />
+      return <CheckCircle2 size={size} className={colorClass} />
     case 'sync_needed':
-      return <AlertTriangle size={size} className="text-warning" />
+      return <AlertTriangle size={size} className={colorClass} />
     case 'syncing':
-      return <Loader2 size={size} className="animate-spin text-warning" />
+      return <Loader2 size={size} className={`animate-spin ${colorClass}`} />
     case 'conflict':
-      return <AlertTriangle size={size} className="text-error" />
+      return <AlertTriangle size={size} className={colorClass} />
     case 'resolving':
-      return <Zap size={size} className="text-warning" />
+      return <Zap size={size} className={colorClass} />
     case 'resolved':
-      return <CheckCircle2 size={size} className="text-success" />
+      return <CheckCircle2 size={size} className={colorClass} />
     case 'waiting':
-      return <PauseCircle size={size} className="text-warning" />
+      return <PauseCircle size={size} className={colorClass} />
     case 'error':
-      return <XCircle size={size} className="text-error" />
+      return <XCircle size={size} className={colorClass} />
     case 'unconfigured':
-      return <Circle size={size} className="text-muted-foreground" />
+      return <Circle size={size} className={colorClass} />
     default:
-      return <Circle size={size} className="text-muted-foreground" />
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Status color utilities
-// ---------------------------------------------------------------------------
-
-export function getStatusColor(status: RepoStatus): string {
-  switch (status) {
-    case 'up_to_date':
-    case 'resolved':
-      return 'hsl(var(--success))'
-    case 'sync_needed':
-    case 'syncing':
-    case 'resolving':
-    case 'waiting':
-      return 'hsl(var(--warning))'
-    case 'conflict':
-    case 'error':
-      return 'hsl(var(--error))'
-    default:
-      return 'hsl(var(--muted-foreground))'
+      return <Circle size={size} className={colorClass} />
   }
 }
 
@@ -78,23 +103,20 @@ export function getStatusColor(status: RepoStatus): string {
 // Status helpers
 // ---------------------------------------------------------------------------
 
-const STATUS_CONFIG: Record<
-  RepoStatus,
-  { labelKey: string; color: string }
-> = {
-  up_to_date: { labelKey: 'status.upToDate', color: 'hsl(var(--success))' },
-  sync_needed: { labelKey: 'status.syncNeeded', color: 'hsl(var(--warning))' },
-  syncing: { labelKey: 'status.syncing', color: 'hsl(var(--warning))' },
-  waiting: { labelKey: 'status.waiting', color: 'hsl(var(--warning))' },
-  conflict: { labelKey: 'status.conflict', color: 'hsl(var(--error))' },
-  resolving: { labelKey: 'status.resolving', color: 'hsl(var(--warning))' },
-  resolved: { labelKey: 'status.resolved', color: 'hsl(var(--success))' },
-  error: { labelKey: 'status.error', color: 'hsl(var(--error))' },
-  unconfigured: { labelKey: 'status.unconfigured', color: 'hsl(var(--muted-foreground))' }
+const STATUS_LABEL_KEYS: Record<RepoStatus, string> = {
+  up_to_date: 'status.upToDate',
+  sync_needed: 'status.syncNeeded',
+  syncing: 'status.syncing',
+  waiting: 'status.waiting',
+  conflict: 'status.conflict',
+  resolving: 'status.resolving',
+  resolved: 'status.resolved',
+  error: 'status.error',
+  unconfigured: 'status.unconfigured'
 }
 
 export function useStatusConfig(status: RepoStatus) {
   const { t } = useTranslation()
-  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.unconfigured
-  return { label: t(config.labelKey), color: config.color }
+  const labelKey = STATUS_LABEL_KEYS[status] ?? STATUS_LABEL_KEYS.unconfigured
+  return { label: t(labelKey), color: getStatusColor(status) }
 }
