@@ -37,7 +37,9 @@ function createWindow(): void {
     icon: nativeImage.createFromPath(join(__dirname, '../../resources/icon.png')),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
     },
     ...platformWindowOptions
   })
@@ -47,7 +49,10 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    const url = new URL(details.url)
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      shell.openExternal(details.url)
+    }
     return { action: 'deny' }
   })
 
