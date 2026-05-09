@@ -32,7 +32,7 @@ export function HomePage(): JSX.Element {
   } = useRepos()
   const {
     resolveAccept, resolveReject, preferred, loading: agentLoading, error: agentError,
-    resolveStream, loadAgentLog, streamEvents, streamLive, streamResults
+    resolveStream, loadAgentLog, clearStream, streamEvents, streamLive, streamResults
   } = useAgents()
   const { engineConfig } = useSettings()
   const {
@@ -258,6 +258,9 @@ export function HomePage(): JSX.Element {
         updateRepo({ ...repo, status: wfRes.data.status ?? repo.status, workflow: wfRes.data.workflow })
       }
 
+      // Clear processed marker so a retry after failure is handled correctly
+      processedStreamResultsRef.current.delete(repo.name)
+      clearStream(repo.name)
       // Start streaming resolve and open terminal drawer
       resolveStream(repo.name, { agent: preferred || undefined, noConfirm })
       setTerminalDrawerRepo(repo.name)
@@ -268,7 +271,7 @@ export function HomePage(): JSX.Element {
       // Release loading immediately — stream progress is tracked via streamLive, not localLoading.
       setLocalLoading((prev) => ({ ...prev, [repo.name]: false }))
     }
-  }, [resolveStream, preferred, updateRepo, refresh, engineConfig, showToast])
+  }, [resolveStream, preferred, updateRepo, refresh, engineConfig, showToast, clearStream])
 
   // Listen for streaming resolve results
   // Use a processed set to avoid re-handling results that were already consumed.
@@ -328,6 +331,7 @@ export function HomePage(): JSX.Element {
 
   const handleReject = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
+    clearStream(repoName)
     try {
       const ok = await resolveReject(repoName)
       if (!ok) return
@@ -340,10 +344,13 @@ export function HomePage(): JSX.Element {
     } finally {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
     }
-  }, [resolveReject, refresh])
+  }, [resolveReject, refresh, clearStream])
 
   const handleWorkflowContinue = useCallback(async (repoName: string, action: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
+    if (action === 'abort' || action === 'reject') {
+      clearStream(repoName)
+    }
     try {
       const res = await engineApi.workflowContinue(repoName, action)
       if (!res.success) {
@@ -362,7 +369,7 @@ export function HomePage(): JSX.Element {
     } finally {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
     }
-  }, [refresh, loadHistory, showToast, engineConfig])
+  }, [refresh, loadHistory, showToast, engineConfig, clearStream])
 
   // Repo actions
   const removingRef = useRef<string | null>(null)
