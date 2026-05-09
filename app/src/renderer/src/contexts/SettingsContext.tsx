@@ -41,7 +41,7 @@ type SettingsAction =
   | { type: 'SET_CONFIG_ERROR'; error: string | null }
 
 const initialState: SettingsState = {
-  theme: (localStorage.getItem('forksync-theme') as Theme) || 'dark',
+  theme: (() => { try { return (localStorage.getItem('forksync-theme') as Theme) || 'dark' } catch { return 'dark' as Theme } })(),
   ideConfig: null,
   ideLoading: true,
   ideError: null,

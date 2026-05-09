@@ -3,7 +3,12 @@ import { initReactI18next } from 'react-i18next'
 import zh from './locales/zh.json'
 import en from './locales/en.json'
 
-const savedLocale = localStorage.getItem('forksync-locale') || 'zh'
+let savedLocale = 'zh'
+try {
+  savedLocale = localStorage.getItem('forksync-locale') || 'zh'
+} catch {
+  // localStorage unavailable (e.g. restricted environment)
+}
 
 i18n.use(initReactI18next).init({
   resources: {

@@ -156,7 +156,12 @@
     "started": "Started {{agent}}",
     "completed": "Completed",
     "failed": "Failed",
-    "resumeScroll": "Resume auto-scroll"
+    "resumeScroll": "Resume auto-scroll",
+    "statusBar": "{{events}} events · {{tools}} tool calls",
+    "duration": "{{seconds}}s",
+    "filesCount": "{{count}} files",
+    "completedIn": "Completed in {{duration}}",
+    "failedIn": "Failed after {{duration}}"
   },
   "settings": {
     "title": "Settings",
@@ -330,19 +335,5 @@
     "completed": "Workflow completed successfully",
     "failed": "Workflow failed",
     "eventsCount": "{{count}} events"
-  },
-  "agentTerminal": {
-    "title": "Agent Resolve",
-    "waiting": "Waiting for agent output...",
-    "live": "Live",
-    "started": "Started {{agent}}",
-    "completed": "Completed",
-    "failed": "Failed",
-    "resumeScroll": "Resume auto-scroll",
-    "statusBar": "{{events}} events · {{tools}} tool calls",
-    "duration": "{{seconds}}s",
-    "filesCount": "{{count}} files",
-    "completedIn": "Completed in {{duration}}",
-    "failedIn": "Failed after {{duration}}"
   }
 }

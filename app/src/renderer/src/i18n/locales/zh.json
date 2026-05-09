@@ -156,7 +156,12 @@
     "started": "已启动 {{agent}}",
     "completed": "已完成",
     "failed": "失败",
-    "resumeScroll": "恢复自动滚动"
+    "resumeScroll": "恢复自动滚动",
+    "statusBar": "{{events}} 条事件 · {{tools}} 次工具调用",
+    "duration": "{{seconds}}秒",
+    "filesCount": "{{count}} 个文件",
+    "completedIn": "完成，耗时 {{duration}}",
+    "failedIn": "失败，耗时 {{duration}}"
   },
   "settings": {
     "title": "设置",
@@ -330,19 +335,5 @@
     "completed": "工作流已完成",
     "failed": "工作流失败",
     "eventsCount": "{{count}} 条事件"
-  },
-  "agentTerminal": {
-    "title": "Agent 解决",
-    "waiting": "等待 Agent 输出...",
-    "live": "实时",
-    "started": "已启动 {{agent}}",
-    "completed": "已完成",
-    "failed": "失败",
-    "resumeScroll": "恢复自动滚动",
-    "statusBar": "{{events}} 条事件 · {{tools}} 次工具调用",
-    "duration": "{{seconds}}秒",
-    "filesCount": "{{count}} 个文件",
-    "completedIn": "完成，耗时 {{duration}}",
-    "failedIn": "失败，耗时 {{duration}}"
   }
 }
