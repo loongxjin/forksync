@@ -142,7 +142,7 @@ export function AgentTerminalDrawer({
     document.addEventListener('mouseup', onMouseUp)
   }, [drawerWidth])
 
-  const renderEvent = (ev: AgentStreamEvent, index: number): React.ReactNode => {
+  const renderEvent = useCallback((ev: AgentStreamEvent, index: number): React.ReactNode => {
     const relTime = startTs ? formatRelative(ev.ts, startTs) : ''
 
     switch (ev.t) {
@@ -263,7 +263,7 @@ export function AgentTerminalDrawer({
           </div>
         )
     }
-  }
+  }, [startTs, t])
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
