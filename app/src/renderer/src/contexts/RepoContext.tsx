@@ -142,8 +142,13 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   const syncPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const syncPollCancelledRef = useRef(false)
 
+  // Reference-counted polling: multiple operations (syncAll, syncRepo) may run
+  // concurrently. Only stop the interval when the last consumer calls stopSyncPoll.
+  const syncPollCountRef = useRef(0)
+
   // Start polling repo status while sync is running (agent resolve can take minutes)
   const startSyncPoll = useCallback(() => {
+    syncPollCountRef.current++
     if (syncPollRef.current) return // already polling
     syncPollCancelledRef.current = false
     syncPollRef.current = setInterval(async () => {
@@ -159,6 +164,8 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   }, [])
 
   const stopSyncPoll = useCallback(() => {
+    syncPollCountRef.current = Math.max(0, syncPollCountRef.current - 1)
+    if (syncPollCountRef.current > 0) return // other consumers still active
     syncPollCancelledRef.current = true
     if (syncPollRef.current) {
       clearInterval(syncPollRef.current)
