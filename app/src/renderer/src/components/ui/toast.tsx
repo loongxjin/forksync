@@ -2,7 +2,7 @@
  * Toast notification component with icons, animations, and close button
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Info, CheckCircle2, AlertTriangle, XCircle, X } from 'lucide-react'
 
 interface ToastProps {
@@ -94,7 +94,6 @@ export function Toast({
 }
 
 // Simple hook-like toast state management
-import { useCallback } from 'react'
 
 export interface ToastState {
   message: string
