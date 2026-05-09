@@ -62,10 +62,13 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
     }
   }
 
+  const upstreamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const handleUpstreamChange = (value: string): void => {
     setUpstream(value)
     if (path && value) {
-      setTimeout(() => loadBranches(path, value), 500)
+      if (upstreamTimerRef.current) clearTimeout(upstreamTimerRef.current)
+      upstreamTimerRef.current = setTimeout(() => loadBranches(path, value), 500)
     }
   }
 
