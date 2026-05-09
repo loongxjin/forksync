@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useSettings } from '@/contexts/SettingsContext'
 import { Label } from '@/components/ui/label'
 import { Toggle } from '@/components/ui/toggle'
 import { Input } from '@/components/ui/input'
 import { useTranslation } from 'react-i18next'
+import { useDebouncedConfig } from '@/hooks/useDebouncedConfig'
 
 
 
@@ -11,39 +12,10 @@ export function ProxySettings(): JSX.Element {
   const { engineConfig, configLoading, updateConfig } = useSettings()
   const { t } = useTranslation()
 
-  const [proxyUrl, setProxyUrl] = useState('socks5://127.0.0.1:7890')
-  const [saving, setSaving] = useState(false)
-  const isEditingRef = useRef(false)
-  const prevConfigUrlRef = useRef('')
-
-  useEffect(() => {
-    if (engineConfig?.Proxy?.URL !== undefined) {
-      // Only sync from config if user is NOT actively editing
-      // and the config value actually changed from what we last synced
-      if (!isEditingRef.current && engineConfig.Proxy.URL !== prevConfigUrlRef.current) {
-        setProxyUrl(engineConfig.Proxy.URL)
-        prevConfigUrlRef.current = engineConfig.Proxy.URL
-      }
-    }
-  }, [engineConfig])
-
-  // Debounced save for proxy URL
-  useEffect(() => {
-    if (!engineConfig) return
-    if (proxyUrl === engineConfig.Proxy?.URL) return
-    if (!engineConfig.Proxy?.Enabled) return // only save URL if proxy is enabled
-
-    isEditingRef.current = true
-    const timer = setTimeout(async () => {
-      setSaving(true)
-      await updateConfig('proxy.url', proxyUrl)
-      setSaving(false)
-      isEditingRef.current = false
-      prevConfigUrlRef.current = proxyUrl
-    }, 1500)
-
-    return () => clearTimeout(timer)
-  }, [proxyUrl, engineConfig, updateConfig])
+  // Debounced config input for proxy URL
+  const [proxyUrl, setProxyUrl, saving] = useDebouncedConfig(
+    'proxy.url', engineConfig?.Proxy?.URL, updateConfig
+  )
 
   const handleToggleProxy = async (val: boolean): Promise<void> => {
     await updateConfig('proxy.enabled', String(val))

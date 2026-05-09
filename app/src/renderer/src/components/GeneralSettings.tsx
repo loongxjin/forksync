@@ -1,4 +1,3 @@
-import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useAgents } from '@/contexts/AgentContext'
 import { Label } from '@/components/ui/label'
@@ -7,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { IDEConfig } from '@/components/IDEConfig'
 import { useTranslation } from 'react-i18next'
 import { Moon, Sun, Monitor } from 'lucide-react'
+import { useDebouncedConfig } from '@/hooks/useDebouncedConfig'
 
 /** A simple toggle switch component */
 
@@ -16,37 +16,10 @@ export function GeneralSettings(): JSX.Element {
   const { agents } = useAgents()
   const { t } = useTranslation()
 
-  // Local state for sync interval (debounced save)
-  const [syncInterval, setSyncInterval] = useState('')
-  const [saving, setSaving] = useState(false)
-  const isEditingRef = useRef(false)
-  const prevConfigIntervalRef = useRef('')
-
-  // Sync local state from engine config
-  useEffect(() => {
-    const configInterval = engineConfig?.Sync?.DefaultInterval ?? ''
-    if (configInterval !== '' && !isEditingRef.current && configInterval !== prevConfigIntervalRef.current) {
-      setSyncInterval(configInterval)
-      prevConfigIntervalRef.current = configInterval
-    }
-  }, [engineConfig])
-
-  // Debounced save for sync interval
-  useEffect(() => {
-    if (!syncInterval || !engineConfig) return
-    if (syncInterval === engineConfig.Sync?.DefaultInterval) return
-
-    isEditingRef.current = true
-    const timer = setTimeout(async () => {
-      setSaving(true)
-      await updateConfig('sync.default_interval', syncInterval)
-      setSaving(false)
-      isEditingRef.current = false
-      prevConfigIntervalRef.current = syncInterval
-    }, 1500)
-
-    return () => clearTimeout(timer)
-  }, [syncInterval, engineConfig, updateConfig])
+  // Debounced config input for sync interval
+  const [syncInterval, setSyncInterval, saving] = useDebouncedConfig(
+    'sync.default_interval', engineConfig?.Sync?.DefaultInterval ?? '', updateConfig
+  )
 
   const handleSyncOnStartup = async (val: boolean): Promise<void> => {
     await updateConfig('sync.sync_on_startup', String(val))

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Toggle } from '@/components/ui/toggle'
 import { Separator } from '@/components/ui/separator'
 import { useTranslation } from 'react-i18next'
+import { useDebouncedConfig } from '@/hooks/useDebouncedConfig'
 
 
 
@@ -28,63 +29,18 @@ export function AgentConfig(): JSX.Element {
   const { engineConfig, configLoading, updateConfig } = useSettings()
   const { t } = useTranslation()
 
-  // Local state for debounced inputs
-  const [agentTimeout, setAgentTimeout] = useState('')
-  const [sessionTTL, setSessionTTL] = useState('')
-  const [savingTimeout, setSavingTimeout] = useState(false)
-  const [savingTTL, setSavingTTL] = useState(false)
+  // Debounced config inputs
+  const [agentTimeout, setAgentTimeout, savingTimeout] = useDebouncedConfig(
+    'agent.timeout', engineConfig?.Agent?.Timeout || '', updateConfig
+  )
+  const [sessionTTL, setSessionTTL, savingTTL] = useDebouncedConfig(
+    'agent.session_ttl', engineConfig?.Agent?.SessionTTL || '', updateConfig
+  )
+
   const [cleaning, setCleaning] = useState(false)
   const [resettingId, setResettingId] = useState<string | null>(null)
   const [configSaving, setConfigSaving] = useState(false)
   const configSavingRef = useRef(false)
-  const isEditingRef = useRef({ timeout: false, sessionTTL: false })
-  const prevConfigRef = useRef({ timeout: '', sessionTTL: '' })
-
-  // Sync from engine config (only when not editing)
-  useEffect(() => {
-    if (engineConfig?.Agent) {
-      const cfgTimeout = engineConfig.Agent.Timeout || ''
-      const cfgTTL = engineConfig.Agent.SessionTTL || ''
-      if (!isEditingRef.current.timeout && cfgTimeout !== prevConfigRef.current.timeout) {
-        setAgentTimeout(cfgTimeout)
-        prevConfigRef.current.timeout = cfgTimeout
-      }
-      if (!isEditingRef.current.sessionTTL && cfgTTL !== prevConfigRef.current.sessionTTL) {
-        setSessionTTL(cfgTTL)
-        prevConfigRef.current.sessionTTL = cfgTTL
-      }
-    }
-  }, [engineConfig])
-
-  // Debounced save: agentTimeout
-  useEffect(() => {
-    if (!agentTimeout || !engineConfig) return
-    if (agentTimeout === engineConfig.Agent?.Timeout) return
-    isEditingRef.current.timeout = true
-    const timer = setTimeout(async () => {
-      setSavingTimeout(true)
-      await updateConfig('agent.timeout', agentTimeout)
-      setSavingTimeout(false)
-      isEditingRef.current.timeout = false
-      prevConfigRef.current.timeout = agentTimeout
-    }, 1500)
-    return () => clearTimeout(timer)
-  }, [agentTimeout, engineConfig, updateConfig])
-
-  // Debounced save: session TTL
-  useEffect(() => {
-    if (!sessionTTL || !engineConfig) return
-    if (sessionTTL === engineConfig.Agent?.SessionTTL) return
-    isEditingRef.current.sessionTTL = true
-    const timer = setTimeout(async () => {
-      setSavingTTL(true)
-      await updateConfig('agent.session_ttl', sessionTTL)
-      setSavingTTL(false)
-      isEditingRef.current.sessionTTL = false
-      prevConfigRef.current.sessionTTL = sessionTTL
-    }, 1500)
-    return () => clearTimeout(timer)
-  }, [sessionTTL, engineConfig, updateConfig])
 
   useEffect(() => {
     refreshAgents()
