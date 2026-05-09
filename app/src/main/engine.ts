@@ -10,7 +10,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { spawn, ChildProcess, exec, execFile } from 'child_process'
 import { createInterface } from 'readline'
-import { existsSync, readdirSync, readFileSync, appendFileSync, mkdirSync } from 'fs'
+import { existsSync, readdirSync, readFileSync, appendFileSync, mkdirSync, statSync } from 'fs'
 import { homedir } from 'os'
 import { promisify } from 'util'
 
@@ -221,7 +221,8 @@ export class EngineClient {
                     resolvedFiles: [],
                     diff: ''
                   }
-                }
+                },
+                error: ''
               } as ApiResponse<ResolveData>)
             } else if (parsed.t === 'error') {
               debugLog(`STDOUT error event`)
@@ -272,7 +273,7 @@ export class EngineClient {
           notifyError(`Engine exited with code ${code}`)
         } else {
           debugLog(`CLOSE: code 0 but not notified, treating as done`)
-          notifyDone({ success: true, data: null as unknown as ResolveData })
+          notifyDone({ success: true, data: null as unknown as ResolveData, error: '' })
         }
       }
     })
@@ -315,27 +316,39 @@ export class EngineClient {
     }
 
     const latest = join(logDir, files[0])
-    console.log('[engine:readAgentLog] reading', latest)
+    const stat = statSync(latest)
+    console.log('[engine:readAgentLog] reading', latest, 'size:', stat.size, 'mtime:', stat.mtime)
     const content = readFileSync(latest, 'utf-8')
+    const lines = content.split('\n').filter(l => l.trim())
     const events: AgentStreamEvent[] = []
+    const skippedLines: string[] = []
 
-    for (const line of content.split('\n')) {
-      if (!line.trim()) continue
+    for (const line of lines) {
       try {
         const parsed = JSON.parse(line)
         if (parsed.t != null) {
           events.push(parsed as AgentStreamEvent)
+        } else {
+          skippedLines.push(`no-t-field:${line.substring(0, 80)}`)
         }
-      } catch {
-        // Skip corrupted lines
-        console.warn('[engine:readAgentLog] skipping corrupted line', line.substring(0, 100))
+      } catch (e) {
+        skippedLines.push(`parse-error:${line.substring(0, 80)}`)
       }
+    }
+
+    // Event type distribution for debugging
+    const typeDist: Record<string, number> = {}
+    for (const ev of events) {
+      typeDist[ev.t] = (typeDist[ev.t] || 0) + 1
     }
 
     // isRunning is true if the last event is not 'done' or 'error'
     const last = events[events.length - 1]
     const isRunning = last != null && last.t !== 'done' && last.t !== 'error'
-    console.log('[engine:readAgentLog] parsed', events.length, 'events, isRunning:', isRunning)
+    console.log('[engine:readAgentLog] parsed', events.length, 'events (total lines:', lines.length, '), isRunning:', isRunning, 'types:', JSON.stringify(typeDist))
+    if (skippedLines.length > 0) {
+      console.warn('[engine:readAgentLog] skipped', skippedLines.length, 'lines:', skippedLines.slice(0, 5))
+    }
 
     return { events, isRunning }
   }

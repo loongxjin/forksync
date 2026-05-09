@@ -59,6 +59,17 @@ export function AgentTerminalDrawer({
   const [userScrolled, setUserScrolled] = useState(false)
   const [drawerWidth, setDrawerWidth] = useState(600)
   const isDragging = useRef(false)
+  const prevEventsLenRef = useRef(0)
+
+  // Debug: log when events change
+  useEffect(() => {
+    if (events.length !== prevEventsLenRef.current) {
+      const typeDist: Record<string, number> = {}
+      for (const ev of events) { typeDist[ev.t] = (typeDist[ev.t] || 0) + 1 }
+      console.log('[AgentTerminal] events changed for', repoName, 'count:', events.length, '(was:', prevEventsLenRef.current, '), types:', JSON.stringify(typeDist), ', isLive:', isLive)
+      prevEventsLenRef.current = events.length
+    }
+  }, [events, repoName, isLive])
 
   // Compute start timestamp for relative times
   const startTs = useMemo(() => {

@@ -176,7 +176,9 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('engine:readAgentLog', async (_event, repoName: string) => {
     console.log('[ipc:readAgentLog]', repoName)
-    return e.readAgentLog(repoName)
+    const result = await e.readAgentLog(repoName)
+    console.log('[ipc:readAgentLog] result for', repoName, result.events.length, 'events, isRunning:', result.isRunning)
+    return result
   })
 
   ipcMain.handle('engine:repoDiff', async (_event, repoName: string) => {
