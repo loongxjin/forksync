@@ -4,6 +4,6 @@ declare global {
   interface Window {
     api: EngineAPI
     platform: string
-    ipcSend: (channel: string) => void
+    ipcSend: (channel: 'window:minimize' | 'window:maximize' | 'window:close') => void
   }
 }
