@@ -116,12 +116,13 @@ export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettin
           </div>
 
           <div className="flex items-center gap-0.5 opacity-30 transition-opacity duration-150 group-hover:opacity-100 ml-2 shrink-0">
-            <button
-              data-action
-              onClick={() => onSettings(repo.name)}
-              className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-              title={t('postSync.settings')}
-            >
+              <button
+                data-action
+                onClick={() => onSettings(repo.name)}
+                className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                title={t('postSync.settings')}
+                aria-label={t('postSync.settings')}
+              >
               <Settings size={14} />
             </button>
             <IDEOpenButton repoPath={repo.path} />
@@ -132,17 +133,19 @@ export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettin
                 disabled={isSyncing}
                 className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                 title={isSyncing ? t('repos.syncing') : t('repos.syncNow')}
+                aria-label={isSyncing ? t('repos.syncing') : t('repos.syncNow')}
               >
                 <RotateCw size={14} className={isSyncing ? 'animate-spin' : ''} />
               </button>
             )}
-            <button
-              data-action
-              onClick={() => onRemove(repo.name)}
-              disabled={removing}
-              className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-error-muted hover:text-error disabled:opacity-50 disabled:cursor-not-allowed"
-              title={t('repos.remove')}
-            >
+              <button
+                data-action
+                onClick={() => onRemove(repo.name)}
+                disabled={removing}
+                className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-error-muted hover:text-error disabled:opacity-50 disabled:cursor-not-allowed"
+                title={t('repos.remove')}
+                aria-label={t('repos.remove')}
+              >
               <Trash2 size={14} />
             </button>
           </div>

@@ -71,6 +71,7 @@ function TitleBar(): JSX.Element {
           onClick={openDrawer}
           className="press-scale rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           title={t('nav.settings')}
+          aria-label={t('nav.settings')}
         >
           <Settings size={16} />
         </button>
@@ -78,6 +79,7 @@ function TitleBar(): JSX.Element {
           onClick={cycleTheme}
           className="press-scale rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           title={theme === 'dark' ? t('theme.dark') : theme === 'light' ? t('theme.light') : t('theme.system')}
+          aria-label={theme === 'dark' ? t('theme.dark') : theme === 'light' ? t('theme.light') : t('theme.system')}
         >
           <ThemeIcon size={16} />
         </button>
@@ -85,6 +87,7 @@ function TitleBar(): JSX.Element {
           onClick={toggleLanguage}
           className="press-scale rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           title={t('nav.language')}
+          aria-label={t('nav.language')}
         >
           <Languages size={16} />
         </button>
