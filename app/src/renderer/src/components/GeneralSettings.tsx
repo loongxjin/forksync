@@ -1,45 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useAgents } from '@/contexts/AgentContext'
-import { Label } from '@/components/ui/label'
+import { Toggle } from '@/components/ui/toggle'
 import { Input } from '@/components/ui/input'
 import { IDEConfig } from '@/components/IDEConfig'
 import { useTranslation } from 'react-i18next'
 import { Moon, Sun, Monitor } from 'lucide-react'
 
 /** A simple toggle switch component */
-function Toggle({
-  checked,
-  onChange,
-  disabled = false,
-  label
-}: {
-  checked: boolean
-  onChange: (val: boolean) => void
-  disabled?: boolean
-  label: string
-}): JSX.Element {
-  return (
-    <div className="flex items-center justify-between">
-      <Label className="cursor-pointer">{label}</Label>
-      <button
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${
-          checked ? 'bg-primary' : 'bg-input'
-        }`}
-      >
-        <span
-          className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${
-            checked ? 'translate-x-4' : 'translate-x-0'
-          }`}
-        />
-      </button>
-    </div>
-  )
-}
+
 
 export function GeneralSettings(): JSX.Element {
   const { theme, setTheme, engineConfig, configLoading, updateConfig } = useSettings()

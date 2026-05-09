@@ -46,7 +46,8 @@ export function DiffDrawer({ open, onOpenChange, repoName }: DiffDrawerProps): J
       .finally(() => {
         setLoading(false)
       })
-  }, [open, repoName, t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t is stable from react-i18next; including it causes re-fetches
+  }, [open, repoName])
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

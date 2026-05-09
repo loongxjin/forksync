@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { BranchMapping } from '@/types/engine'
 import { ArrowRight } from 'lucide-react'
+import { useAnimatedMount } from '@/hooks/useAnimatedMount'
 
 interface AddRepoDialogProps {
   open: boolean
@@ -25,16 +26,7 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
   const [loadingBranches, setLoadingBranches] = useState(false)
   const [enableMapping, setEnableMapping] = useState(false)
 
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    if (open) {
-      setMounted(true)
-    } else if (mounted) {
-      const timer = setTimeout(() => setMounted(false), 200)
-      return () => clearTimeout(timer)
-    }
-  }, [open, mounted])
+  const mounted = useAnimatedMount(open)
 
   if (!mounted) return null
 

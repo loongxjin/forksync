@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { PostSyncCommand } from '@/types/engine'
 import { engineApi } from '@/lib/api'
 import { Trash2, X } from 'lucide-react'
+import { useAnimatedMount } from '@/hooks/useAnimatedMount'
 
 interface RepoSettingsDialogProps {
   repoName: string
@@ -30,8 +31,8 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
       if (res.success) {
         setCommands(res.data.commands ?? [])
       }
-    } catch {
-      // silent
+    } catch (err) {
+      console.error('[RepoSettingsDialog] Failed to load commands:', err)
     } finally {
       setLoading(false)
     }
@@ -55,8 +56,8 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
         setNewCmd('')
         setShowAddForm(false)
       }
-    } catch {
-      // silent
+    } catch (err) {
+      console.error('[RepoSettingsDialog] Failed to add command:', err)
     } finally {
       setSaving(false)
     }
@@ -69,23 +70,14 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
       if (res.success) {
         setCommands(res.data.commands ?? [])
       }
-    } catch {
-      // silent
+    } catch (err) {
+      console.error('[RepoSettingsDialog] Failed to remove command:', err)
     } finally {
       setSaving(false)
     }
   }
 
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    if (open) {
-      setMounted(true)
-    } else if (mounted) {
-      const timer = setTimeout(() => setMounted(false), 200)
-      return () => clearTimeout(timer)
-    }
-  }, [open, mounted])
+  const mounted = useAnimatedMount(open)
 
   if (!mounted) return null
 

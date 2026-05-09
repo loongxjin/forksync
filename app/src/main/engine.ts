@@ -8,13 +8,14 @@
 
 import { app } from 'electron'
 import { join } from 'path'
-import { spawn, ChildProcess, exec } from 'child_process'
+import { spawn, ChildProcess, exec, execFile } from 'child_process'
 import { createInterface } from 'readline'
 import { existsSync, readdirSync, readFileSync, appendFileSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { promisify } from 'util'
 
 const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 import type {
   ApiResponse,
   StatusData,
@@ -355,7 +356,7 @@ export class EngineClient {
       if (!repo) {
         return { success: false, error: `repo "${repoName}" not found` }
       }
-      const { stdout, stderr } = await execAsync(`git -C "${repo.path}" diff HEAD`)
+      const { stdout, stderr } = await execFileAsync('git', ['-C', repo.path, 'diff', 'HEAD'])
       if (stderr) {
         console.warn('[engine:repoDiff] stderr:', stderr)
       }
@@ -457,8 +458,8 @@ export class EngineClient {
   }
 
   /** `forksync workflow continue <name> --action <action> --json` */
-  async workflowContinue(name: string, action: string): Promise<ApiResponse<{ repoId: string; repoName: string; status: string; workflow?: { runId: string; steps: any[]; status: string; startedAt: string; finishedAt?: string } }>> {
-    return this.exec<{ repoId: string; repoName: string; status: string; workflow?: { runId: string; steps: any[]; status: string; startedAt: string; finishedAt?: string } }>(['workflow', 'continue', name, '--action', action])
+  async workflowContinue(name: string, action: string): Promise<ApiResponse<WorkflowContinueData>> {
+    return this.exec<WorkflowContinueData>(['workflow', 'continue', name, '--action', action])
   }
 
   // -----------------------------------------------------------------------
@@ -547,6 +548,32 @@ export class EngineClient {
       return [...engineArgs, '--json']
     }
     return ['run', '.', ...engineArgs, '--json']
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Workflow Types
+// ---------------------------------------------------------------------------
+
+export interface WorkflowStep {
+  name: string
+  status: string
+  startedAt?: string
+  finishedAt?: string
+  message?: string
+  [key: string]: unknown
+}
+
+export interface WorkflowContinueData {
+  repoId: string
+  repoName: string
+  status: string
+  workflow?: {
+    runId: string
+    steps: WorkflowStep[]
+    status: string
+    startedAt: string
+    finishedAt?: string
   }
 }
 

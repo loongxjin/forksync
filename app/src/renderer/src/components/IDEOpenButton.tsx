@@ -6,6 +6,7 @@ import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useSettingsDrawer } from '@/contexts/SettingsDrawerContext'
+import { useRepos } from '@/contexts/RepoContext'
 import { Code, Loader2 } from 'lucide-react'
 
 interface IDEOpenButtonProps {
@@ -16,6 +17,7 @@ export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
   const { t } = useTranslation()
   const { getDefaultIDE, openInIDE, ideLoading } = useSettings()
   const { openDrawer } = useSettingsDrawer()
+  const { showToast } = useRepos()
   const [opening, setOpening] = useState(false)
 
   const defaultIDE = getDefaultIDE()
@@ -29,11 +31,11 @@ export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
     const result = await openInIDE(repoPath, defaultIDE.id)
     setOpening(false)
     if (!result.success) {
-      alert(result.error ?? t('ide.openFailed'))
+      showToast(result.error ?? t('ide.openFailed'), 'error')
     }
-  }, [repoPath, defaultIDE, openInIDE, openDrawer, t])
+  }, [repoPath, defaultIDE, openInIDE, openDrawer, showToast, t])
 
-  if (ideLoading) return <></>
+  if (ideLoading) return null
 
   // data-action: marker to prevent RepoRow expand toggle when clicking
   return (

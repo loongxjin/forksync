@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import type { Repo, RepoStatus } from '@/types/engine'
-import { getStatusConfig, StatusIcon, getStatusColor } from '@/components/StatusCard'
+import { useStatusConfig, StatusIcon, getStatusColor } from '@/components/StatusCard'
 import { IDEOpenButton } from '@/components/IDEOpenButton'
 import { isConflictStatus, cn } from '@/lib/utils'
 import { ChevronRight, Settings, RotateCw, Trash2 } from 'lucide-react'
@@ -12,7 +12,7 @@ interface RepoStatusBadgeProps {
 }
 
 export function RepoStatusBadge({ status, className }: RepoStatusBadgeProps): JSX.Element {
-  const config = getStatusConfig(status)
+  const config = useStatusConfig(status)
 
   const variantMap: Record<string, 'success' | 'warning' | 'error' | 'info' | 'muted'> = {
     up_to_date: 'success',

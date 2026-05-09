@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { ScannedRepo, BranchMapping } from '@/types/engine'
 import { ArrowRight } from 'lucide-react'
+import { useAnimatedMount } from '@/hooks/useAnimatedMount'
 
 interface ScanDialogProps {
   open: boolean
@@ -54,16 +55,7 @@ export function ScanDialog({
     }
   }, [open, initialDir, onScan])
 
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    if (open) {
-      setMounted(true)
-    } else if (mounted) {
-      const timer = setTimeout(() => setMounted(false), 200)
-      return () => clearTimeout(timer)
-    }
-  }, [open, mounted])
+  const mounted = useAnimatedMount(open)
 
   if (!mounted) return null
 

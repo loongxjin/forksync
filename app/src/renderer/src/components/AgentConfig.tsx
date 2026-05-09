@@ -5,43 +5,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CheckCircle2, XCircle, Clock, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Toggle } from '@/components/ui/toggle'
 import { Separator } from '@/components/ui/separator'
 import { useTranslation } from 'react-i18next'
 
-/** Toggle reused from other settings panels */
-function Toggle({
-  checked,
-  onChange,
-  disabled = false,
-  label
-}: {
-  checked: boolean
-  onChange: (val: boolean) => void
-  disabled?: boolean
-  label: string
-}): JSX.Element {
-  return (
-    <div className="flex items-center justify-between">
-      <Label className="cursor-pointer">{label}</Label>
-      <button
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${
-          checked ? 'bg-primary' : 'bg-input'
-        }`}
-      >
-        <span
-          className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${
-            checked ? 'translate-x-4' : 'translate-x-0'
-          }`}
-        />
-      </button>
-    </div>
-  )
-}
+
 
 const conflictModeOptions = [
   { value: 'agent_resolve', labelKey: 'settings.agent.modes.agentResolve', descKey: 'settings.agent.modes.agentResolveDesc' },
@@ -60,7 +28,7 @@ export function AgentConfig(): JSX.Element {
   const { t } = useTranslation()
 
   // Local state for debounced inputs
-  const [timeout, setTimeout_] = useState('')
+  const [agentTimeout, setAgentTimeout] = useState('')
   const [sessionTTL, setSessionTTL] = useState('')
   const [savingTimeout, setSavingTimeout] = useState(false)
   const [savingTTL, setSavingTTL] = useState(false)
@@ -77,7 +45,7 @@ export function AgentConfig(): JSX.Element {
       const cfgTimeout = engineConfig.Agent.Timeout || ''
       const cfgTTL = engineConfig.Agent.SessionTTL || ''
       if (!isEditingRef.current.timeout && cfgTimeout !== prevConfigRef.current.timeout) {
-        setTimeout_(cfgTimeout)
+        setAgentTimeout(cfgTimeout)
         prevConfigRef.current.timeout = cfgTimeout
       }
       if (!isEditingRef.current.sessionTTL && cfgTTL !== prevConfigRef.current.sessionTTL) {
@@ -87,20 +55,20 @@ export function AgentConfig(): JSX.Element {
     }
   }, [engineConfig])
 
-  // Debounced save: timeout
+  // Debounced save: agentTimeout
   useEffect(() => {
-    if (!timeout || !engineConfig) return
-    if (timeout === engineConfig.Agent?.Timeout) return
+    if (!agentTimeout || !engineConfig) return
+    if (agentTimeout === engineConfig.Agent?.Timeout) return
     isEditingRef.current.timeout = true
     const timer = setTimeout(async () => {
       setSavingTimeout(true)
-      await updateConfig('agent.timeout', timeout)
+      await updateConfig('agent.timeout', agentTimeout)
       setSavingTimeout(false)
       isEditingRef.current.timeout = false
-      prevConfigRef.current.timeout = timeout
+      prevConfigRef.current.timeout = agentTimeout
     }, 1500)
     return () => clearTimeout(timer)
-  }, [timeout, engineConfig, updateConfig])
+  }, [agentTimeout, engineConfig, updateConfig])
 
   // Debounced save: session TTL
   useEffect(() => {
@@ -240,8 +208,8 @@ export function AgentConfig(): JSX.Element {
           <Label className="text-xs text-muted-foreground">{t('settings.agent.timeout')}</Label>
           <div className="flex items-center gap-2">
             <Input
-              value={timeout}
-              onChange={(e) => setTimeout_(e.target.value)}
+              value={agentTimeout}
+              onChange={(e) => setAgentTimeout(e.target.value)}
               placeholder={t('settings.agent.timeoutPlaceholder')}
               className="max-w-[200px]"
               disabled={isLoading}

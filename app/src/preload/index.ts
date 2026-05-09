@@ -126,6 +126,17 @@ contextBridge.exposeInMainWorld('api', api)
 contextBridge.exposeInMainWorld('platform', process.platform)
 
 // Raw ipcSend for Linux window controls and other one-way messages
+// Whitelist: only allow specific channels to prevent IPC abuse
+const ALLOWED_IPC_CHANNELS = new Set([
+  'window:minimize',
+  'window:maximize',
+  'window:close'
+])
+
 contextBridge.exposeInMainWorld('ipcSend', (channel: string): void => {
+  if (!ALLOWED_IPC_CHANNELS.has(channel)) {
+    console.warn(`[preload] ipcSend: blocked disallowed channel "${channel}"`)
+    return
+  }
   ipcRenderer.send(channel)
 })

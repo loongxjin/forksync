@@ -1,6 +1,4 @@
 import { Outlet } from 'react-router-dom'
-import { useEffect } from 'react'
-import { engineApi } from '@/lib/api'
 import { Toast } from './ui/toast'
 import { useRepos } from '@/contexts/RepoContext'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -133,17 +131,6 @@ function LinuxWindowControls(): JSX.Element {
 export function Layout(): JSX.Element {
   const { toast, hideToast } = useRepos()
   const { open, closeDrawer } = useSettingsDrawer()
-
-  // Listen for navigation events from main process (notification click-through)
-  // In single-page mode, we no longer navigate; just refresh repos
-  useEffect(() => {
-    const unsubscribe = engineApi.onNavigate?.(() => {
-      // Single-page mode: navigation is no-op; user stays on home page
-    })
-    return () => {
-      unsubscribe?.()
-    }
-  }, [])
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">

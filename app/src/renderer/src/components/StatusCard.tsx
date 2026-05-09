@@ -93,7 +93,7 @@ const STATUS_CONFIG: Record<
   unconfigured: { labelKey: 'status.unconfigured', color: 'hsl(var(--muted-foreground))' }
 }
 
-export function getStatusConfig(status: RepoStatus) {
+export function useStatusConfig(status: RepoStatus) {
   const { t } = useTranslation()
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.unconfigured
   return { label: t(config.labelKey), color: config.color }
