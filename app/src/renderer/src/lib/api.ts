@@ -94,4 +94,4 @@ export interface EngineAPI {
 }
 
 /** Typed access to the engine API exposed via preload contextBridge */
-export const engineApi: EngineAPI = (window as unknown as { api: EngineAPI }).api
+export const engineApi: EngineAPI = window.api
