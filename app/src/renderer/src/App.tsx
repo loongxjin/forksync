@@ -21,7 +21,11 @@ function App(): JSX.Element {
                 <HashRouter>
                   <Routes>
                     <Route element={<Layout />}>
-                      <Route path="/" element={<HomePage />} />
+                      <Route path="/" element={
+                        <ErrorBoundary>
+                          <HomePage />
+                        </ErrorBoundary>
+                      } />
                     </Route>
                   </Routes>
                 </HashRouter>
