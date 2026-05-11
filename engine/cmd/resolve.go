@@ -416,6 +416,13 @@ func showResolutionDiff(r types.Repo, diff string, result *agent.AgentResult, pr
 func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveContext, result *agent.AgentResult) error {
 	// Agent logs are meaningless once the workflow is complete — clean them up.
 	agent.DeleteAllLogs(rc.cfgMgr.ConfigDir(), rc.repo.Name)
+
+	// Execute post-sync commands now that the merge is committed.
+	results := syncpkg.RunPostSyncCommands(ctx, rc.repo)
+	if err := syncpkg.PostSyncError(results); err != "" {
+		logger.Error("resolve: post-sync command failed", "repo", rc.repo.Name, "error", err)
+	}
+
 	// Stage all resolved files
 	gitOps := newGitOps(rc.cfg)
 	for _, f := range result.ResolvedFiles {
@@ -543,6 +550,12 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 	r.ErrorMessage = ""
 	updateWorkflowCommit(&r)
 	updateRepoWithLog(r, store, "accept")
+
+	// Execute post-sync commands now that the merge is committed.
+	results := syncpkg.RunPostSyncCommands(cmd.Context(), r)
+	if err := syncpkg.PostSyncError(results); err != "" {
+		logger.Error("resolve: post-sync command failed", "repo", r.Name, "error", err)
+	}
 
 	info := workflowCompletionInfo(r.Workflow)
 	recordWorkflowComplete(r, 0, info)

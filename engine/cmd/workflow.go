@@ -269,6 +269,12 @@ func finalizeCommitWithWorkflow(ctx context.Context, r types.Repo, store repo.St
 	r.ErrorMessage = ""
 	r.LastSync = &now
 
+	// Execute post-sync commands now that the merge is committed.
+	results := syncpkg.RunPostSyncCommands(ctx, r)
+	if err := syncpkg.PostSyncError(results); err != "" {
+		logger.Error("workflow: post-sync command failed", "repo", r.Name, "error", err)
+	}
+
 	// Workflow completed — agent logs are no longer needed.
 	_, cfgMgr := getSharedConfig()
 	agent.DeleteAllLogs(cfgMgr.ConfigDir(), r.Name)

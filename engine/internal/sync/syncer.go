@@ -388,8 +388,8 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	s.saveWorkflow(r, wf)
 	result.Status = string(types.RepoStatusUpToDate)
 	s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
-	result.PostSyncResults = s.runPostSyncCommands(ctx, r)
-	if postSyncErr := s.postSyncError(result.PostSyncResults); postSyncErr != "" {
+	result.PostSyncResults = RunPostSyncCommands(ctx, r)
+	if postSyncErr := PostSyncError(result.PostSyncResults); postSyncErr != "" {
 		result.ErrorMessage = postSyncErr
 		s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, result.ErrorMessage)
 	}
@@ -441,7 +441,13 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 			markWorkflowDone(wf, types.WorkflowSuccess)
 			result.Status = string(types.RepoStatusUpToDate)
 			result.AutoResolved = len(mergeResult.Conflicts)
-			s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
+			result.PostSyncResults = RunPostSyncCommands(ctx, r)
+			if postSyncErr := PostSyncError(result.PostSyncResults); postSyncErr != "" {
+				result.ErrorMessage = postSyncErr
+				s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, result.ErrorMessage)
+			} else {
+				s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
+			}
 			s.saveWorkflow(r, wf)
 			s.notifyResult(r.Name, result)
 			s.finalizeResult(result)
@@ -729,9 +735,11 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 	return results
 }
 
-// runPostSyncCommands executes the repo's post-sync commands in order.
+// RunPostSyncCommands executes the repo's post-sync commands in order.
 // It stops on the first failure. The sync status remains "up_to_date" regardless.
-func (s *Syncer) runPostSyncCommands(ctx context.Context, r types.Repo) []types.PostSyncResult {
+// Exported so resolve and workflow commands can also execute post-sync after
+// conflict resolution completes.
+func RunPostSyncCommands(ctx context.Context, r types.Repo) []types.PostSyncResult {
 	if len(r.PostSyncCommands) == 0 {
 		return nil
 	}
@@ -762,12 +770,14 @@ func (s *Syncer) runPostSyncCommands(ctx context.Context, r types.Repo) []types.
 			if res.Error == "" {
 				res.Error = err.Error()
 			}
+			logger.Error("sync: post-sync command failed", "repo", r.Name, "command", cmd.Name, "error", res.Error)
 			results = append(results, res)
 			break // stop on first failure
 		}
 
 		res.Success = true
 		res.Output = strings.TrimSpace(stdout.String())
+		logger.Info("sync: post-sync command succeeded", "repo", r.Name, "command", cmd.Name)
 		results = append(results, res)
 	}
 
@@ -775,7 +785,7 @@ func (s *Syncer) runPostSyncCommands(ctx context.Context, r types.Repo) []types.
 }
 
 // postSyncError returns a summary error message if any post-sync command failed.
-func (s *Syncer) postSyncError(results []types.PostSyncResult) string {
+func PostSyncError(results []types.PostSyncResult) string {
 	for _, r := range results {
 		if !r.Success {
 			return fmt.Sprintf("post-sync command \"%s\" failed: %s", r.Name, r.Error)
