@@ -167,7 +167,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('engine:workflowContinue', async (_event, name: string, action: string) => {
     const safeAction = assertString(action, 'action')
-    if (!['accept', 'reject', 'retry', 'abort', 'resolve', 'commit'].includes(safeAction)) {
+    if (!['accept', 'reject', 'abort', 'resolve_with_agent', 'retry_commit', 'continue_manual'].includes(safeAction)) {
       throw new Error(`Invalid action: ${safeAction}`)
     }
     return e.workflowContinue(assertString(name, 'name'), safeAction)
