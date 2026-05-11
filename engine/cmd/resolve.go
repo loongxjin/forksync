@@ -418,10 +418,8 @@ func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveCon
 	agent.DeleteAllLogs(rc.cfgMgr.ConfigDir(), rc.repo.Name)
 
 	// Execute post-sync commands now that the merge is committed.
-	results := syncpkg.RunPostSyncCommands(ctx, rc.repo)
-	if err := syncpkg.PostSyncError(results); err != "" {
-		logger.Error("resolve: post-sync command failed", "repo", rc.repo.Name, "error", err)
-	}
+	// Run post-sync commands (logs success/failure internally).
+	syncpkg.RunPostSyncCommands(ctx, rc.repo)
 
 	// Stage all resolved files
 	gitOps := newGitOps(rc.cfg)
@@ -552,10 +550,8 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 	updateRepoWithLog(r, store, "accept")
 
 	// Execute post-sync commands now that the merge is committed.
-	results := syncpkg.RunPostSyncCommands(cmd.Context(), r)
-	if err := syncpkg.PostSyncError(results); err != "" {
-		logger.Error("resolve: post-sync command failed", "repo", r.Name, "error", err)
-	}
+	// Run post-sync commands (logs success/failure internally).
+	syncpkg.RunPostSyncCommands(cmd.Context(), r)
 
 	info := workflowCompletionInfo(r.Workflow)
 	recordWorkflowComplete(r, 0, info)
