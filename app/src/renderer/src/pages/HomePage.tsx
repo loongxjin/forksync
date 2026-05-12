@@ -113,12 +113,23 @@ export function HomePage(): JSX.Element {
     if (!shouldSkip) loadHistory()
   }, [loadHistory, historyInitialized, lastLoadAt, hasSyncing])
 
-  // Load persisted agent logs for repos that are currently resolving
+  // Load persisted agent logs for repos that are currently resolving.
+  // Also covers the auto-sync path where status is 'syncing' (not 'resolving')
+  // but the workflow has an active agent_resolve step.
   useEffect(() => {
     if (!initialized) return
     for (const repo of repos) {
       if (repo.status === 'resolving') {
         loadAgentLog(repo.name)
+        continue
+      }
+      if (repo.status === 'syncing' && repo.workflow) {
+        const agentStep = repo.workflow.steps.find(
+          (s) => s.step === 'agent_resolve' && s.status === 'running'
+        )
+        if (agentStep) {
+          loadAgentLog(repo.name)
+        }
       }
     }
   }, [initialized, repos, loadAgentLog])
