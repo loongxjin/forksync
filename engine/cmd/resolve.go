@@ -217,17 +217,20 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	result.ResolvedFiles = conflictPaths
 	result.AgentName = provider.Name()
 
-	// Update status — agent resolved successfully
-	resolved.Store(true)
-	r.Status = types.RepoStatusResolved
-	r.ErrorMessage = ""
-	if r.Workflow != nil {
+		// Update status — agent resolved successfully
+		resolved.Store(true)
+		r.Status = types.RepoStatusResolved
+		r.ErrorMessage = ""
+		if r.Workflow == nil {
+			r.Workflow = newWorkflowFromRepo(r)
+		}
+		// Mark completed steps as Success (newWorkflowFromRepo initializes them as Pending/Success for fetch/merge/check_conflicts)
+		syncpkg.AdvanceStep(r.Workflow, types.StepResolveStrategy, types.StepStatusSuccess, "")
 		syncpkg.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusSuccess,
 			fmt.Sprintf("resolved by %s", provider.Name()))
 		syncpkg.AdvanceStep(r.Workflow, types.StepAcceptChanges, types.StepStatusWaiting, "")
 		r.Workflow.Status = types.WorkflowWaiting
-	}
-	updateRepoWithLog(r, store, "resolved")
+		updateRepoWithLog(r, store, "resolved")
 
 	// Auto-confirm or wait for user
 	confirmBeforeCommit := true
