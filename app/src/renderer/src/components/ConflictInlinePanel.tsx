@@ -28,17 +28,7 @@ export function ConflictInlinePanel({
   hasLog
 }: ConflictInlinePanelProps): JSX.Element {
   const { t } = useTranslation()
-  const [resolving, setResolving] = useState(false)
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
-
-  const handleResolve = async (): Promise<void> => {
-    setResolving(true)
-    try {
-      await onResolve()
-    } finally {
-      setResolving(false)
-    }
-  }
 
   const agentResult = resolveResult?.agentResult
   const conflicts = resolveResult?.conflicts ?? []
@@ -119,8 +109,8 @@ export function ConflictInlinePanel({
         <div className="flex gap-2 flex-wrap">
           {status === 'conflict' && (
             <>
-              <Button onClick={handleResolve} disabled={loading || resolving} size="sm">
-                {resolving ? t('resolvePanel.resolving') : t('resolvePanel.resolveWithAgent')}
+              <Button onClick={onResolve} disabled={loading} size="sm">
+                {loading ? t('resolvePanel.resolving') : t('resolvePanel.resolveWithAgent')}
               </Button>
               {hasLog && onViewTerminal && (
                 <Button onClick={onViewTerminal} disabled={loading} size="sm" variant="outline">
