@@ -82,8 +82,13 @@ export function WorkflowSteps({
           const showDetailsAfterAgentResolve =
             stepRecord.step === 'agent_resolve' &&
             (stepRecord.status === 'success' || stepRecord.status === 'failed')
+          const agentResolveFinished = steps.some(
+            s => s.step === 'agent_resolve' && (s.status === 'success' || s.status === 'failed')
+          )
           const showDetailsAfterAcceptWaiting =
-            stepRecord.step === 'accept_changes' && stepRecord.status === 'waiting'
+            stepRecord.step === 'accept_changes' &&
+            stepRecord.status === 'waiting' &&
+            !agentResolveFinished
 
           const showDetails = showDetailsAfterAgentResolve || showDetailsAfterAcceptWaiting
 
