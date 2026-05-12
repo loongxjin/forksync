@@ -521,6 +521,7 @@ export function HomePage(): JSX.Element {
                         repo={repo}
                         streamEvents={streamEvents[repo.name] ?? []}
                         isStreamLive={streamLive.has(repo.name)}
+                        resolveResult={resolveResults[repo.name] ?? null}
                         onResolveWithAgent={() => handleResolve(repo)}
                         onOpenIDE={() => window.api.ideOpen(repo.path, 'default')}
                         onAbort={() => handleWorkflowContinue(repo.name, 'abort')}
