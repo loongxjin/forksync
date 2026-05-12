@@ -169,7 +169,8 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
   const [state, dispatch] = useReducer(agentReducer, initialState)
   const ipcSetupRef = useRef(false)
   const pollTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map())
-  const eventCountRef = useRef<Record<string, number>>({})
+  const ipcEventCountRef = useRef<Record<string, number>>({})
+  const pollWatermarkRef = useRef<Record<string, number>>({})
 
   const refreshAgents = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', loading: true })
@@ -257,7 +258,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
 
   const resolveStream = useCallback((name: string, opts?: { agent?: string; noConfirm?: boolean }) => {
     console.log('[AgentContext] resolveStream called', name, opts, 'ipcSetup:', ipcSetupRef.current)
-    eventCountRef.current[name] = 0
+    ipcEventCountRef.current[name] = 0
     dispatch({ type: 'STREAM_START', repoName: name })
     try {
       engineApi.resolveStreamStart(name, opts)
@@ -281,7 +282,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
       const res = await engineApi.readAgentLog(name)
       console.log('[AgentContext] loadAgentLog result', name, res.events.length, 'events, isRunning:', res.isRunning)
       // Track event count in ref so poll closure stays current
-      eventCountRef.current[name] = res.events.length
+      pollWatermarkRef.current[name] = res.events.length
       dispatch({ type: 'STREAM_LOAD', repoName: name, events: res.events, isRunning: res.isRunning })
       // If agent is still running, start polling for new events every 2 seconds
       if (res.isRunning) {
@@ -289,7 +290,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
         const timer = setInterval(async () => {
           try {
             const pollRes = await engineApi.readAgentLog(name)
-            const prevCount = eventCountRef.current[name] ?? 0
+            const prevCount = pollWatermarkRef.current[name] ?? 0
             console.log('[AgentContext] poll: read for', name, 'logEvents:', pollRes.events.length, 'prevDispatched:', prevCount, 'isRunning:', pollRes.isRunning)
             if (!pollRes.isRunning) {
               // Agent finished — dispatch any remaining new events, then dispatch done
@@ -303,7 +304,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
               dispatch({ type: 'STREAM_DONE', repoName: name, result: null })
               const t = pollTimersRef.current.get(name)
               if (t) { clearInterval(t); pollTimersRef.current.delete(name) }
-              delete eventCountRef.current[name]
+              delete pollWatermarkRef.current[name]
               return
             }
             // Only dispatch genuinely new events
@@ -313,7 +314,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
               for (const ev of newEvents) {
                 dispatch({ type: 'STREAM_EVENT', repoName: name, event: ev })
               }
-              eventCountRef.current[name] = pollRes.events.length
+              pollWatermarkRef.current[name] = pollRes.events.length
             }
           } catch (pollErr) {
             console.error('[AgentContext] poll failed for', name, pollErr)
@@ -331,7 +332,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
     // Stop poll timer if any
     const timer = pollTimersRef.current.get(name)
     if (timer) { clearInterval(timer); pollTimersRef.current.delete(name) }
-    delete eventCountRef.current[name]
+    delete pollWatermarkRef.current[name]
     dispatch({ type: 'STREAM_CLEAR', repoName: name })
   }, [])
 
@@ -342,7 +343,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
 
     const unsubEvent = engineApi.onResolveStreamEvent((repoName, event) => {
       console.log('[AgentContext] stream event received', repoName, event.t, 'dataLen:', event.d?.length ?? 0)
-      eventCountRef.current[repoName] = (eventCountRef.current[repoName] ?? 0) + 1
+      ipcEventCountRef.current[repoName] = (ipcEventCountRef.current[repoName] ?? 0) + 1
       dispatch({ type: 'STREAM_EVENT', repoName, event })
     })
 
@@ -351,7 +352,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
       // Stop poll timer for this repo (IPC stream path)
       const timer = pollTimersRef.current.get(repoName)
       if (timer) { clearInterval(timer); pollTimersRef.current.delete(repoName); console.log('[AgentContext] poll stopped (done)', repoName) }
-      delete eventCountRef.current[repoName]
+      delete ipcEventCountRef.current[repoName]
       dispatch({ type: 'STREAM_DONE', repoName, result: apiRes.success ? apiRes.data : null })
     })
 
@@ -360,7 +361,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
       // Stop poll timer for this repo
       const timer = pollTimersRef.current.get(repoName)
       if (timer) { clearInterval(timer); pollTimersRef.current.delete(repoName); console.log('[AgentContext] poll stopped (error)', repoName) }
-      delete eventCountRef.current[repoName]
+      delete ipcEventCountRef.current[repoName]
       dispatch({ type: 'STREAM_EVENT', repoName, event: { t: 'error', d: error, ts: new Date().toISOString() } })
       dispatch({ type: 'STREAM_DONE', repoName, result: null })
     })
