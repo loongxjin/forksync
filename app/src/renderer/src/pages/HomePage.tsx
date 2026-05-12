@@ -342,6 +342,13 @@ export function HomePage(): JSX.Element {
     await handleWorkflowContinue(repoName, 'reject')
   }, [handleWorkflowContinue])
 
+  const handleViewTerminal = useCallback((repoName: string) => {
+    setTerminalDrawerRepo(repoName)
+    if (!(streamEvents[repoName]?.length)) {
+      loadAgentLog(repoName)
+    }
+  }, [streamEvents, loadAgentLog])
+
   // Repo actions
   const removingRef = useRef<string | null>(null)
   const [removingRepo, setRemovingRepo] = useState<string | null>(null)
@@ -512,12 +519,7 @@ export function HomePage(): JSX.Element {
                         onAccept={() => handleWorkflowContinue(repo.name, 'accept')}
                         onReject={() => handleWorkflowContinue(repo.name, 'reject')}
                         onRetryCommit={() => handleWorkflowContinue(repo.name, 'retry_commit')}
-                        onViewTerminal={() => {
-                          setTerminalDrawerRepo(repo.name)
-                          if (!(streamEvents[repo.name]?.length)) {
-                            loadAgentLog(repo.name)
-                          }
-                        }}
+                        onViewTerminal={() => handleViewTerminal(repo.name)}
                         onViewDiff={() => setDiffDrawerRepo(repo.name)}
                         loading={agentLoading || !!localLoading[repo.name]}
                       />
@@ -529,13 +531,8 @@ export function HomePage(): JSX.Element {
                         onAccept={() => handleAccept(repo.name)}
                         onReject={() => handleReject(repo.name)}
                         loading={agentLoading || !!localLoading[repo.name]}
-                        onViewTerminal={() => {
-                          setTerminalDrawerRepo(repo.name)
-                          if (!(streamEvents[repo.name]?.length)) {
-                            loadAgentLog(repo.name)
-                          }
-                        }}
-                        hasLog={(streamEvents[repo.name]?.length ?? 0) > 0}
+                        onViewTerminal={() => handleViewTerminal(repo.name)}
+                        hasLog={(streamEvents[repo.name]?.length ?? 0) > 0}}
                       />
                     ) : (
                       <RepoDetailPanel
