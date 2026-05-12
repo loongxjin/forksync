@@ -113,13 +113,31 @@ export function HomePage(): JSX.Element {
     if (!shouldSkip) loadHistory()
   }, [loadHistory, historyInitialized, lastLoadAt, hasSyncing])
 
-  // Load persisted agent logs for repos that are currently resolving.
-  // Also covers the auto-sync path where status is 'syncing' (not 'resolving')
-  // but the workflow has an active agent_resolve step.
+  // Track which repos have been auto-loaded to prevent repeated loadAgentLog
+  // calls when repos changes (e.g. status poll every 3s during sync).
+  const autoLoadedRef = useRef<Set<string>>(new Set())
+
+  // When a new workflow starts, reset auto-load so the next sync/re-resolve
+  // picks up the new agent log (STREAM_LOAD from loadAgentLog overwrites old events).
+  const lastWorkflowStartRef = useRef<Record<string, string>>({})
+  useEffect(() => {
+    for (const repo of repos) {
+      const startedAt = repo.workflow?.startedAt
+      if (startedAt && startedAt !== lastWorkflowStartRef.current[repo.name]) {
+        lastWorkflowStartRef.current[repo.name] = startedAt
+        autoLoadedRef.current.delete(repo.name)
+      }
+    }
+  }, [repos])
+
+  // Auto-load agent logs for repos with active agent resolution.
+  // Guarded by autoLoadedRef to fire only once per workflow.
   useEffect(() => {
     if (!initialized) return
     for (const repo of repos) {
+      if (autoLoadedRef.current.has(repo.name)) continue
       if (repo.status === 'resolving') {
+        autoLoadedRef.current.add(repo.name)
         loadAgentLog(repo.name)
         continue
       }
@@ -128,25 +146,12 @@ export function HomePage(): JSX.Element {
           (s) => s.step === 'agent_resolve' && s.status === 'running'
         )
         if (agentStep) {
+          autoLoadedRef.current.add(repo.name)
           loadAgentLog(repo.name)
         }
       }
     }
   }, [initialized, repos, loadAgentLog])
-
-  // Clear old stream events when a new workflow starts for a repo (e.g. user
-  // rejected and re-synced). Without this, the terminal would show stale events
-  // from the previous run because streamEvents is still populated.
-  const lastWorkflowStartRef = useRef<Record<string, string>>({})
-  useEffect(() => {
-    for (const repo of repos) {
-      const startedAt = repo.workflow?.startedAt
-      if (startedAt && startedAt !== lastWorkflowStartRef.current[repo.name]) {
-        lastWorkflowStartRef.current[repo.name] = startedAt
-        clearStream(repo.name)
-      }
-    }
-  }, [repos, clearStream])
 
   // Path A: Auto-sync resolve results → resolveResults
   // When syncAll/syncRepo returns, syncResults may contain repos with agent resolution

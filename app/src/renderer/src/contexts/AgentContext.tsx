@@ -284,7 +284,9 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
       // Track event count in ref so poll closure stays current
       pollWatermarkRef.current[name] = res.events.length
       dispatch({ type: 'STREAM_LOAD', repoName: name, events: res.events, isRunning: res.isRunning })
-      // If agent is still running, start polling for new events every 2 seconds
+      // If agent is still running, start polling for new events every 2 seconds.
+      // If already finished, dispatch STREAM_DONE so the HomePage streamResults
+      // effect triggers refresh() to update the workflow status.
       if (res.isRunning) {
         console.log('[AgentContext] starting poll for', name, 'count:', res.events.length)
         const timer = setInterval(async () => {
@@ -321,6 +323,9 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
           }
         }, 2000)
         pollTimersRef.current.set(name, timer)
+      } else if (res.events.length > 0) {
+        // Agent already finished — trigger refresh so workflow status updates.
+        dispatch({ type: 'STREAM_DONE', repoName: name, result: null })
       }
     } catch (err) {
       console.error('[AgentContext] loadAgentLog failed', name, err)
