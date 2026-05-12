@@ -7,7 +7,6 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { useHistory } from '@/contexts/HistoryContext'
 import { StatusOverviewBar, type FilterStatus, CONFLICT_FAMILY } from '@/components/StatusOverviewBar'
 import { RepoRow } from '@/components/RepoRow'
-import { ConflictInlinePanel } from '@/components/ConflictInlinePanel'
 import { RepoDetailPanel } from '@/components/RepoDetailPanel'
 import { WorkflowSteps } from '@/components/WorkflowSteps'
 import { AgentTerminalDrawer } from '@/components/AgentTerminalDrawer'
@@ -20,7 +19,6 @@ import { ScanDialog } from '@/components/ScanDialog'
 import { RepoSettingsDialog } from '@/components/RepoSettingsDialog'
 import { engineApi } from '@/lib/api'
 import type { Repo, RepoStatus, ResolveData, SyncHistoryRecord } from '@/types/engine'
-import { isConflictStatus } from '@/lib/utils'
 import { RotateCw, RefreshCw, FolderOpen, ChevronDown, ChevronRight, CheckCircle2, Zap, XCircle, Search, Plus } from 'lucide-react'
 
 export function HomePage(): JSX.Element {
@@ -128,7 +126,7 @@ export function HomePage(): JSX.Element {
   // Path A: Auto-sync resolve results → resolveResults
   // When syncAll/syncRepo returns, syncResults may contain repos with agent resolution
   // data (status=resolved + agentResult). This path populates resolveResults so
-  // ConflictInlinePanel can show diff, summary and conflict file list.
+  // WorkflowSteps can show diff, summary and conflict file list.
   // Mutually exclusive with Path B — a repo is either synced or manually resolved.
   useEffect(() => {
     if (!syncResultsMountedRef.current) {
@@ -136,7 +134,7 @@ export function HomePage(): JSX.Element {
       return
     }
     // If any sync result has agent resolution data, populate resolveResults
-    // so ConflictInlinePanel can show diff, summary and file list.
+    // so WorkflowSteps can show diff, summary and file list.
     const resolvedSyncs = syncResults.filter(
       (r) => r.status === 'resolved' && r.agentResult
     )
@@ -246,12 +244,12 @@ export function HomePage(): JSX.Element {
       const noConfirm = engineConfig?.Agent?.ConfirmBeforeCommit === false
 
       // Always call `workflow continue resolve_with_agent` to create/advance the workflow.
-      // When triggered from ConflictInlinePanel (no existing workflow),
+      // When triggered without an existing workflow,
       // `handleResolveWithAgent` creates a new workflow with fetch/merge/check_conflicts
       // marked as success and resolve_strategy as success, agent_resolve as running.
       // When triggered from WorkflowSteps (existing workflow), it advances the steps.
       // Either way, the backend returns the updated repo with workflow so the UI
-      // can immediately show WorkflowSteps instead of staying on ConflictInlinePanel.
+      // can immediately show WorkflowSteps.
       const wfRes = await engineApi.workflowContinue(repo.name, 'resolve_with_agent')
       if (!wfRes.success) {
         showToast?.(wfRes.error ?? 'Workflow continue failed', 'error')
@@ -501,7 +499,6 @@ export function HomePage(): JSX.Element {
         <div className="space-y-2">
           {filteredRepos.map((repo) => {
             const isExpanded = expandedRepoIds.has(repo.id)
-            const isConflict = isConflictStatus(repo.status)
 
             return (
               <div key={repo.id}>
@@ -531,17 +528,6 @@ export function HomePage(): JSX.Element {
                         onViewTerminal={() => handleViewTerminal(repo.name)}
                         onViewDiff={() => setDiffDrawerRepo(repo.name)}
                         loading={agentLoading || !!localLoading[repo.name]}
-                      />
-                    ) : isConflict ? (
-                      <ConflictInlinePanel
-                        repo={repo}
-                        resolveResult={resolveResults[repo.name] ?? null}
-                        onResolve={() => handleResolve(repo)}
-                        onAccept={() => handleAccept(repo.name)}
-                        onReject={() => handleReject(repo.name)}
-                        loading={agentLoading || !!localLoading[repo.name]}
-                        onViewTerminal={() => handleViewTerminal(repo.name)}
-                        hasLog={(streamEvents[repo.name]?.length ?? 0) > 0}}
                       />
                     ) : (
                       <RepoDetailPanel
