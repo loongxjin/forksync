@@ -311,7 +311,7 @@ export function HomePage(): JSX.Element {
   // Path B: Manual resolve stream results → resolveResults
   // When the user clicks "Resolve with Agent", resolveStream sends NDJSON events.
   // On completion, streamResults is populated with the final ResolveData.
-  // This path writes it to resolveResults and triggers refresh + summarize.
+  // This path writes it to resolveResults and triggers refresh.
   // Mutually exclusive with Path A — a repo is either synced or manually resolved.
   useEffect(() => {
     let hasNew = false
@@ -322,9 +322,8 @@ export function HomePage(): JSX.Element {
         setResolveResults((prev) => ({ ...prev, [repoName]: result }))
       }
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
-      if (result && engineConfig?.Sync?.AutoSummary) {
-        engineApi.summarize(repoName).catch(() => {})
-      }
+      // Summarize is handled by handleWorkflowContinue on explicit accept,
+      // not here — the user hasn't confirmed the resolution yet.
     }
     if (hasNew) {
       console.log('[HomePage] calling refresh after stream done')
