@@ -550,6 +550,11 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		return false, nil
 	}
 
+	// The agent adapters don't populate ResolvedFiles, but we know exactly
+	// which files had conflicts. Tell verifyAndStageResolvedFiles to check
+	// and stage those so the subsequent commit succeeds.
+	result.ResolvedFiles = conflictPaths
+
 	// Verify no conflict markers remain and stage resolved files
 	if !s.verifyAndStageResolvedFiles(ctx, r, result) {
 		return false, nil
