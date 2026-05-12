@@ -42,14 +42,6 @@ const (
 	defaultDiffPreviewMaxLines = 100
 )
 
-// resolveContext groups parameters that always appear together during agent resolution.
-type resolveContext struct {
-	repo   types.Repo
-	store  repo.Store
-	cfg    *config.Config
-	cfgMgr *config.Manager
-}
-
 // conflictResolution groups parameters for conflict resolution handlers.
 type conflictResolution struct {
 	repo         types.Repo
@@ -251,7 +243,11 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	)
 
 	if resolveNoConfirm || !confirmBeforeCommit {
-		return completeAgentResolve(ctx, cmd, resolveContext{repo: r, store: store, cfg: cfg, cfgMgr: cfgMgr}, result)
+		return finalizeCommitWithWorkflow(ctx, r, store, newGitOps(cfg), commitWorkflowParams{
+			commitMsg:     types.CommitMsgAgentResolved,
+			recordHistory: true,
+			silentOutput:  resolveStream,
+		})
 	}
 
 	// Show diff and wait for confirmation
@@ -415,63 +411,6 @@ func showResolutionDiff(r types.Repo, diff string, result *agent.AgentResult, pr
 	}
 	outputText("")
 	outputText("Run 'forksync resolve %s --accept' to accept, or '--reject' to rollback.", r.Name)
-}
-
-// completeAgentResolve stages files and completes the merge.
-func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveContext, result *agent.AgentResult) error {
-	// Agent logs are meaningless once the workflow is complete — clean them up.
-	agent.DeleteAllLogs(rc.cfgMgr.ConfigDir(), rc.repo.Name)
-
-	// Execute post-sync commands now that the merge is committed.
-	// Run post-sync commands (logs success/failure internally).
-	syncpkg.RunPostSyncCommands(ctx, rc.repo)
-
-	// Stage all resolved files
-	gitOps := newGitOps(rc.cfg)
-	for _, f := range result.ResolvedFiles {
-		if err := gitOps.StageFile(ctx, rc.repo.Path, f); err != nil {
-			return fmt.Errorf("git add %s: %w", f, err)
-		}
-	}
-
-	// Commit — skip pre-commit hooks since this is an automated merge commit
-	commitMsg := types.CommitMsgAgentResolved
-	if err := gitOps.Commit(ctx, rc.repo.Path, commitMsg); err != nil {
-		logger.Warn("resolve: commit failed after agent resolution, keeping resolved state for manual confirmation",
-			"repo", rc.repo.Name, "error", err)
-		if isJSON() && !resolveStream {
-			outputJSON(types.ResolveData{
-				RepoID:      rc.repo.ID,
-				Conflicts:   []types.ConflictFile{},
-				AgentResult: agentResultToTypes(result),
-				CommitError: fmt.Sprintf("auto-commit failed: %v", err),
-			}, nil)
-		} else if !isJSON() {
-			outputText("Agent resolved conflicts but commit failed: %v", err)
-			outputText("Please fix the issue and run 'forksync resolve %s --accept' to complete the merge.", rc.repo.Name)
-		}
-		return nil
-	}
-
-	// Update status
-	rc.repo.Status = types.RepoStatusUpToDate
-	rc.repo.ErrorMessage = ""
-	if rc.repo.Workflow != nil {
-		syncpkg.AdvanceStep(rc.repo.Workflow, types.StepAcceptChanges, types.StepStatusSuccess, "")
-		syncpkg.AdvanceStep(rc.repo.Workflow, types.StepCommit, types.StepStatusSuccess, "")
-		syncpkg.MarkWorkflowDone(rc.repo.Workflow, types.WorkflowSuccess)
-	}
-	updateRepoWithLog(rc.repo, rc.store, "complete")
-
-	info := workflowCompletionInfo(rc.repo.Workflow)
-	recordWorkflowComplete(rc.repo, 0, info)
-
-	if !resolveStream {
-		outputResult(types.AcceptData{RepoID: rc.repo.ID, Resolved: true}, "✅ Merge completed for %s (agent-resolved)", rc.repo.Name)
-	} else {
-		logger.Info("[TRACE] resolve: skipping outputResult in stream mode", "repo", rc.repo.Name)
-	}
-	return nil
 }
 
 // runResolveReject rolls back the merge using git merge --abort,
