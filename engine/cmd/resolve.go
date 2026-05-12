@@ -42,14 +42,6 @@ const (
 	defaultDiffPreviewMaxLines = 100
 )
 
-// resolveContext groups parameters that always appear together during agent resolution.
-type resolveContext struct {
-	repo   types.Repo
-	store  repo.Store
-	cfg    *config.Config
-	cfgMgr *config.Manager
-}
-
 // conflictResolution groups parameters for conflict resolution handlers.
 type conflictResolution struct {
 	repo         types.Repo
@@ -225,12 +217,20 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	result.ResolvedFiles = conflictPaths
 	result.AgentName = provider.Name()
 
-	// Update status — agent resolved successfully
-	resolved.Store(true)
-	r.Status = types.RepoStatusResolved
-	r.ErrorMessage = ""
-	updateWorkflowAgentResolve(&r, provider.Name(), "")
-	updateRepoWithLog(r, store, "resolved")
+		// Update status — agent resolved successfully
+		resolved.Store(true)
+		r.Status = types.RepoStatusResolved
+		r.ErrorMessage = ""
+		if r.Workflow == nil {
+			r.Workflow = newWorkflowFromRepo(r)
+		}
+		// Mark completed steps as Success (newWorkflowFromRepo initializes them as Pending/Success for fetch/merge/check_conflicts)
+		syncpkg.AdvanceStep(r.Workflow, types.StepResolveStrategy, types.StepStatusSuccess, "")
+		syncpkg.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusSuccess,
+			fmt.Sprintf("resolved by %s", provider.Name()))
+		syncpkg.AdvanceStep(r.Workflow, types.StepAcceptChanges, types.StepStatusWaiting, "")
+		r.Workflow.Status = types.WorkflowWaiting
+		updateRepoWithLog(r, store, "resolved")
 
 	// Auto-confirm or wait for user
 	confirmBeforeCommit := true
@@ -246,7 +246,11 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	)
 
 	if resolveNoConfirm || !confirmBeforeCommit {
-		return completeAgentResolve(ctx, cmd, resolveContext{repo: r, store: store, cfg: cfg, cfgMgr: cfgMgr}, result)
+		return finalizeCommitWithWorkflow(ctx, r, store, newGitOps(cfg), commitWorkflowParams{
+			commitMsg:     types.CommitMsgAgentResolved,
+			recordHistory: true,
+			silentOutput:  resolveStream,
+		})
 	}
 
 	// Show diff and wait for confirmation
@@ -412,59 +416,6 @@ func showResolutionDiff(r types.Repo, diff string, result *agent.AgentResult, pr
 	outputText("Run 'forksync resolve %s --accept' to accept, or '--reject' to rollback.", r.Name)
 }
 
-// completeAgentResolve stages files and completes the merge.
-func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveContext, result *agent.AgentResult) error {
-	// Agent logs are meaningless once the workflow is complete — clean them up.
-	agent.DeleteAllLogs(rc.cfgMgr.ConfigDir(), rc.repo.Name)
-
-	// Execute post-sync commands now that the merge is committed.
-	// Run post-sync commands (logs success/failure internally).
-	syncpkg.RunPostSyncCommands(ctx, rc.repo)
-
-	// Stage all resolved files
-	gitOps := newGitOps(rc.cfg)
-	for _, f := range result.ResolvedFiles {
-		if err := gitOps.StageFile(ctx, rc.repo.Path, f); err != nil {
-			return fmt.Errorf("git add %s: %w", f, err)
-		}
-	}
-
-	// Commit — skip pre-commit hooks since this is an automated merge commit
-	commitMsg := types.CommitMsgAgentResolved
-	if err := gitOps.Commit(ctx, rc.repo.Path, commitMsg); err != nil {
-		logger.Warn("resolve: commit failed after agent resolution, keeping resolved state for manual confirmation",
-			"repo", rc.repo.Name, "error", err)
-		if isJSON() && !resolveStream {
-			outputJSON(types.ResolveData{
-				RepoID:      rc.repo.ID,
-				Conflicts:   []types.ConflictFile{},
-				AgentResult: agentResultToTypes(result),
-				CommitError: fmt.Sprintf("auto-commit failed: %v", err),
-			}, nil)
-		} else if !isJSON() {
-			outputText("Agent resolved conflicts but commit failed: %v", err)
-			outputText("Please fix the issue and run 'forksync resolve %s --accept' to complete the merge.", rc.repo.Name)
-		}
-		return nil
-	}
-
-	// Update status
-	rc.repo.Status = types.RepoStatusUpToDate
-	rc.repo.ErrorMessage = ""
-	updateWorkflowCommit(&rc.repo)
-	updateRepoWithLog(rc.repo, rc.store, "complete")
-
-	info := workflowCompletionInfo(rc.repo.Workflow)
-	recordWorkflowComplete(rc.repo, 0, info)
-
-	if !resolveStream {
-		outputResult(types.AcceptData{RepoID: rc.repo.ID, Resolved: true}, "✅ Merge completed for %s (agent-resolved)", rc.repo.Name)
-	} else {
-		logger.Info("[TRACE] resolve: skipping outputResult in stream mode", "repo", rc.repo.Name)
-	}
-	return nil
-}
-
 // runResolveReject rolls back the merge using git merge --abort,
 // restoring the repository to its pre-merge state.
 func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config) error {
@@ -475,24 +426,24 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 
 	err := gitOps.AbortMerge(ctx, r.Path)
 	if err != nil {
-		logger.Error("resolve: merge --abort failed", "repo", r.Name, "error", err)
-		r.Status = types.RepoStatusConflict
-		r.ErrorMessage = fmt.Sprintf("reject failed: merge --abort error: %v", err)
-		_ = store.Update(r)
-
-		if isJSON() {
-			outputJSON(types.RejectData{RepoID: r.ID, RolledBack: false}, fmt.Errorf("merge --abort failed: %w", err))
-		} else {
-			outputText("⚠️  Failed to rollback: %v", err)
-		}
-		return fmt.Errorf("merge --abort: %w", err)
+		logger.Warn("resolve: merge --abort failed", "repo", r.Name, "error", err)
 	}
 
-	r.Status = types.RepoStatusConflict
+	// Mark workflow as aborted (pending steps → Skipped, workflow → Failed)
+	// so cleanupStaleWorkflows recognizes it as an aborted workflow and cleans it up.
+	if r.Workflow != nil {
+		for i := range r.Workflow.Steps {
+			if r.Workflow.Steps[i].Status == types.StepStatusPending {
+				r.Workflow.Steps[i].Status = types.StepStatusSkipped
+				now := types.Time{Time: time.Now()}
+				r.Workflow.Steps[i].EndedAt = &now
+			}
+		}
+		syncpkg.MarkWorkflowDone(r.Workflow, types.WorkflowFailed)
+	}
+
+	r.Status = types.RepoStatusSyncNeeded
 	r.ErrorMessage = ""
-	// User explicitly rejected — clear the workflow entirely rather than leaving
-	// a failed record behind. The git state has already been rolled back.
-	r.Workflow = nil
 	updateRepoWithLog(r, store, "reject")
 
 	outputResult(types.RejectData{RepoID: r.ID, RolledBack: true}, "🔄 Rolled back merge for %s", r.Name)
@@ -500,9 +451,7 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 }
 
 // runResolveAccept checks for remaining conflicts and completes the merge.
-func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, cfgMgr *config.Manager) error {
-	agent.DeleteAllLogs(cfgMgr.ConfigDir(), r.Name)
-
+func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, _ *config.Manager) error {
 	remaining := newGitOps(cfg).DetectConflicts(cmd.Context(), r.Path)
 
 	if len(remaining) > 0 {
@@ -531,33 +480,11 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 		return nil
 	}
 
-	gitOps := newGitOps(cfg)
-	// Stage all resolved files before committing.
-	if err := gitOps.StageAll(cmd.Context(), r.Path); err != nil {
-		return fmt.Errorf("git add: %w", err)
-	}
-
-	// Complete the merge.
-	if err := gitOps.CommitNoEdit(cmd.Context(), r.Path); err != nil {
-		if err := gitOps.Commit(cmd.Context(), r.Path, types.CommitMsgAgentResolved); err != nil {
-			return fmt.Errorf("git commit: %w", err)
-		}
-	}
-
-	r.Status = types.RepoStatusUpToDate
-	r.ErrorMessage = ""
-	updateWorkflowCommit(&r)
-	updateRepoWithLog(r, store, "accept")
-
-	// Execute post-sync commands now that the merge is committed.
-	// Run post-sync commands (logs success/failure internally).
-	syncpkg.RunPostSyncCommands(cmd.Context(), r)
-
-	info := workflowCompletionInfo(r.Workflow)
-	recordWorkflowComplete(r, 0, info)
-
-	outputResult(types.AcceptData{RepoID: r.ID, Resolved: true}, "✅ Merge completed for %s", r.Name)
-	return nil
+	// Delegate stage → commit → workflow → post-sync → history to the shared function.
+	return finalizeCommitWithWorkflow(cmd.Context(), r, store, newGitOps(cfg), commitWorkflowParams{
+		commitMsg:     types.CommitMsgAgentResolved,
+		recordHistory: true,
+	})
 }
 
 // toConflictFiles converts string paths to ConflictFile slices.
@@ -615,64 +542,4 @@ func outputResult(data any, textFormat string, textArgs ...any) {
 	} else {
 		outputText(textFormat, textArgs...)
 	}
-}
-
-// updateWorkflowAgentResolve updates the workflow when agent resolve succeeds.
-func updateWorkflowAgentResolve(r *types.Repo, agentName string, commitErr string) {
-	if r.Workflow == nil {
-		return
-	}
-	now := types.Time{Time: time.Now()}
-	for i := range r.Workflow.Steps {
-		if r.Workflow.Steps[i].Step == types.StepAgentResolve {
-			r.Workflow.Steps[i].Status = types.StepStatusSuccess
-			r.Workflow.Steps[i].Message = fmt.Sprintf("resolved by %s", agentName)
-			r.Workflow.Steps[i].EndedAt = &now
-		}
-		if r.Workflow.Steps[i].Step == types.StepAcceptChanges {
-			if commitErr != "" {
-				r.Workflow.Steps[i].Status = types.StepStatusWaiting
-				r.Workflow.Steps[i].Message = commitErr
-			} else {
-				r.Workflow.Steps[i].Status = types.StepStatusWaiting
-			}
-		}
-	}
-	r.Workflow.Status = types.WorkflowWaiting
-}
-
-// updateWorkflowCommit updates the workflow when commit succeeds.
-func updateWorkflowCommit(r *types.Repo) {
-	if r.Workflow == nil {
-		return
-	}
-	now := types.Time{Time: time.Now()}
-	for i := range r.Workflow.Steps {
-		if r.Workflow.Steps[i].Step == types.StepCommit {
-			r.Workflow.Steps[i].Status = types.StepStatusSuccess
-			r.Workflow.Steps[i].EndedAt = &now
-		}
-		if r.Workflow.Steps[i].Step == types.StepAcceptChanges && r.Workflow.Steps[i].Status == types.StepStatusWaiting {
-			r.Workflow.Steps[i].Status = types.StepStatusSuccess
-			r.Workflow.Steps[i].EndedAt = &now
-		}
-	}
-	r.Workflow.Status = types.WorkflowSuccess
-	r.Workflow.FinishedAt = &now
-}
-
-// updateWorkflowAbort updates the workflow when the merge is aborted.
-func updateWorkflowAbort(r *types.Repo) {
-	if r.Workflow == nil {
-		return
-	}
-	now := types.Time{Time: time.Now()}
-	for i := range r.Workflow.Steps {
-		if r.Workflow.Steps[i].Status == types.StepStatusPending {
-			r.Workflow.Steps[i].Status = types.StepStatusSkipped
-			r.Workflow.Steps[i].EndedAt = &now
-		}
-	}
-	r.Workflow.Status = types.WorkflowFailed
-	r.Workflow.FinishedAt = &now
 }

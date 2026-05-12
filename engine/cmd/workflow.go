@@ -156,6 +156,7 @@ type commitWorkflowParams struct {
 	commitMsg          string // fallback commit message
 	skipAgentAndAccept bool   // whether to mark agent_resolve and accept_changes as skipped
 	recordHistory      bool   // whether to record workflow completion history
+	silentOutput       bool   // suppress outputWorkflowResult (used in --stream mode)
 }
 
 func handleWorkflowAccept(ctx context.Context, r types.Repo, store repo.Store, cfg *config.Config) error {
@@ -244,7 +245,9 @@ func finalizeCommitWithWorkflow(ctx context.Context, r types.Repo, store repo.St
 			r.Status = types.RepoStatusError
 			r.ErrorMessage = fmt.Sprintf("commit failed: %v", err2)
 			_ = store.Update(r)
-			outputWorkflowResult(r)
+			if !params.silentOutput {
+				outputWorkflowResult(r)
+			}
 			return nil
 		}
 	}

@@ -160,7 +160,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		result.ErrorMessage = "sync already in progress"
 		result.Workflow = newWorkflow(r.ID)
 		AdvanceStep(result.Workflow, types.StepFetch, types.StepStatusFailed, "sync already in progress")
-		markWorkflowDone(result.Workflow, types.WorkflowFailed)
+		MarkWorkflowDone(result.Workflow, types.WorkflowFailed)
 		s.finalizeResult(result)
 		return result
 	}
@@ -259,7 +259,7 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 		result.Status = string(types.RepoStatusConflict)
 		result.ErrorMessage = fmt.Sprintf("repository is in %s state, please resolve conflicts before syncing", r.Status)
 		AdvanceStep(wf, types.StepFetch, types.StepStatusFailed, result.ErrorMessage)
-		markWorkflowDone(wf, types.WorkflowFailed)
+		MarkWorkflowDone(wf, types.WorkflowFailed)
 		s.saveWorkflow(r, wf)
 		// DO NOT call finalizeResult — this is not a real sync, don't pollute history
 		s.logResult(result)
@@ -274,7 +274,7 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 // updates repo status, optionally notifies, saves workflow, and finalizes the result.
 func (s *Syncer) failSync(r types.Repo, result *Result, wf *types.SyncWorkflow, step types.WorkflowStep, errMsg string, notify bool) *Result {
 	AdvanceStep(wf, step, types.StepStatusFailed, errMsg)
-	markWorkflowDone(wf, types.WorkflowFailed)
+	MarkWorkflowDone(wf, types.WorkflowFailed)
 	result.Status = string(types.RepoStatusError)
 	result.ErrorMessage = errMsg
 	s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
@@ -342,7 +342,7 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 		MarkStepSkipped(wf, types.StepAgentResolve)
 		MarkStepSkipped(wf, types.StepAcceptChanges)
 		AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-		markWorkflowDone(wf, types.WorkflowSuccess)
+		MarkWorkflowDone(wf, types.WorkflowSuccess)
 		result.Status = string(types.RepoStatusUpToDate)
 		result.CommitsPulled = 0
 		s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
@@ -394,7 +394,7 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 		s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, result.ErrorMessage)
 	}
 	AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-	markWorkflowDone(wf, types.WorkflowSuccess)
+	MarkWorkflowDone(wf, types.WorkflowSuccess)
 	s.saveWorkflow(r, wf)
 	s.notifyResult(r.Name, result)
 	s.finalizeResult(result)
@@ -438,7 +438,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 				fmt.Sprintf("resolved by %s", s.sessionMgr.ProviderName()))
 			MarkStepSkipped(wf, types.StepAcceptChanges)
 			AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-			markWorkflowDone(wf, types.WorkflowSuccess)
+			MarkWorkflowDone(wf, types.WorkflowSuccess)
 			result.Status = string(types.RepoStatusUpToDate)
 			result.AutoResolved = len(mergeResult.Conflicts)
 			result.PostSyncResults = RunPostSyncCommands(ctx, r)
@@ -479,7 +479,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 		}
 		// Agent failed
 		AdvanceStep(wf, types.StepAgentResolve, types.StepStatusFailed, "agent failed to resolve conflicts")
-		markWorkflowDone(wf, types.WorkflowFailed)
+		MarkWorkflowDone(wf, types.WorkflowFailed)
 		result.Status = string(types.RepoStatusConflict)
 		s.updateRepoStatus(r.ID, types.RepoStatusConflict, "")
 		s.saveWorkflow(r, wf)

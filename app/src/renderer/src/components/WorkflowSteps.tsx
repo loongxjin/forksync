@@ -1,15 +1,18 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { DiffViewer } from '@/components/DiffViewer'
 import { StepItem } from '@/components/StepItem'
-import type { Repo, WorkflowStepRecord, AgentStreamEvent } from '@/types/engine'
+import type { Repo, ResolveData, AgentStreamEvent } from '@/types/engine'
 import { cn } from '@/lib/utils'
-import { Bot, Monitor, GitPullRequestClosed, RotateCcw, Terminal, Eye, FileDiff, X } from 'lucide-react'
+import { Bot, Monitor, GitPullRequestClosed, RotateCcw, Terminal, Eye, FileDiff, X, FileText, AlertTriangle } from 'lucide-react'
 
 interface WorkflowStepsProps {
   repo: Repo
   streamEvents?: AgentStreamEvent[]
   isStreamLive?: boolean
+  resolveResult?: ResolveData | null
   onResolveWithAgent?: () => void
   onOpenIDE?: () => void
   onAbort?: () => void
@@ -25,6 +28,7 @@ export function WorkflowSteps({
   repo,
   streamEvents = [],
   isStreamLive = false,
+  resolveResult,
   onResolveWithAgent,
   onOpenIDE,
   onAbort,
@@ -37,6 +41,7 @@ export function WorkflowSteps({
 }: WorkflowStepsProps): JSX.Element {
   const { t } = useTranslation()
   const workflow = repo.workflow
+  const [selectedFile, setSelectedFile] = useState<string | null>(null)
 
   if (!workflow) {
     return (
@@ -48,6 +53,14 @@ export function WorkflowSteps({
 
   const steps = workflow.steps
   const eventsCount = streamEvents.length
+
+  // Extract resolve detail data
+  const agentResult = resolveResult?.agentResult
+  const conflicts = resolveResult?.conflicts ?? []
+  const diff = agentResult?.diff
+  const showResolveDetails = resolveResult && (
+    agentResult?.agentName || agentResult?.summary || conflicts.length > 0 || resolveResult?.commitError
+  )
 
   const getStepProps = (index: number) => {
     const step = steps[index]
@@ -64,6 +77,15 @@ export function WorkflowSteps({
           const { isLast, isNextActive } = getStepProps(idx)
           const isAgentResolveRunning = stepRecord.step === 'agent_resolve' && stepRecord.status === 'running'
           const isWaiting = stepRecord.status === 'waiting'
+
+          // Should we show resolve details after this step?
+          const showDetailsAfterAgentResolve =
+            stepRecord.step === 'agent_resolve' &&
+            (stepRecord.status === 'success' || stepRecord.status === 'failed')
+          const showDetailsAfterAcceptWaiting =
+            stepRecord.step === 'accept_changes' && stepRecord.status === 'waiting'
+
+          const showDetails = showDetailsAfterAgentResolve || showDetailsAfterAcceptWaiting
 
           return (
             <StepItem
@@ -147,6 +169,79 @@ export function WorkflowSteps({
                       <GitPullRequestClosed size={14} className="mr-1.5" />
                       {t('workflow.abortMerge')}
                     </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Resolve details: agent info, summary, conflict files, diff, commit error */}
+              {showDetails && showResolveDetails && (
+                <div className="mt-2 ml-1 border-l-2 border-primary/20 pl-3 space-y-3">
+                  {/* Agent info */}
+                  {agentResult?.agentName && (
+                    <p className="text-xs text-muted-foreground">
+                      <Bot size={12} className="inline mr-1" />
+                      {t('resolvePanel.agent')} <span className="text-foreground font-medium">{agentResult.agentName}</span>
+                    </p>
+                  )}
+
+                  {/* AI Summary */}
+                  {agentResult?.summary && (
+                    <div className="rounded-lg bg-primary/5 border border-primary/10 p-3">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        <FileText size={12} className="inline mr-1" />
+                        {t('home.aiSuggestion')}
+                      </p>
+                      <p className="text-sm leading-relaxed">{agentResult.summary}</p>
+                    </div>
+                  )}
+
+                  {/* Conflict files */}
+                  {conflicts.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        {t('conflicts.conflictFiles')}
+                      </p>
+                      <div className="space-y-0.5">
+                        {conflicts.map((f) => (
+                          <button
+                            key={f.path}
+                            onClick={() => setSelectedFile(selectedFile === f.path ? null : f.path)}
+                            className={cn(
+                              'flex items-center gap-2 text-sm w-full text-left px-2 py-1.5 rounded-md transition-colors duration-150',
+                              selectedFile === f.path ? 'bg-accent text-foreground' : 'hover:bg-accent/50 text-muted-foreground hover:text-foreground'
+                            )}
+                          >
+                            <AlertTriangle size={12} className="text-error shrink-0" />
+                            <span className="truncate font-mono text-xs">{f.path}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Diff preview */}
+                  {diff && selectedFile && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        {t('conflicts.diffPreview')} — {selectedFile}
+                        <span className="text-error ml-1">({t('conflicts.fullStagedDiff')})</span>
+                      </p>
+                      <DiffViewer diff={diff} className="max-h-64" />
+                    </div>
+                  )}
+
+                  {/* Commit failure warning */}
+                  {resolveResult?.commitError && (
+                    <div className="rounded-lg bg-error/10 border border-error/20 p-3">
+                      <p className="text-xs font-medium text-error flex items-center gap-1.5">
+                        <AlertTriangle size={12} />
+                        {t('resolvePanel.commitFailed')}
+                      </p>
+                      <p className="mt-1 text-xs text-error/80 font-mono break-all">{resolveResult.commitError}</p>
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        {t('resolvePanel.commitFailedHint')}
+                      </p>
+                    </div>
                   )}
                 </div>
               )}

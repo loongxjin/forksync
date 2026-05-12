@@ -7,7 +7,6 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { useHistory } from '@/contexts/HistoryContext'
 import { StatusOverviewBar, type FilterStatus, CONFLICT_FAMILY } from '@/components/StatusOverviewBar'
 import { RepoRow } from '@/components/RepoRow'
-import { ConflictInlinePanel } from '@/components/ConflictInlinePanel'
 import { RepoDetailPanel } from '@/components/RepoDetailPanel'
 import { WorkflowSteps } from '@/components/WorkflowSteps'
 import { AgentTerminalDrawer } from '@/components/AgentTerminalDrawer'
@@ -20,7 +19,6 @@ import { ScanDialog } from '@/components/ScanDialog'
 import { RepoSettingsDialog } from '@/components/RepoSettingsDialog'
 import { engineApi } from '@/lib/api'
 import type { Repo, RepoStatus, ResolveData, SyncHistoryRecord } from '@/types/engine'
-import { isConflictStatus } from '@/lib/utils'
 import { RotateCw, RefreshCw, FolderOpen, ChevronDown, ChevronRight, CheckCircle2, Zap, XCircle, Search, Plus } from 'lucide-react'
 
 export function HomePage(): JSX.Element {
@@ -31,7 +29,7 @@ export function HomePage(): JSX.Element {
     startupSyncDone, markStartupSyncDone
   } = useRepos()
   const {
-    resolveAccept, resolveReject, preferred, loading: agentLoading, error: agentError,
+    preferred, loading: agentLoading, error: agentError,
     resolveStream, loadAgentLog, clearStream, streamEvents, streamLive, streamResults
   } = useAgents()
   const { engineConfig } = useSettings()
@@ -125,14 +123,18 @@ export function HomePage(): JSX.Element {
     }
   }, [initialized, repos, loadAgentLog])
 
-  // Reload history after sync, and populate resolveResults for auto-resolved repos
+  // Path A: Auto-sync resolve results → resolveResults
+  // When syncAll/syncRepo returns, syncResults may contain repos with agent resolution
+  // data (status=resolved + agentResult). This path populates resolveResults so
+  // WorkflowSteps can show diff, summary and conflict file list.
+  // Mutually exclusive with Path B — a repo is either synced or manually resolved.
   useEffect(() => {
     if (!syncResultsMountedRef.current) {
       syncResultsMountedRef.current = true
       return
     }
     // If any sync result has agent resolution data, populate resolveResults
-    // so ConflictInlinePanel can show diff, summary and file list.
+    // so WorkflowSteps can show diff, summary and file list.
     const resolvedSyncs = syncResults.filter(
       (r) => r.status === 'resolved' && r.agentResult
     )
@@ -242,12 +244,12 @@ export function HomePage(): JSX.Element {
       const noConfirm = engineConfig?.Agent?.ConfirmBeforeCommit === false
 
       // Always call `workflow continue resolve_with_agent` to create/advance the workflow.
-      // When triggered from ConflictInlinePanel (no existing workflow),
+      // When triggered without an existing workflow,
       // `handleResolveWithAgent` creates a new workflow with fetch/merge/check_conflicts
       // marked as success and resolve_strategy as success, agent_resolve as running.
       // When triggered from WorkflowSteps (existing workflow), it advances the steps.
       // Either way, the backend returns the updated repo with workflow so the UI
-      // can immediately show WorkflowSteps instead of staying on ConflictInlinePanel.
+      // can immediately show WorkflowSteps.
       const wfRes = await engineApi.workflowContinue(repo.name, 'resolve_with_agent')
       if (!wfRes.success) {
         showToast?.(wfRes.error ?? 'Workflow continue failed', 'error')
@@ -276,7 +278,11 @@ export function HomePage(): JSX.Element {
   const refreshRef = useRef(refresh)
   refreshRef.current = refresh
 
-  // Listen for streaming resolve results.
+  // Path B: Manual resolve stream results → resolveResults
+  // When the user clicks "Resolve with Agent", resolveStream sends NDJSON events.
+  // On completion, streamResults is populated with the final ResolveData.
+  // This path writes it to resolveResults and triggers refresh + summarize.
+  // Mutually exclusive with Path A — a repo is either synced or manually resolved.
   useEffect(() => {
     let hasNew = false
     for (const [repoName, result] of Object.entries(streamResults)) {
@@ -301,46 +307,6 @@ export function HomePage(): JSX.Element {
     }
   }, [streamResults, loadHistory, engineConfig])
 
-  const handleAccept = useCallback(async (repoName: string) => {
-    setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
-    try {
-      const result = await resolveAccept(repoName)
-      if (!result) return
-      setResolveResults((prev) => {
-        const next = { ...prev }
-        delete next[repoName]
-        return next
-      })
-      await refresh()
-      loadHistory()
-      // Fire-and-forget AI summarization after resolving conflicts
-      if (engineConfig?.Sync?.AutoSummary) {
-        engineApi.summarize(repoName).catch(() => {
-          // ignore background summary errors
-        })
-      }
-    } finally {
-      setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
-    }
-  }, [resolveAccept, refresh, loadHistory, engineConfig])
-
-  const handleReject = useCallback(async (repoName: string) => {
-    setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
-    clearStream(repoName)
-    try {
-      const ok = await resolveReject(repoName)
-      if (!ok) return
-      setResolveResults((prev) => {
-        const next = { ...prev }
-        delete next[repoName]
-        return next
-      })
-      await refresh()
-    } finally {
-      setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
-    }
-  }, [resolveReject, refresh, clearStream])
-
   const handleWorkflowContinue = useCallback(async (repoName: string, action: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
     if (action === 'abort' || action === 'reject') {
@@ -350,11 +316,19 @@ export function HomePage(): JSX.Element {
       const res = await engineApi.workflowContinue(repoName, action)
       if (!res.success) {
         showToast?.(res.error ?? `Workflow action ${action} failed`, 'error')
-      } else if (engineConfig?.Sync?.AutoSummary && (action === 'accept' || action === 'continue_manual')) {
-        // Fire-and-forget AI summarization after resolving conflicts via workflow
-        engineApi.summarize(repoName).catch(() => {
-          // ignore background summary errors
+      } else {
+        // Clean up resolveResults on accept or reject
+        setResolveResults((prev) => {
+          const next = { ...prev }
+          delete next[repoName]
+          return next
         })
+        if (engineConfig?.Sync?.AutoSummary && (action === 'accept' || action === 'continue_manual')) {
+          // Fire-and-forget AI summarization after resolving conflicts via workflow
+          engineApi.summarize(repoName).catch(() => {
+            // ignore background summary errors
+          })
+        }
       }
       await refresh()
       loadHistory()
@@ -365,6 +339,21 @@ export function HomePage(): JSX.Element {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
     }
   }, [refresh, loadHistory, showToast, engineConfig, clearStream])
+
+  const handleAccept = useCallback(async (repoName: string) => {
+    await handleWorkflowContinue(repoName, 'accept')
+  }, [handleWorkflowContinue])
+
+  const handleReject = useCallback(async (repoName: string) => {
+    await handleWorkflowContinue(repoName, 'reject')
+  }, [handleWorkflowContinue])
+
+  const handleViewTerminal = useCallback((repoName: string) => {
+    setTerminalDrawerRepo(repoName)
+    if (!(streamEvents[repoName]?.length)) {
+      loadAgentLog(repoName)
+    }
+  }, [streamEvents, loadAgentLog])
 
   // Repo actions
   const removingRef = useRef<string | null>(null)
@@ -510,7 +499,6 @@ export function HomePage(): JSX.Element {
         <div className="space-y-2">
           {filteredRepos.map((repo) => {
             const isExpanded = expandedRepoIds.has(repo.id)
-            const isConflict = isConflictStatus(repo.status)
 
             return (
               <div key={repo.id}>
@@ -530,36 +518,16 @@ export function HomePage(): JSX.Element {
                         repo={repo}
                         streamEvents={streamEvents[repo.name] ?? []}
                         isStreamLive={streamLive.has(repo.name)}
+                        resolveResult={resolveResults[repo.name] ?? null}
                         onResolveWithAgent={() => handleResolve(repo)}
                         onOpenIDE={() => window.api.ideOpen(repo.path, 'default')}
                         onAbort={() => handleWorkflowContinue(repo.name, 'abort')}
                         onAccept={() => handleWorkflowContinue(repo.name, 'accept')}
                         onReject={() => handleWorkflowContinue(repo.name, 'reject')}
                         onRetryCommit={() => handleWorkflowContinue(repo.name, 'retry_commit')}
-                        onViewTerminal={() => {
-                          setTerminalDrawerRepo(repo.name)
-                          if (!(streamEvents[repo.name]?.length)) {
-                            loadAgentLog(repo.name)
-                          }
-                        }}
+                        onViewTerminal={() => handleViewTerminal(repo.name)}
                         onViewDiff={() => setDiffDrawerRepo(repo.name)}
                         loading={agentLoading || !!localLoading[repo.name]}
-                      />
-                    ) : isConflict ? (
-                      <ConflictInlinePanel
-                        repo={repo}
-                        resolveResult={resolveResults[repo.name] ?? null}
-                        onResolve={() => handleResolve(repo)}
-                        onAccept={() => handleAccept(repo.name)}
-                        onReject={() => handleReject(repo.name)}
-                        loading={agentLoading || !!localLoading[repo.name]}
-                        onViewTerminal={() => {
-                          setTerminalDrawerRepo(repo.name)
-                          if (!(streamEvents[repo.name]?.length)) {
-                            loadAgentLog(repo.name)
-                          }
-                        }}
-                        hasLog={(streamEvents[repo.name]?.length ?? 0) > 0}
                       />
                     ) : (
                       <RepoDetailPanel
