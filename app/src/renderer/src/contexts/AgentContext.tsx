@@ -11,7 +11,7 @@ import {
   useEffect,
   type ReactNode
 } from 'react'
-import type { AgentInfo, AgentSessionInfo, ResolveData, AcceptData, AgentResetData, AgentStreamEvent } from '@/types/engine'
+import type { AgentInfo, AgentSessionInfo, ResolveData, AgentResetData, AgentStreamEvent } from '@/types/engine'
 import { engineApi } from '@/lib/api'
 
 // ---------------------------------------------------------------------------
@@ -151,8 +151,6 @@ interface AgentContextValue extends AgentState {
     name: string,
     opts?: { agent?: string; noConfirm?: boolean }
   ) => Promise<ResolveData | null>
-  resolveAccept: (name: string) => Promise<AcceptData | null>
-  resolveReject: (name: string) => Promise<boolean>
   cleanup: () => Promise<number>
   resetSession: (name: string) => Promise<AgentResetData | null>
   resolveStream: (name: string, opts?: { agent?: string; noConfirm?: boolean }) => void
@@ -227,40 +225,6 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
     },
     []
   )
-
-  const resolveAccept = useCallback(async (name: string): Promise<AcceptData | null> => {
-    dispatch({ type: 'SET_LOADING', loading: true })
-    try {
-      const res = await engineApi.resolveAccept(name)
-      if (res.success) {
-        dispatch({ type: 'SET_LOADING', loading: false })
-        return res.data
-      } else {
-        dispatch({ type: 'SET_ERROR', error: res.error })
-        return null
-      }
-    } catch (err) {
-      dispatch({ type: 'SET_ERROR', error: (err as Error).message })
-      return null
-    }
-  }, [])
-
-  const resolveReject = useCallback(async (name: string): Promise<boolean> => {
-    dispatch({ type: 'SET_LOADING', loading: true })
-    try {
-      const res = await engineApi.resolveReject(name)
-      if (res.success) {
-        dispatch({ type: 'SET_LOADING', loading: false })
-        return true
-      } else {
-        dispatch({ type: 'SET_ERROR', error: res.error })
-        return false
-      }
-    } catch (err) {
-      dispatch({ type: 'SET_ERROR', error: (err as Error).message })
-      return false
-    }
-  }, [])
 
   const cleanup = useCallback(async (): Promise<number> => {
     try {
@@ -438,8 +402,6 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
         refreshAgents,
         refreshSessions,
         resolve,
-        resolveAccept,
-        resolveReject,
         cleanup,
         resetSession,
         resolveStream,

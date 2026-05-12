@@ -31,7 +31,7 @@ export function HomePage(): JSX.Element {
     startupSyncDone, markStartupSyncDone
   } = useRepos()
   const {
-    resolveAccept, resolveReject, preferred, loading: agentLoading, error: agentError,
+    preferred, loading: agentLoading, error: agentError,
     resolveStream, loadAgentLog, clearStream, streamEvents, streamLive, streamResults
   } = useAgents()
   const { engineConfig } = useSettings()
@@ -301,46 +301,6 @@ export function HomePage(): JSX.Element {
     }
   }, [streamResults, loadHistory, engineConfig])
 
-  const handleAccept = useCallback(async (repoName: string) => {
-    setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
-    try {
-      const result = await resolveAccept(repoName)
-      if (!result) return
-      setResolveResults((prev) => {
-        const next = { ...prev }
-        delete next[repoName]
-        return next
-      })
-      await refresh()
-      loadHistory()
-      // Fire-and-forget AI summarization after resolving conflicts
-      if (engineConfig?.Sync?.AutoSummary) {
-        engineApi.summarize(repoName).catch(() => {
-          // ignore background summary errors
-        })
-      }
-    } finally {
-      setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
-    }
-  }, [resolveAccept, refresh, loadHistory, engineConfig])
-
-  const handleReject = useCallback(async (repoName: string) => {
-    setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
-    clearStream(repoName)
-    try {
-      const ok = await resolveReject(repoName)
-      if (!ok) return
-      setResolveResults((prev) => {
-        const next = { ...prev }
-        delete next[repoName]
-        return next
-      })
-      await refresh()
-    } finally {
-      setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
-    }
-  }, [resolveReject, refresh, clearStream])
-
   const handleWorkflowContinue = useCallback(async (repoName: string, action: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
     if (action === 'abort' || action === 'reject') {
@@ -350,11 +310,19 @@ export function HomePage(): JSX.Element {
       const res = await engineApi.workflowContinue(repoName, action)
       if (!res.success) {
         showToast?.(res.error ?? `Workflow action ${action} failed`, 'error')
-      } else if (engineConfig?.Sync?.AutoSummary && (action === 'accept' || action === 'continue_manual')) {
-        // Fire-and-forget AI summarization after resolving conflicts via workflow
-        engineApi.summarize(repoName).catch(() => {
-          // ignore background summary errors
+      } else {
+        // Clean up resolveResults on accept or reject
+        setResolveResults((prev) => {
+          const next = { ...prev }
+          delete next[repoName]
+          return next
         })
+        if (engineConfig?.Sync?.AutoSummary && (action === 'accept' || action === 'continue_manual')) {
+          // Fire-and-forget AI summarization after resolving conflicts via workflow
+          engineApi.summarize(repoName).catch(() => {
+            // ignore background summary errors
+          })
+        }
       }
       await refresh()
       loadHistory()
@@ -365,6 +333,14 @@ export function HomePage(): JSX.Element {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
     }
   }, [refresh, loadHistory, showToast, engineConfig, clearStream])
+
+  const handleAccept = useCallback(async (repoName: string) => {
+    await handleWorkflowContinue(repoName, 'accept')
+  }, [handleWorkflowContinue])
+
+  const handleReject = useCallback(async (repoName: string) => {
+    await handleWorkflowContinue(repoName, 'reject')
+  }, [handleWorkflowContinue])
 
   // Repo actions
   const removingRef = useRef<string | null>(null)
