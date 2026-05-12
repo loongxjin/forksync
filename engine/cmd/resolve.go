@@ -509,9 +509,7 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 }
 
 // runResolveAccept checks for remaining conflicts and completes the merge.
-func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, cfgMgr *config.Manager) error {
-	agent.DeleteAllLogs(cfgMgr.ConfigDir(), r.Name)
-
+func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, _ *config.Manager) error {
 	remaining := newGitOps(cfg).DetectConflicts(cmd.Context(), r.Path)
 
 	if len(remaining) > 0 {
@@ -540,37 +538,11 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 		return nil
 	}
 
-	gitOps := newGitOps(cfg)
-	// Stage all resolved files before committing.
-	if err := gitOps.StageAll(cmd.Context(), r.Path); err != nil {
-		return fmt.Errorf("git add: %w", err)
-	}
-
-	// Complete the merge.
-	if err := gitOps.CommitNoEdit(cmd.Context(), r.Path); err != nil {
-		if err := gitOps.Commit(cmd.Context(), r.Path, types.CommitMsgAgentResolved); err != nil {
-			return fmt.Errorf("git commit: %w", err)
-		}
-	}
-
-	r.Status = types.RepoStatusUpToDate
-	r.ErrorMessage = ""
-	if r.Workflow != nil {
-		syncpkg.AdvanceStep(r.Workflow, types.StepAcceptChanges, types.StepStatusSuccess, "")
-		syncpkg.AdvanceStep(r.Workflow, types.StepCommit, types.StepStatusSuccess, "")
-		syncpkg.MarkWorkflowDone(r.Workflow, types.WorkflowSuccess)
-	}
-	updateRepoWithLog(r, store, "accept")
-
-	// Execute post-sync commands now that the merge is committed.
-	// Run post-sync commands (logs success/failure internally).
-	syncpkg.RunPostSyncCommands(cmd.Context(), r)
-
-	info := workflowCompletionInfo(r.Workflow)
-	recordWorkflowComplete(r, 0, info)
-
-	outputResult(types.AcceptData{RepoID: r.ID, Resolved: true}, "✅ Merge completed for %s", r.Name)
-	return nil
+	// Delegate stage → commit → workflow → post-sync → history to the shared function.
+	return finalizeCommitWithWorkflow(cmd.Context(), r, store, newGitOps(cfg), commitWorkflowParams{
+		commitMsg:     types.CommitMsgAgentResolved,
+		recordHistory: true,
+	})
 }
 
 // toConflictFiles converts string paths to ConflictFile slices.
