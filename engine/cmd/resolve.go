@@ -229,7 +229,12 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	resolved.Store(true)
 	r.Status = types.RepoStatusResolved
 	r.ErrorMessage = ""
-	updateWorkflowAgentResolve(&r, provider.Name(), "")
+	if r.Workflow != nil {
+		syncpkg.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusSuccess,
+			fmt.Sprintf("resolved by %s", provider.Name()))
+		syncpkg.AdvanceStep(r.Workflow, types.StepAcceptChanges, types.StepStatusWaiting, "")
+		r.Workflow.Status = types.WorkflowWaiting
+	}
 	updateRepoWithLog(r, store, "resolved")
 
 	// Auto-confirm or wait for user
@@ -451,7 +456,11 @@ func completeAgentResolve(ctx context.Context, cmd *cobra.Command, rc resolveCon
 	// Update status
 	rc.repo.Status = types.RepoStatusUpToDate
 	rc.repo.ErrorMessage = ""
-	updateWorkflowCommit(&rc.repo)
+	if rc.repo.Workflow != nil {
+		syncpkg.AdvanceStep(rc.repo.Workflow, types.StepAcceptChanges, types.StepStatusSuccess, "")
+		syncpkg.AdvanceStep(rc.repo.Workflow, types.StepCommit, types.StepStatusSuccess, "")
+		syncpkg.MarkWorkflowDone(rc.repo.Workflow, types.WorkflowSuccess)
+	}
 	updateRepoWithLog(rc.repo, rc.store, "complete")
 
 	info := workflowCompletionInfo(rc.repo.Workflow)
@@ -546,7 +555,11 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 
 	r.Status = types.RepoStatusUpToDate
 	r.ErrorMessage = ""
-	updateWorkflowCommit(&r)
+	if r.Workflow != nil {
+		syncpkg.AdvanceStep(r.Workflow, types.StepAcceptChanges, types.StepStatusSuccess, "")
+		syncpkg.AdvanceStep(r.Workflow, types.StepCommit, types.StepStatusSuccess, "")
+		syncpkg.MarkWorkflowDone(r.Workflow, types.WorkflowSuccess)
+	}
 	updateRepoWithLog(r, store, "accept")
 
 	// Execute post-sync commands now that the merge is committed.
@@ -615,64 +628,4 @@ func outputResult(data any, textFormat string, textArgs ...any) {
 	} else {
 		outputText(textFormat, textArgs...)
 	}
-}
-
-// updateWorkflowAgentResolve updates the workflow when agent resolve succeeds.
-func updateWorkflowAgentResolve(r *types.Repo, agentName string, commitErr string) {
-	if r.Workflow == nil {
-		return
-	}
-	now := types.Time{Time: time.Now()}
-	for i := range r.Workflow.Steps {
-		if r.Workflow.Steps[i].Step == types.StepAgentResolve {
-			r.Workflow.Steps[i].Status = types.StepStatusSuccess
-			r.Workflow.Steps[i].Message = fmt.Sprintf("resolved by %s", agentName)
-			r.Workflow.Steps[i].EndedAt = &now
-		}
-		if r.Workflow.Steps[i].Step == types.StepAcceptChanges {
-			if commitErr != "" {
-				r.Workflow.Steps[i].Status = types.StepStatusWaiting
-				r.Workflow.Steps[i].Message = commitErr
-			} else {
-				r.Workflow.Steps[i].Status = types.StepStatusWaiting
-			}
-		}
-	}
-	r.Workflow.Status = types.WorkflowWaiting
-}
-
-// updateWorkflowCommit updates the workflow when commit succeeds.
-func updateWorkflowCommit(r *types.Repo) {
-	if r.Workflow == nil {
-		return
-	}
-	now := types.Time{Time: time.Now()}
-	for i := range r.Workflow.Steps {
-		if r.Workflow.Steps[i].Step == types.StepCommit {
-			r.Workflow.Steps[i].Status = types.StepStatusSuccess
-			r.Workflow.Steps[i].EndedAt = &now
-		}
-		if r.Workflow.Steps[i].Step == types.StepAcceptChanges && r.Workflow.Steps[i].Status == types.StepStatusWaiting {
-			r.Workflow.Steps[i].Status = types.StepStatusSuccess
-			r.Workflow.Steps[i].EndedAt = &now
-		}
-	}
-	r.Workflow.Status = types.WorkflowSuccess
-	r.Workflow.FinishedAt = &now
-}
-
-// updateWorkflowAbort updates the workflow when the merge is aborted.
-func updateWorkflowAbort(r *types.Repo) {
-	if r.Workflow == nil {
-		return
-	}
-	now := types.Time{Time: time.Now()}
-	for i := range r.Workflow.Steps {
-		if r.Workflow.Steps[i].Status == types.StepStatusPending {
-			r.Workflow.Steps[i].Status = types.StepStatusSkipped
-			r.Workflow.Steps[i].EndedAt = &now
-		}
-	}
-	r.Workflow.Status = types.WorkflowFailed
-	r.Workflow.FinishedAt = &now
 }

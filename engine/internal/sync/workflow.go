@@ -53,8 +53,8 @@ func MarkStepSkipped(wf *types.SyncWorkflow, step types.WorkflowStep) {
 	AdvanceStep(wf, step, types.StepStatusSkipped, "")
 }
 
-// markWorkflowDone marks the workflow as completed (success or failed).
-func markWorkflowDone(wf *types.SyncWorkflow, status types.WorkflowRunStatus) {
+// MarkWorkflowDone marks the workflow as completed (success or failed).
+func MarkWorkflowDone(wf *types.SyncWorkflow, status types.WorkflowRunStatus) {
 	if wf == nil {
 		return
 	}
@@ -101,7 +101,7 @@ func workflowFromResult(result *Result) *types.SyncWorkflow {
 			MarkStepSkipped(wf, types.StepAgentResolve)
 			MarkStepSkipped(wf, types.StepAcceptChanges)
 			AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-			markWorkflowDone(wf, types.WorkflowSuccess)
+			MarkWorkflowDone(wf, types.WorkflowSuccess)
 			return wf
 		}
 
@@ -111,7 +111,7 @@ func workflowFromResult(result *Result) *types.SyncWorkflow {
 		MarkStepSkipped(wf, types.StepAgentResolve)
 		MarkStepSkipped(wf, types.StepAcceptChanges)
 		AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-		markWorkflowDone(wf, types.WorkflowSuccess)
+		MarkWorkflowDone(wf, types.WorkflowSuccess)
 		return wf
 
 	case string(types.RepoStatusConflict):
@@ -161,10 +161,9 @@ func workflowFromResult(result *Result) *types.SyncWorkflow {
 				AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusFailed, result.ErrorMessage)
 			}
 		}
-		markWorkflowDone(wf, types.WorkflowFailed)
+		MarkWorkflowDone(wf, types.WorkflowFailed)
 		return wf
 	}
 
 	return wf
 }
-
