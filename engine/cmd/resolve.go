@@ -426,24 +426,24 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 
 	err := gitOps.AbortMerge(ctx, r.Path)
 	if err != nil {
-		logger.Error("resolve: merge --abort failed", "repo", r.Name, "error", err)
-		r.Status = types.RepoStatusConflict
-		r.ErrorMessage = fmt.Sprintf("reject failed: merge --abort error: %v", err)
-		_ = store.Update(r)
-
-		if isJSON() {
-			outputJSON(types.RejectData{RepoID: r.ID, RolledBack: false}, fmt.Errorf("merge --abort failed: %w", err))
-		} else {
-			outputText("⚠️  Failed to rollback: %v", err)
-		}
-		return fmt.Errorf("merge --abort: %w", err)
+		logger.Warn("resolve: merge --abort failed", "repo", r.Name, "error", err)
 	}
 
-	r.Status = types.RepoStatusConflict
+	// Mark workflow as aborted (pending steps → Skipped, workflow → Failed)
+	// so cleanupStaleWorkflows recognizes it as an aborted workflow and cleans it up.
+	if r.Workflow != nil {
+		for i := range r.Workflow.Steps {
+			if r.Workflow.Steps[i].Status == types.StepStatusPending {
+				r.Workflow.Steps[i].Status = types.StepStatusSkipped
+				now := types.Time{Time: time.Now()}
+				r.Workflow.Steps[i].EndedAt = &now
+			}
+		}
+		syncpkg.MarkWorkflowDone(r.Workflow, types.WorkflowFailed)
+	}
+
+	r.Status = types.RepoStatusSyncNeeded
 	r.ErrorMessage = ""
-	// User explicitly rejected — clear the workflow entirely rather than leaving
-	// a failed record behind. The git state has already been rolled back.
-	r.Workflow = nil
 	updateRepoWithLog(r, store, "reject")
 
 	outputResult(types.RejectData{RepoID: r.ID, RolledBack: true}, "🔄 Rolled back merge for %s", r.Name)
