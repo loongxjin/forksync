@@ -125,7 +125,11 @@ export function HomePage(): JSX.Element {
     }
   }, [initialized, repos, loadAgentLog])
 
-  // Reload history after sync, and populate resolveResults for auto-resolved repos
+  // Path A: Auto-sync resolve results → resolveResults
+  // When syncAll/syncRepo returns, syncResults may contain repos with agent resolution
+  // data (status=resolved + agentResult). This path populates resolveResults so
+  // ConflictInlinePanel can show diff, summary and conflict file list.
+  // Mutually exclusive with Path B — a repo is either synced or manually resolved.
   useEffect(() => {
     if (!syncResultsMountedRef.current) {
       syncResultsMountedRef.current = true
@@ -276,7 +280,11 @@ export function HomePage(): JSX.Element {
   const refreshRef = useRef(refresh)
   refreshRef.current = refresh
 
-  // Listen for streaming resolve results.
+  // Path B: Manual resolve stream results → resolveResults
+  // When the user clicks "Resolve with Agent", resolveStream sends NDJSON events.
+  // On completion, streamResults is populated with the final ResolveData.
+  // This path writes it to resolveResults and triggers refresh + summarize.
+  // Mutually exclusive with Path A — a repo is either synced or manually resolved.
   useEffect(() => {
     let hasNew = false
     for (const [repoName, result] of Object.entries(streamResults)) {
