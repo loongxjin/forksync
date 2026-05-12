@@ -123,6 +123,20 @@ export function HomePage(): JSX.Element {
     }
   }, [initialized, repos, loadAgentLog])
 
+  // Clear old stream events when a new workflow starts for a repo (e.g. user
+  // rejected and re-synced). Without this, the terminal would show stale events
+  // from the previous run because streamEvents is still populated.
+  const lastWorkflowStartRef = useRef<Record<string, string>>({})
+  useEffect(() => {
+    for (const repo of repos) {
+      const startedAt = repo.workflow?.startedAt
+      if (startedAt && startedAt !== lastWorkflowStartRef.current[repo.name]) {
+        lastWorkflowStartRef.current[repo.name] = startedAt
+        clearStream(repo.name)
+      }
+    }
+  }, [repos, clearStream])
+
   // Path A: Auto-sync resolve results → resolveResults
   // When syncAll/syncRepo returns, syncResults may contain repos with agent resolution
   // data (status=resolved + agentResult). This path populates resolveResults so
