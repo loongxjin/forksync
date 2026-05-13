@@ -61,10 +61,10 @@ func (o *Operations) runGit(ctx context.Context, repoPath string, args ...string
 	fullArgs := append([]string{"-C", repoPath}, args...)
 	cmd := exec.CommandContext(ctx, "git", fullArgs...)
 	cmd.Env = o.proxyEnv()
-	output, err := cmd.Output()
-	elapsed := time.Since(start)
-	if err != nil {
-		logger.Debug("git command failed",
+		output, err := cmd.Output()
+		elapsed := time.Since(start)
+		if err != nil {
+			logger.Warn("git command failed",
 			"args", strings.Join(fullArgs, " "),
 			"elapsed", elapsed,
 			"error", err,
@@ -84,10 +84,10 @@ func (o *Operations) runGitCombined(ctx context.Context, repoPath string, args .
 	fullArgs := append([]string{"-C", repoPath}, args...)
 	cmd := exec.CommandContext(ctx, "git", fullArgs...)
 	cmd.Env = o.proxyEnv()
-	output, err := cmd.CombinedOutput()
-	elapsed := time.Since(start)
-	if err != nil {
-		logger.Debug("git command failed",
+		output, err := cmd.CombinedOutput()
+		elapsed := time.Since(start)
+		if err != nil {
+			logger.Warn("git command failed",
 			"args", strings.Join(fullArgs, " "),
 			"elapsed", elapsed,
 			"output", string(output),
@@ -116,7 +116,7 @@ func (o *Operations) Fetch(ctx context.Context, repo types.Repo) error {
 		return nil
 	}
 	// Fallback to CLI
-	logger.Debug("git: go-git fetch failed, falling back to CLI",
+	logger.Info("git: go-git fetch failed, falling back to CLI",
 		"repo", repo.Name,
 		"path", repo.Path,
 		"error", err,
@@ -145,7 +145,7 @@ func (o *Operations) fetchGoGit(ctx context.Context, repo types.Repo) error {
 	if err != nil {
 		// If upstream remote doesn't exist, try to add it
 		if repo.Upstream != "" {
-			logger.Debug("git: remote not found, creating upstream remote",
+			logger.Info("git: remote not found, creating upstream remote",
 				"repo", repo.Name,
 				"remote", remoteName,
 				"upstream", repo.Upstream,
@@ -192,7 +192,7 @@ func (o *Operations) fetchCLI(ctx context.Context, repo types.Repo) error {
 		}
 	}
 	if !remoteExists && repo.Upstream != "" {
-		logger.Debug("git: CLI creating remote", "repo", repo.Name, "remote", remoteName, "url", repo.Upstream)
+		logger.Info("git: CLI creating remote", "repo", repo.Name, "remote", remoteName, "url", repo.Upstream)
 		if _, err := o.runGit(ctx, repo.Path, "remote", "add", remoteName, repo.Upstream); err != nil {
 			return fmt.Errorf("git remote add %s: %w", remoteName, err)
 		}
@@ -220,7 +220,7 @@ func (o *Operations) Status(ctx context.Context, repo types.Repo) (*StatusResult
 		return result, nil
 	}
 	// Fallback to CLI
-	logger.Debug("git: go-git status failed, falling back to CLI",
+	logger.Info("git: go-git status failed, falling back to CLI",
 		"repo", repo.Name,
 		"path", repo.Path,
 		"error", err,
@@ -445,7 +445,7 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 	if err != nil {
 		if strings.Contains(outputStr, "CONFLICT") {
 			conflicts := o.DetectConflicts(ctx, repo.Path)
-			logger.Debug("git: mergeCLI detected CONFLICT",
+			logger.Warn("git: mergeCLI detected CONFLICT",
 				"repo", repo.Name,
 				"upstream_ref", upstreamRef,
 				"raw_conflicts", conflicts,
@@ -453,7 +453,7 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 			// Filter out files that have been manually resolved but not yet staged.
 			// Auto-stage them so they don't appear as unresolved conflicts.
 			stillConflicted := o.FilterResolvedFiles(ctx, repo.Path, conflicts)
-			logger.Debug("git: mergeCLI after FilterResolvedFiles",
+				logger.Info("git: mergeCLI after FilterResolvedFiles",
 				"repo", repo.Name,
 				"still_conflicted", stillConflicted,
 				"auto_staged_count", len(conflicts)-len(stillConflicted),
@@ -461,7 +461,7 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 			if len(stillConflicted) == 0 {
 				// All conflicts were auto-staged — no real conflicts remain.
 				// MERGE_HEAD still exists, caller should handle this state.
-				logger.Debug("git: mergeCLI all conflicts auto-staged, MERGE_HEAD remains",
+				logger.Info("git: mergeCLI all conflicts auto-staged, MERGE_HEAD remains",
 					"repo", repo.Name,
 				)
 				return &MergeResult{HasConflicts: false}, nil
@@ -534,7 +534,7 @@ func (o *Operations) IsMergingState(ctx context.Context, repoPath string) (bool,
 	// MERGE_HEAD exists — check for unmerged files
 	unmergedFiles := o.DetectConflicts(ctx, repoPath)
 	if len(unmergedFiles) == 0 {
-		logger.Debug("git: MERGE_HEAD exists but no unmerged files", "path", repoPath)
+		logger.Info("git: MERGE_HEAD exists but no unmerged files", "path", repoPath)
 		return true, nil, nil
 	}
 
@@ -558,7 +558,7 @@ func (o *Operations) FilterResolvedFiles(ctx context.Context, repoPath string, u
 		content, err := o.GetConflictedContent(ctx, repoPath, file)
 		if err != nil {
 			// Can't read file — assume it's still conflicted
-			logger.Debug("git: FilterResolvedFiles can't read file, assuming conflicted",
+			logger.Warn("git: FilterResolvedFiles can't read file, assuming conflicted",
 				"file", file,
 				"error", err,
 			)

@@ -45,7 +45,7 @@ func NewLogWriter(baseDir, repoID string) (*LogWriter, error) {
 	}
 
 	sw := NewStreamWriter(file)
-	logger.Info("agent: created log writer", "repo", repoID, "path", path)
+	logger.Debug("agent: created log writer", "repo", repoID, "path", path)
 	return &LogWriter{file: file, sw: sw, path: path}, nil
 }
 
@@ -123,7 +123,7 @@ func ReadLogFile(path string) ([]StreamEvent, error) {
 		var ev StreamEvent
 		if err := json.Unmarshal([]byte(line), &ev); err != nil {
 			// Skip corrupted lines rather than failing entirely.
-			logger.Debug("agent: skipping corrupted log line", "path", path, "error", err, "line", line)
+			logger.Warn("agent: skipping corrupted log line", "path", path, "error", err, "line", line)
 			continue
 		}
 		events = append(events, ev)

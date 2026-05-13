@@ -176,7 +176,7 @@ func (s *JSONStore) Update(repo types.Repo) error {
 
 	old, ok := s.repos[repo.ID]
 	if !ok {
-		logger.Debug("repo: Update repo not found", "id", repo.ID, "name", repo.Name)
+		logger.Warn("repo: Update repo not found", "id", repo.ID, "name", repo.Name)
 		return ErrRepoNotFound
 	}
 

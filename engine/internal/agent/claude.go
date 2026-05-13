@@ -100,7 +100,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 		"--resume", session.ID,
 		prompt,
 	}
-	logger.Info("[TRACE] claude: ResolveConflictsWithStream START (stream-json mode)", "repo", session.RepoPath, "session", session.ID)
+	logger.Debug("[TRACE] claude: ResolveConflictsWithStream START (stream-json mode)", "repo", session.RepoPath, "session", session.ID)
 
 	cmd := exec.CommandContext(ctx, a.binary, args...)
 	cmd.Dir = session.RepoPath
@@ -124,7 +124,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 		})
 		return nil, fmt.Errorf("claude start: %w", err)
 	}
-	logger.Info("[TRACE] claude: process started OK (stream-json)", "pid", cmd.Process.Pid)
+	logger.Debug("[TRACE] claude: process started OK (stream-json)", "pid", cmd.Process.Pid)
 
 	var (
 		resultTextBuilder strings.Builder
@@ -147,7 +147,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 				continue
 			}
 			stdoutLineCount++
-			logger.Info("[TRACE] claude: stream-json line", "lineNum", stdoutLineCount, "len", len(line), "preview", truncateForLog(line, 200))
+			logger.Debug("[TRACE] claude: stream-json line", "lineNum", stdoutLineCount, "len", len(line), "preview", truncateForLog(line, 200))
 
 			// Parse the stream-json event
 			var ev map[string]any
@@ -169,7 +169,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 				// Session init — extract session_id
 				if sid, ok := ev["session_id"].(string); ok && sid != "" {
 					sessionID = sid
-					logger.Info("[TRACE] claude: stream-json init", "sessionID", sid)
+					logger.Debug("[TRACE] claude: stream-json init", "sessionID", sid)
 				}
 
 			case "assistant":
@@ -206,7 +206,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 						Success:   false,
 					})
 				}
-				logger.Info("[TRACE] claude: stream-json result event", "sessionID", sessionID)
+				logger.Debug("[TRACE] claude: stream-json result event", "sessionID", sessionID)
 
 			default:
 				// Unknown event type — log and skip
@@ -216,7 +216,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 		if err := scanner.Err(); err != nil {
 			logger.Warn("[TRACE] claude: stdout scanner error", "error", err)
 		}
-		logger.Info("[TRACE] claude: stdout scanner DONE", "totalLines", stdoutLineCount)
+		logger.Debug("[TRACE] claude: stdout scanner DONE", "totalLines", stdoutLineCount)
 	}()
 
 	// Scan stderr
@@ -227,7 +227,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 		for scanner.Scan() {
 			line := scanner.Text()
 			stderrLineCount++
-			logger.Info("[TRACE] claude: stderr line", "lineNum", stderrLineCount, "preview", truncateForLog(line, 120))
+			logger.Debug("[TRACE] claude: stderr line", "lineNum", stderrLineCount, "preview", truncateForLog(line, 120))
 			_ = sw.WriteEvent(StreamEvent{
 				Type:      StreamEventStderr,
 				Data:      line,
@@ -237,17 +237,17 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 		if err := scanner.Err(); err != nil {
 			logger.Warn("[TRACE] claude: stderr scanner error", "error", err)
 		}
-		logger.Info("[TRACE] claude: stderr scanner DONE", "totalLines", stderrLineCount)
+		logger.Debug("[TRACE] claude: stderr scanner DONE", "totalLines", stderrLineCount)
 	}()
 
 	// Wait for process and scanners
 	waitErr := cmd.Wait()
 	wg.Wait()
 
-	logger.Info("[TRACE] claude: process finished", "waitErr", waitErr, "stdoutLines", stdoutLineCount, "stderrLines", stderrLineCount, "sessionID", sessionID)
+	logger.Debug("[TRACE] claude: process finished", "waitErr", waitErr, "stdoutLines", stdoutLineCount, "stderrLines", stderrLineCount, "sessionID", sessionID)
 
 	if waitErr != nil {
-		logger.Warn("[TRACE] claude: process exited with error", "error", waitErr)
+		logger.Error("[TRACE] claude: process exited with error", "error", waitErr)
 		_ = sw.WriteEvent(StreamEvent{
 			Type:      StreamEventError,
 			Data:      fmt.Sprintf("claude CLI: %v", waitErr),
@@ -276,7 +276,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 		SessionID: sessionID,
 	})
 
-	logger.Info("[TRACE] claude: streamed resolve completed", "sessionID", sessionID, "resultLen", len(resultText))
+	logger.Debug("[TRACE] claude: streamed resolve completed", "sessionID", sessionID, "resultLen", len(resultText))
 
 	return &AgentResult{
 		Success:   true,

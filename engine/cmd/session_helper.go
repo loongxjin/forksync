@@ -36,7 +36,7 @@ func newSessionManager(cfg *config.Config, cfgMgr *config.Manager) *session.Mana
 	sessionsDir := sessionsDir(cfgMgr)
 	sessionStore := session.NewSessionStore(sessionsDir)
 	if initErr := sessionStore.Init(); initErr != nil {
-		logger.Warn("sync: failed to init session store", "error", initErr)
+		logger.Error("sync: failed to init session store", "error", initErr)
 		return nil
 	}
 

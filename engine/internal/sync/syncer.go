@@ -295,7 +295,7 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	if s.shouldUseAgentResolve(r) {
 		timeout = agentResolveTimeout(s.cfg)
 	}
-	logger.Debug("sync: executeSync starting",
+	logger.Info("sync: executeSync starting",
 		"repo", r.Name,
 		"timeout", timeout,
 		"agent_resolve", s.shouldUseAgentResolve(r),
@@ -418,7 +418,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 		autoAgentResolve = true
 	}
 
-	logger.Debug("sync: handleMergeConflicts strategy decision",
+	logger.Info("sync: handleMergeConflicts strategy decision",
 		"repo", r.Name,
 		"conflicts", len(mergeResult.Conflicts),
 		"conflict_strategy", s.resolveStrategyOrDefault(),
@@ -539,13 +539,13 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	if lw != nil {
 		defer lw.Close()
 		streamWriter = lw.StreamWriter()
-		logger.Info("sync: agent log writer active", "repo", r.Name)
+			logger.Debug("sync: agent log writer active", "repo", r.Name)
 	}
 
 	// Resolve conflicts via agent
 	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy, streamWriter)
 	if err != nil {
-		logger.Warn("sync: agent resolve failed",
+			logger.Error("sync: agent resolve failed",
 			"repo", r.Name,
 			"agent", s.sessionMgr.ProviderName(),
 			"error", err,
@@ -553,7 +553,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		return false, nil
 	}
 	if !result.Success {
-		logger.Warn("sync: agent reported unsuccessful resolve",
+			logger.Error("sync: agent reported unsuccessful resolve",
 			"repo", r.Name,
 			"agent", s.sessionMgr.ProviderName(),
 			"summary", result.Summary,
@@ -582,7 +582,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		autoConfirm = !s.cfg.Agent.ConfirmBeforeCommit
 	}
 
-	logger.Info("sync: auto-confirm check",
+	logger.Debug("sync: auto-confirm check",
 		"repo", r.Name,
 		"autoConfirm", autoConfirm,
 		"confirmBeforeCommit", s.cfg.Agent.ConfirmBeforeCommit,
@@ -664,7 +664,7 @@ func (s *Syncer) verifyAndStageResolvedFiles(ctx context.Context, r types.Repo, 
 		}
 	}
 	if len(stillConflicted) > 0 {
-		logger.Warn("sync: agent left conflict markers in files",
+			logger.Error("sync: agent left conflict markers in files",
 			"repo", r.Name,
 			"agent", s.sessionMgr.ProviderName(),
 			"files", stillConflicted,
@@ -675,7 +675,7 @@ func (s *Syncer) verifyAndStageResolvedFiles(ctx context.Context, r types.Repo, 
 
 	for _, file := range result.ResolvedFiles {
 		if err := s.gitOps.StageFile(ctx, r.Path, file); err != nil {
-			logger.Warn("sync: failed to stage resolved file",
+				logger.Error("sync: failed to stage resolved file",
 				"repo", r.Name,
 				"file", file,
 				"error", err,

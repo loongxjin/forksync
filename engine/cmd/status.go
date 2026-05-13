@@ -162,7 +162,7 @@ func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps 
 
 	// Fetch latest refs before calculating ahead/behind
 	if fetchErr := gitOps.Fetch(ctx, r); fetchErr != nil {
-		logger.Error("status: fetch failed", "repo", r.Name, "error", fetchErr)
+		logger.Warn("status: fetch failed", "repo", r.Name, "error", fetchErr)
 	}
 
 	statusResult, err := gitOps.Status(ctx, r)

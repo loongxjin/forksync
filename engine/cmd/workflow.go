@@ -229,7 +229,7 @@ func handleWorkflowContinueManual(ctx context.Context, r types.Repo, store repo.
 // and continue_manual actions.
 func finalizeCommitWithWorkflow(ctx context.Context, r types.Repo, store repo.Store, gitOps *git.Operations, params commitWorkflowParams) error {
 	if err := gitOps.StageAll(ctx, r.Path); err != nil {
-		logger.Warn("workflow: stage all failed", "repo", r.Name, "error", err)
+		logger.Error("workflow: stage all failed", "repo", r.Name, "error", err)
 	}
 	if err := gitOps.CommitNoEdit(ctx, r.Path); err != nil {
 		if err2 := gitOps.Commit(ctx, r.Path, params.commitMsg); err2 != nil {
@@ -346,7 +346,7 @@ func recordWorkflowComplete(r types.Repo, commitsPulled int, info workflowComple
 		gitOps := newGitOps(cfg)
 		if head, err := gitOps.GetPreMergeHEAD(context.Background(), r.Path); err == nil && head != "" {
 			oldHEAD = head
-			logger.Debug("[workflow] recovered oldHEAD from reflog", "repo", r.Name, "oldHEAD", oldHEAD)
+			logger.Info("[workflow] recovered oldHEAD from reflog", "repo", r.Name, "oldHEAD", oldHEAD)
 		}
 	}
 

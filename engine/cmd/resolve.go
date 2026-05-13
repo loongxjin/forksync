@@ -177,11 +177,11 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	streamWriter, closeLogWriter := setupResolveStreamWriter(cfgMgr.ConfigDir(), r.Name)
 	defer closeLogWriter()
 
-	logger.Info("[TRACE] resolve: calling sessionMgr.ResolveConflicts", "repo", r.Name, "hasStreamWriter", streamWriter != nil, "isJSON", isJSON())
+	logger.Debug("[TRACE] resolve: calling sessionMgr.ResolveConflicts", "repo", r.Name, "hasStreamWriter", streamWriter != nil, "isJSON", isJSON())
 	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy, streamWriter)
-	logger.Info("[TRACE] resolve: sessionMgr.ResolveConflicts returned", "repo", r.Name, "err", err, "resultNil", result == nil)
+	logger.Debug("[TRACE] resolve: sessionMgr.ResolveConflicts returned", "repo", r.Name, "err", err, "resultNil", result == nil)
 	if err != nil {
-		logger.Warn("resolve: agent resolve failed", "repo", r.Name, "error", err)
+		logger.Error("resolve: agent resolve failed", "repo", r.Name, "error", err)
 		if streamWriter != nil {
 			_ = streamWriter.WriteEvent(agent.StreamEvent{
 				Type:      agent.StreamEventError,
@@ -238,7 +238,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		confirmBeforeCommit = cfg.Agent.ConfirmBeforeCommit
 	}
 
-	logger.Info("resolve: auto-confirm check",
+	logger.Debug("resolve: auto-confirm check",
 		"repo", r.Name,
 		"resolveNoConfirm", resolveNoConfirm,
 		"confirmBeforeCommit", confirmBeforeCommit,
@@ -258,10 +258,10 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	// being consumed by the Electron process. The final result is already
 	// delivered via the done stream event.
 	if !resolveStream {
-		logger.Info("[TRACE] resolve: calling showResolutionDiff (non-stream)", "repo", r.Name)
+		logger.Debug("[TRACE] resolve: calling showResolutionDiff (non-stream)", "repo", r.Name)
 		showResolutionDiff(r, diff, result, provider)
 	} else {
-		logger.Info("[TRACE] resolve: skipping showResolutionDiff (stream mode — result already sent via done event)", "repo", r.Name)
+		logger.Debug("[TRACE] resolve: skipping showResolutionDiff (stream mode — result already sent via done event)", "repo", r.Name)
 	}
 	return nil
 }
@@ -357,7 +357,7 @@ func handleUnresolvedConflicts(cr conflictResolution, trulyUnresolved []string) 
 	cr.repo.ErrorMessage = fmt.Sprintf("agent left %d unresolved conflicts: %s", len(trulyUnresolved), strings.Join(trulyUnresolved, ", "))
 	updateRepoWithLog(cr.repo, cr.store, "unresolved-conflicts")
 
-	logger.Warn("resolve: agent left unresolved conflicts",
+	logger.Error("resolve: agent left unresolved conflicts",
 		"repo", cr.repo.Name,
 		"remaining", trulyUnresolved,
 		"agent", cr.provider.Name(),
@@ -518,7 +518,7 @@ func setupResolveStreamWriter(configDir, repoName string) (*agent.StreamWriter, 
 	if !resolveStream {
 		return nil, func() {}
 	}
-	logger.Info("[TRACE] resolve: streaming mode enabled", "repo", repoName)
+	logger.Debug("[TRACE] resolve: streaming mode enabled", "repo", repoName)
 	stdoutSW := agent.NewStreamWriter(os.Stdout)
 	lw, lwErr := agent.NewLogWriter(configDir, repoName)
 	if lwErr != nil {
@@ -526,7 +526,7 @@ func setupResolveStreamWriter(configDir, repoName string) (*agent.StreamWriter, 
 		return stdoutSW, func() {}
 	}
 	msw := agent.NewMultiStreamWriter(stdoutSW, lw.StreamWriter())
-	logger.Info("resolve: streaming to stdout + disk log", "repo", repoName)
+	logger.Debug("resolve: streaming to stdout + disk log", "repo", repoName)
 	return msw.StreamWriter(), func() { lw.Close() }
 }
 

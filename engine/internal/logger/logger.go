@@ -33,7 +33,7 @@ func Init(dir string) error {
 	}
 	rotateWriter = w
 
-	level := slog.LevelDebug
+	level := slog.LevelInfo
 	if env := os.Getenv("FORKSYNC_LOG_LEVEL"); env != "" {
 		switch strings.ToLower(env) {
 		case "info":

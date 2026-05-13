@@ -45,7 +45,7 @@ func getSharedConfig() (*config.Config, *config.Manager) {
 		sharedCfgMgr = config.NewManager()
 		sharedCfg, configErr = sharedCfgMgr.Load()
 		if configErr != nil {
-			logger.Debug("config load skipped", "error", configErr)
+			logger.Warn("config load skipped", "error", configErr)
 		}
 	})
 	return sharedCfg, sharedCfgMgr

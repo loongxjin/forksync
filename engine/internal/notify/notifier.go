@@ -81,17 +81,17 @@ func (n *Notifier) send(title, message string) {
 			title, message,
 		)
 		if err := exec.Command("powershell", "-NoProfile", "-Command", script).Run(); err != nil {
-			logger.Debug("notify failed", "platform", "windows", "error", err)
+			logger.Warn("notify failed", "platform", "windows", "error", err)
 		}
 	case "darwin":
 		// macOS: use osascript
 		if err := exec.Command("osascript", "-e", fmt.Sprintf(`display notification %q with title %q`, message, title)).Run(); err != nil {
-			logger.Debug("notify failed", "platform", "darwin", "error", err)
+			logger.Warn("notify failed", "platform", "darwin", "error", err)
 		}
 	case "linux":
 		// Linux: use notify-send
 		if err := exec.Command("notify-send", escapeNotifySend(title), escapeNotifySend(message)).Run(); err != nil {
-			logger.Debug("notify failed", "platform", "linux", "error", err)
+			logger.Warn("notify failed", "platform", "linux", "error", err)
 		}
 	}
 }

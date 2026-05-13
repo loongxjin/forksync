@@ -80,7 +80,7 @@ func (a *baseAdapter) ResolveConflicts(ctx context.Context, session *Session, pr
 // when a StreamWriter is provided.
 func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *Session, prompt string, sw *StreamWriter) (*AgentResult, error) {
 	args := a.buildArgs(session.ID, prompt)
-	logger.Info("[TRACE] baseAdapter: ResolveConflictsWithStream START", "agent", a.name, "repo", session.RepoPath, "session", session.ID, "args", args)
+	logger.Debug("[TRACE] baseAdapter: ResolveConflictsWithStream START", "agent", a.name, "repo", session.RepoPath, "session", session.ID, "args", args)
 
 	cmd := exec.CommandContext(ctx, a.binary, args...)
 	cmd.Dir = session.RepoPath
@@ -104,7 +104,7 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 		})
 		return nil, fmt.Errorf("%s start: %w", a.name, err)
 	}
-	logger.Info("[TRACE] baseAdapter: process started OK", "agent", a.name, "pid", cmd.Process.Pid)
+	logger.Debug("[TRACE] baseAdapter: process started OK", "agent", a.name, "pid", cmd.Process.Pid)
 
 	var outputBuilder strings.Builder
 	var wg sync.WaitGroup
@@ -123,7 +123,7 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 			// Strip ANSI escape sequences (some agents like OpenCode use them).
 			clean := StripANSI(line)
 			stdoutLineCount++
-			logger.Info("[TRACE] baseAdapter: stdout line", "agent", a.name, "lineNum", stdoutLineCount, "len", len(line), "preview", truncateForLog(line, 120))
+			logger.Debug("[TRACE] baseAdapter: stdout line", "agent", a.name, "lineNum", stdoutLineCount, "len", len(line), "preview", truncateForLog(line, 120))
 			outputBuilder.WriteString(clean)
 			outputBuilder.WriteByte('\n')
 			_ = sw.WriteEvent(StreamEvent{
@@ -135,7 +135,7 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 		if err := scanner.Err(); err != nil {
 			logger.Warn("[TRACE] baseAdapter: stdout scanner error", "agent", a.name, "error", err)
 		}
-		logger.Info("[TRACE] baseAdapter: stdout scanner DONE", "agent", a.name, "totalLines", stdoutLineCount)
+		logger.Debug("[TRACE] baseAdapter: stdout scanner DONE", "agent", a.name, "totalLines", stdoutLineCount)
 	}()
 
 	// Scan stderr
@@ -148,7 +148,7 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 			line := scanner.Text()
 			clean := StripANSI(line)
 			stderrLineCount++
-			logger.Info("[TRACE] baseAdapter: stderr line", "agent", a.name, "lineNum", stderrLineCount, "preview", truncateForLog(line, 120))
+			logger.Debug("[TRACE] baseAdapter: stderr line", "agent", a.name, "lineNum", stderrLineCount, "preview", truncateForLog(line, 120))
 			outputBuilder.WriteString(clean)
 			outputBuilder.WriteByte('\n')
 			_ = sw.WriteEvent(StreamEvent{
@@ -160,7 +160,7 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 		if err := scanner.Err(); err != nil {
 			logger.Warn("[TRACE] baseAdapter: stderr scanner error", "agent", a.name, "error", err)
 		}
-		logger.Info("[TRACE] baseAdapter: stderr scanner DONE", "agent", a.name, "totalLines", stderrLineCount)
+		logger.Debug("[TRACE] baseAdapter: stderr scanner DONE", "agent", a.name, "totalLines", stderrLineCount)
 	}()
 
 	// Wait for process and scanners
@@ -168,10 +168,10 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 	wg.Wait()
 
 	output := outputBuilder.String()
-	logger.Info("[TRACE] baseAdapter: process finished", "agent", a.name, "waitErr", waitErr, "outputLen", len(output), "stdoutLines", stdoutLineCount, "stderrLines", stderrLineCount)
+	logger.Debug("[TRACE] baseAdapter: process finished", "agent", a.name, "waitErr", waitErr, "outputLen", len(output), "stdoutLines", stdoutLineCount, "stderrLines", stderrLineCount)
 
 	if waitErr != nil {
-		logger.Warn("baseAdapter: agent process exited with error", "agent", a.name, "error", waitErr)
+		logger.Error("baseAdapter: agent process exited with error", "agent", a.name, "error", waitErr)
 		_ = sw.WriteEvent(StreamEvent{
 			Type:      StreamEventError,
 			Data:      fmt.Sprintf("%s CLI: %s: %v", a.name, output, waitErr),
@@ -191,7 +191,7 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 	}
 
 	summary := truncateOutput(output, maxSummaryLength)
-	logger.Info("[TRACE] baseAdapter: agent process completed", "agent", a.name, "sessionID", sessionID)
+	logger.Debug("[TRACE] baseAdapter: agent process completed", "agent", a.name, "sessionID", sessionID)
 	_ = sw.WriteEvent(StreamEvent{
 		Type:      StreamEventDone,
 		Timestamp: time.Now().UTC(),

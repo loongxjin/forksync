@@ -77,7 +77,7 @@ func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*ag
 		// If the user switched preferred agent, the cached session is stale.
 		// Invalidate it so a new session is created with the current provider.
 		if rec.AgentName != m.provider.Name() {
-			logger.Info("session: cached session agent mismatch, invalidating",
+			logger.Debug("session: cached session agent mismatch, invalidating",
 				"repo", repoID, "cached", rec.AgentName, "current", m.provider.Name())
 			_ = m.store.UpdateStatus(repoID, string(types.SessionStatusExpired))
 		} else if time.Since(rec.LastUsedAt) < m.ttl {
@@ -108,7 +108,7 @@ func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*ag
 // it transparently creates a new session and retries.
 // An optional streamWriter enables real-time NDJSON streaming of agent output.
 func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string, conflictFiles []string, strategy string, sw *agent.StreamWriter) (*agent.AgentResult, error) {
-	logger.Info("[TRACE] session: ResolveConflicts ENTRY", "repo", repoID, "strategy", strategy, "streaming", sw != nil, "conflictFiles", conflictFiles)
+	logger.Debug("[TRACE] session: ResolveConflicts ENTRY", "repo", repoID, "strategy", strategy, "streaming", sw != nil, "conflictFiles", conflictFiles)
 
 	// Ensure session exists — reuse active or create new
 	sess, err := m.GetOrCreate(ctx, repoID, repoPath)
@@ -128,28 +128,28 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 
 	// Call agent — use streaming if a StreamWriter is provided and the
 	// adapter supports it.
-	logger.Info("[TRACE] session: calling resolveWithOptionalStream", "provider", m.provider.Name(), "hasStreamWriter", sw != nil)
+	logger.Debug("[TRACE] session: calling resolveWithOptionalStream", "provider", m.provider.Name(), "hasStreamWriter", sw != nil)
 	result, err := m.resolveWithOptionalStream(ctx, sess, prompt, conflictFiles, sw)
 	if err != nil {
-		logger.Info("session: resolve failed, retrying with new session", "repo", repoID, "error", err)
+		logger.Warn("session: resolve failed, retrying with new session", "repo", repoID, "error", err)
 		// Resume failed — the session is stale on the agent side.
 		// Discard it and create a fresh one, then retry.
 		m.invalidateSession(repoID)
 		sess, retryErr := m.createSessionLocked(ctx, repoID, repoPath)
 		if retryErr != nil {
 			if updateErr := m.store.UpdateStatus(repoID, string(types.SessionStatusFailed)); updateErr != nil {
-				logger.Warn("session: failed to mark failed after retry", "repo", repoID, "error", updateErr)
-			}
-			return nil, fmt.Errorf("resume failed (%v); recreate session also failed: %w", err, retryErr)
+				logger.Error("session: failed to mark failed after retry", "repo", repoID, "error", updateErr)
+				}
+				return nil, fmt.Errorf("resume failed (%v); recreate session also failed: %w", err, retryErr)
 		}
 		// Retry with merged prompt (this is a new session too)
 		prompt = agent.BuildInitialConflictPrompt(conflictFiles, strategy)
 		result, err = m.resolveWithOptionalStream(ctx, sess, prompt, conflictFiles, sw)
 		if err != nil {
 			if updateErr := m.store.UpdateStatus(repoID, string(types.SessionStatusFailed)); updateErr != nil {
-				logger.Warn("session: failed to mark failed after retry", "repo", repoID, "error", updateErr)
-			}
-			return result, err
+				logger.Error("session: failed to mark failed after retry", "repo", repoID, "error", updateErr)
+				}
+				return result, err
 		}
 	}
 
@@ -171,7 +171,7 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 		if rec, loadErr := m.store.Load(repoID); loadErr == nil {
 			rec.SessionID = result.SessionID
 			if saveErr := m.store.Save(rec); saveErr != nil {
-				logger.Warn("session: failed to save updated session ID", "repo", repoID, "error", saveErr)
+				logger.Error("session: failed to save updated session ID", "repo", repoID, "error", saveErr)
 			}
 		}
 		sess.ID = result.SessionID
@@ -185,9 +185,9 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 
 // resolveWithOptionalStream dispatches to the adapter's streaming or non-streaming method.
 func (m *Manager) resolveWithOptionalStream(ctx context.Context, sess *agent.Session, prompt string, conflictFiles []string, sw *agent.StreamWriter) (*agent.AgentResult, error) {
-	logger.Info("[TRACE] session: resolveWithOptionalStream ENTRY", "provider", m.provider.Name(), "hasSW", sw != nil, "sessionID", sess.ID, "isNew", sess.IsNew)
+	logger.Debug("[TRACE] session: resolveWithOptionalStream ENTRY", "provider", m.provider.Name(), "hasSW", sw != nil, "sessionID", sess.ID, "isNew", sess.IsNew)
 	if sw != nil {
-		logger.Info("session: using streaming resolve", "agent", m.provider.Name(), "repo", sess.RepoPath)
+		logger.Debug("session: using streaming resolve", "agent", m.provider.Name(), "repo", sess.RepoPath)
 		// Update start event with files
 		_ = sw.WriteEvent(agent.StreamEvent{
 			Type:      agent.StreamEventStart,
@@ -202,9 +202,9 @@ func (m *Manager) resolveWithOptionalStream(ctx context.Context, sess *agent.Ses
 			if p, ok := m.provider.(interface {
 				ResolveConflictsWithStream(context.Context, *agent.Session, string, *agent.StreamWriter) (*agent.AgentResult, error)
 			}); ok {
-				logger.Info("[TRACE] session: adapter supports streaming, calling ResolveConflictsWithStream", "provider", m.provider.Name())
+				logger.Debug("[TRACE] session: adapter supports streaming, calling ResolveConflictsWithStream", "provider", m.provider.Name())
 				result, err := p.ResolveConflictsWithStream(ctx, sess, prompt, sw)
-				logger.Info("[TRACE] session: ResolveConflictsWithStream RETURNED", "provider", m.provider.Name(), "err", err, "success", result != nil && result.Success)
+				logger.Debug("[TRACE] session: ResolveConflictsWithStream RETURNED", "provider", m.provider.Name(), "err", err, "success", result != nil && result.Success)
 				return result, err
 			}
 			logger.Warn("[TRACE] session: adapter does NOT support streaming, falling back to non-streaming", "agent", m.provider.Name())
