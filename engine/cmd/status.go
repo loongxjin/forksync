@@ -193,6 +193,10 @@ func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps 
 		repos[idx].Status = types.RepoStatusUpToDate
 		repos[idx].ErrorMessage = ""
 		updateRepoWithLog(repos[idx], store, actionStatusUpdate)
+	} else if repos[idx].BehindBy == 0 && repos[idx].Status == types.RepoStatusUpToDate && repos[idx].ErrorMessage != "" {
+		// Stale error message from a previous post-sync failure — clear it.
+		repos[idx].ErrorMessage = ""
+		updateRepoWithLog(repos[idx], store, actionStatusUpdate)
 	}
 }
 
