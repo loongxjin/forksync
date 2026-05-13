@@ -728,7 +728,7 @@ function HistoryRow({ record, onRetry }: { record: SyncHistoryRecord; onRetry: (
             </span>
           )}
           {record.errorMessage && (
-            <span className="truncate text-xs text-error" title={record.errorMessage}>
+            <span className="truncate text-xs text-error min-w-0 max-w-[200px]" title={record.errorMessage}>
               {record.errorMessage}
             </span>
           )}
