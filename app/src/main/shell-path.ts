@@ -10,6 +10,7 @@
 
 import { execFileSync } from 'child_process'
 import { app } from 'electron'
+import log from './logger'
 
 export function injectShellPath(): void {
   // Only needed for packaged macOS / Linux builds. Dev mode launched from a
@@ -34,6 +35,6 @@ export function injectShellPath(): void {
       process.env.PATH = shellPath
     }
   } catch (err) {
-    console.error('Failed to inject shell PATH:', err)
+    log.error('Failed to inject shell PATH:', err)
   }
 }

@@ -9,6 +9,7 @@ import { Notification, BrowserWindow } from 'electron'
 import { t } from './i18n'
 import type { SyncResult } from '../renderer/src/types/engine'
 import type { EngineClient } from './engine'
+import log from './logger'
 
 // Module-level config cache — defaults to enabled
 let notificationEnabled = true
@@ -22,10 +23,10 @@ export async function updateNotificationConfig(engine: EngineClient): Promise<vo
     const res = await engine.configGet()
     if (res.success && res.data?.Notification) {
       notificationEnabled = res.data.Notification.Enabled
-      console.log('[notify] Config refreshed: enabled =', notificationEnabled)
+      log.info('[notify] Config refreshed: enabled =', notificationEnabled)
     }
   } catch (err) {
-    console.warn('[notify] Failed to read notification config:', err)
+    log.warn('[notify] Failed to read notification config:', err)
   }
 }
 
@@ -91,16 +92,16 @@ interface NotifyOptions {
 
 function showNotification(opts: NotifyOptions): void {
   if (!notificationEnabled) {
-    console.log('[notify] Suppressed (disabled):', opts.title)
+    log.debug('[notify] Suppressed (disabled):', opts.title)
     return
   }
 
   if (!Notification.isSupported()) {
-    console.warn('[notify] Notifications not supported on this platform')
+    log.warn('[notify] Notifications not supported on this platform')
     return
   }
 
-  console.log('[notify] Showing:', opts.title, '-', opts.body)
+  log.debug('[notify] Showing:', opts.title, '-', opts.body)
 
   const notification = new Notification({
     title: opts.title,

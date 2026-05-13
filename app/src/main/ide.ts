@@ -10,6 +10,7 @@ import { t } from './i18n'
 import { execFile } from 'child_process'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
+import log from './logger'
 import { homedir } from 'os'
 import type { IDEInfo, CustomIDE, IDEConfig, IDEOpenResult } from '../renderer/src/types/ide'
 
@@ -250,7 +251,7 @@ async function openInIDE(repoPath: string, ideId: string): Promise<IDEOpenResult
     if (ide.openMethod === 'cli') {
       const child = execFile(ide.cliCommand, [repoPath], (err) => {
         if (err) {
-          console.error(`Failed to open ${repoPath} with ${ide.name}:`, err)
+          log.error(`Failed to open ${repoPath} with ${ide.name}:`, err)
         }
       })
       child.unref()
@@ -259,14 +260,14 @@ async function openInIDE(repoPath: string, ideId: string): Promise<IDEOpenResult
       const flatpakId = ide.cliCommand.replace('flatpak:', '')
       const child = execFile('flatpak', ['run', flatpakId, repoPath], (err) => {
         if (err) {
-          console.error(`Failed to open ${repoPath} with ${ide.name} via flatpak:`, err)
+          log.error(`Failed to open ${repoPath} with ${ide.name} via flatpak:`, err)
         }
       })
       child.unref()
     } else if (process.platform === 'darwin') {
       const child = execFile('open', ['-a', ide.appName, repoPath], (err) => {
         if (err) {
-          console.error(`Failed to open ${repoPath} with ${ide.name}:`, err)
+          log.error(`Failed to open ${repoPath} with ${ide.name}:`, err)
         }
       })
       child.unref()
@@ -276,7 +277,7 @@ async function openInIDE(repoPath: string, ideId: string): Promise<IDEOpenResult
       const appName = ide.appName || ide.name
       const child = execFile('powershell', ['-Command', 'Start-Process', appName, repoPath], (err) => {
         if (err) {
-          console.error(`Failed to open ${repoPath} with ${ide.name}:`, err)
+          log.error(`Failed to open ${repoPath} with ${ide.name}:`, err)
         }
       })
       child.unref()

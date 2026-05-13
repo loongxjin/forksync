@@ -7,12 +7,13 @@
 
 import { ipcMain, dialog, app, BrowserWindow } from 'electron'
 import { t } from './i18n'
-import { existsSync, mkdirSync, writeFileSync, unlinkSync, appendFileSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
 import { join, resolve, normalize } from 'path'
 import { homedir } from 'os'
 import { EngineClient } from './engine'
 import { notifySyncResults, updateNotificationConfig } from './notify'
 import type { AgentStreamEvent } from '../renderer/src/types/engine'
+import log from './logger'
 
 // --- Input validation helpers ---
 
@@ -176,10 +177,8 @@ export function registerIpcHandlers(): void {
   // --- Agent resolve streaming (fire-and-forget start, push events) ---
 
   const activeStreams = new Map<string, ReturnType<EngineClient['resolveStream']>>()
-  const ipcLogPath = join(homedir(), '.forksync', 'logs', 'electron-resolve-stream.log')
   const ipcLog = (msg: string): void => {
-    const ts = new Date().toISOString()
-    try { appendFileSync(ipcLogPath, `[${ts}] [IPC] ${msg}\n`) } catch (e) { console.warn('[ipc] failed to write IPC log:', e) }
+    log.debug(`[IPC] ${msg}`)
   }
 
   ipcMain.on('engine:resolveStream:start', (event, name: string, opts?: { agent?: string; noConfirm?: boolean }) => {
@@ -216,15 +215,15 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('engine:readAgentLog', async (_event, repoName: string) => {
     const safeRepoName = assertString(repoName, 'repoName')
-    console.log('[ipc:readAgentLog]', safeRepoName)
+    log.debug('[ipc:readAgentLog]', safeRepoName)
     const result = await e.readAgentLog(safeRepoName)
-    console.log('[ipc:readAgentLog] result for', repoName, result.events.length, 'events, isRunning:', result.isRunning)
+    log.debug('[ipc:readAgentLog] result for', repoName, result.events.length, 'events, isRunning:', result.isRunning)
     return result
   })
 
   ipcMain.handle('engine:repoDiff', async (_event, repoName: string) => {
     const safeRepoName = assertString(repoName, 'repoName')
-    console.log('[ipc:repoDiff]', safeRepoName)
+    log.debug('[ipc:repoDiff]', safeRepoName)
     return e.repoDiff(safeRepoName)
   })
 

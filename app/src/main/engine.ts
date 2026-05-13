@@ -10,9 +10,10 @@ import { app } from 'electron'
 import { join } from 'path'
 import { spawn, ChildProcess, exec, execFile } from 'child_process'
 import { createInterface } from 'readline'
-import { existsSync, readdirSync, readFileSync, appendFileSync, mkdirSync, statSync } from 'fs'
+import { existsSync, readdirSync, readFileSync, mkdirSync, statSync } from 'fs'
 import { homedir } from 'os'
 import { promisify } from 'util'
+import log from './logger'
 
 /**
  * Kill a child process and its entire process group.
@@ -174,22 +175,17 @@ export class EngineClient {
     }
 
     const fullArgs = this.buildArgs(args)
-    console.log('[engine:resolveStream] spawned', name, 'args:', fullArgs)
     const child: ChildProcess = spawn(this.binaryPath, fullArgs, {
       cwd: app.isPackaged ? undefined : this.engineDir,
-      env: { ...process.env },
+      env: { ...process.env, ...(app.isPackaged ? {} : { FORKSYNC_LOG_LEVEL: 'debug' }) },
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: process.platform !== 'win32' // create new process group on Unix
     })
-    console.log('[engine:resolveStream] spawned', name, 'pid:', child.pid, 'args:', fullArgs)
+    log.info('[engine:resolveStream] spawned', name, 'pid:', child.pid)
 
-    // Debug log file for tracing stream issues
-    const debugLogPath = join(homedir(), '.forksync', 'logs', 'electron-resolve-stream.log')
+    // Debug log for tracing stream issues (goes to electron-log file)
     const debugLog = (msg: string): void => {
-      const ts = new Date().toISOString()
-      const line = `[${ts}] ${msg}\n`
-      console.log(`[engine:resolveStream] ${msg}`)
-      try { appendFileSync(debugLogPath, line) } catch (e) { console.warn('[engine:resolveStream] failed to write debug log:', e) }
+      log.debug(`[engine:resolveStream] ${msg}`)
     }
     debugLog(`START resolveStream name=${name} pid=${child.pid} args=${JSON.stringify(fullArgs)}`)
 
@@ -205,12 +201,12 @@ export class EngineClient {
     }
     const notifyDone = (result: ApiResponse<ResolveData>): void => {
       notified = true
-      console.log('[engine:resolveStream] done', name, 'success:', result.success)
+      log.info('[engine:resolveStream] done', name, 'success:', result.success)
       for (const cb of doneCbs) cb(result)
     }
     const notifyError = (err: string): void => {
       notified = true
-      console.error('[engine:resolveStream] error', name, err)
+      log.error('[engine:resolveStream] error', name, err)
       for (const cb of errorCbs) cb(err)
     }
 
@@ -318,12 +314,12 @@ export class EngineClient {
     events: AgentStreamEvent[]
     isRunning: boolean
   }> {
-    console.log('[engine:readAgentLog]', repoName)
+    log.debug('[engine:readAgentLog]', repoName)
     const configDir = join(homedir(), '.forksync')
     const logDir = join(configDir, 'agent-logs', repoName)
 
     if (!existsSync(logDir)) {
-      console.log('[engine:readAgentLog] logDir not found', logDir)
+      log.debug('[engine:readAgentLog] logDir not found', logDir)
       return { events: [], isRunning: false }
     }
 
@@ -333,13 +329,13 @@ export class EngineClient {
       .reverse()
 
     if (files.length === 0) {
-      console.log('[engine:readAgentLog] no log files')
+      log.debug('[engine:readAgentLog] no log files')
       return { events: [], isRunning: false }
     }
 
     const latest = join(logDir, files[0])
     const stat = statSync(latest)
-    console.log('[engine:readAgentLog] reading', latest, 'size:', stat.size, 'mtime:', stat.mtime)
+    log.debug('[engine:readAgentLog] reading', latest, 'size:', stat.size, 'mtime:', stat.mtime)
     const content = readFileSync(latest, 'utf-8')
     const lines = content.split('\n').filter(l => l.trim())
     const events: AgentStreamEvent[] = []
@@ -367,9 +363,9 @@ export class EngineClient {
     // isRunning is true if the last event is not 'done' or 'error'
     const last = events[events.length - 1]
     const isRunning = last != null && last.t !== 'done' && last.t !== 'error'
-    console.log('[engine:readAgentLog] parsed', events.length, 'events (total lines:', lines.length, '), isRunning:', isRunning, 'types:', JSON.stringify(typeDist))
+    log.debug('[engine:readAgentLog] parsed', events.length, 'events (total lines:', lines.length, '), isRunning:', isRunning, 'types:', JSON.stringify(typeDist))
     if (skippedLines.length > 0) {
-      console.warn('[engine:readAgentLog] skipped', skippedLines.length, 'lines:', skippedLines.slice(0, 5))
+      log.warn('[engine:readAgentLog] skipped', skippedLines.length, 'lines:', skippedLines.slice(0, 5))
     }
 
     return { events, isRunning }
@@ -393,12 +389,12 @@ export class EngineClient {
       }
       const { stdout, stderr } = await execFileAsync('git', ['-C', repo.path, 'diff', 'HEAD'])
       if (stderr) {
-        console.warn('[engine:repoDiff] stderr:', stderr)
+        log.warn('[engine:repoDiff] stderr:', stderr)
       }
       return { success: true, diff: stdout }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      console.error('[engine:repoDiff] error:', message)
+      log.error('[engine:repoDiff] error:', message)
       return { success: false, error: message }
     }
   }
@@ -517,7 +513,7 @@ export class EngineClient {
 
       const child: ChildProcess = spawn(this.binaryPath, fullArgs, {
         cwd: app.isPackaged ? undefined : this.engineDir,
-        env: { ...process.env },
+        env: { ...process.env, ...(app.isPackaged ? {} : { FORKSYNC_LOG_LEVEL: 'debug' }) },
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: process.platform !== 'win32'
       })
