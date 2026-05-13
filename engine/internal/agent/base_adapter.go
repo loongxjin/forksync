@@ -120,13 +120,15 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 		scanner := bufio.NewScanner(stdoutPipe)
 		for scanner.Scan() {
 			line := scanner.Text()
+			// Strip ANSI escape sequences (some agents like OpenCode use them).
+			clean := StripANSI(line)
 			stdoutLineCount++
 			logger.Info("[TRACE] baseAdapter: stdout line", "agent", a.name, "lineNum", stdoutLineCount, "len", len(line), "preview", truncateForLog(line, 120))
-			outputBuilder.WriteString(line)
+			outputBuilder.WriteString(clean)
 			outputBuilder.WriteByte('\n')
 			_ = sw.WriteEvent(StreamEvent{
 				Type:      StreamEventStdout,
-				Data:      line,
+				Data:      clean,
 				Timestamp: time.Now().UTC(),
 			})
 		}
@@ -144,13 +146,14 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 		scanner := bufio.NewScanner(stderrPipe)
 		for scanner.Scan() {
 			line := scanner.Text()
+			clean := StripANSI(line)
 			stderrLineCount++
 			logger.Info("[TRACE] baseAdapter: stderr line", "agent", a.name, "lineNum", stderrLineCount, "preview", truncateForLog(line, 120))
-			outputBuilder.WriteString(line)
+			outputBuilder.WriteString(clean)
 			outputBuilder.WriteByte('\n')
 			_ = sw.WriteEvent(StreamEvent{
 				Type:      StreamEventStderr,
-				Data:      line,
+				Data:      clean,
 				Timestamp: time.Now().UTC(),
 			})
 		}
@@ -193,7 +196,7 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 		Type:      StreamEventDone,
 		Timestamp: time.Now().UTC(),
 		Success:   true,
-		Summary:   summary,
+		Summary:   StripANSI(summary),
 		SessionID: sessionID,
 	})
 

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -135,6 +136,15 @@ func BuildInitialConflictPrompt(conflictFiles []string, strategy string) string 
 	sb.WriteString(BuildConflictPrompt(conflictFiles, strategy))
 
 	return sb.String()
+}
+
+// StripANSI removes ANSI escape sequences (e.g. color codes) from a string.
+// Some agents like OpenCode emit colored output that would render as "[0m"
+// in the terminal drawer.
+var ansiRegexp = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+func StripANSI(s string) string {
+	return ansiRegexp.ReplaceAllString(s, "")
 }
 
 // extractSessionID attempts to find a session ID from agent CLI output.
