@@ -63,18 +63,38 @@ func init() {
 
 
 func runAgentList(cmd *cobra.Command, args []string) error {
-	registry := agent.NewRegistry("") // empty preferred → auto-discover
+	// Use the configured preferred agent, not just the first installed one.
+	cfg, _ := getSharedConfig()
+	preferredCfg := ""
+	if cfg != nil {
+		preferredCfg = cfg.Agent.Preferred
+	}
+	registry := agent.NewRegistry(preferredCfg)
 	agents := registry.Discover()
 
 	// For the list, show ALL agents (installed + not) for discovery purposes
 	allAgents := registry.ListAll()
 
-	// Find preferred agent
-	preferred := ""
-	for _, a := range agents {
-		if a.Installed {
-			preferred = a.Name
-			break
+	// Use configured preferred if available and installed, otherwise first installed.
+	preferred := preferredCfg
+	if preferred != "" {
+		found := false
+		for _, a := range agents {
+			if a.Name == preferred {
+				found = true
+				break
+			}
+		}
+		if !found {
+			preferred = "" // configured agent not installed, fall back
+		}
+	}
+	if preferred == "" {
+		for _, a := range agents {
+			if a.Installed {
+				preferred = a.Name
+				break
+			}
 		}
 	}
 

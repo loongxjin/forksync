@@ -511,6 +511,17 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		return false, nil
 	}
 
+	// Reload config to pick up agent preference changes made via settings UI
+	// without requiring a serve process restart.
+	mgr := config.NewManagerWithDir(s.configDir)
+	if cfg, err := mgr.Load(); err == nil {
+		s.cfg = cfg
+		reg := agent.NewRegistry(cfg.Agent.Preferred)
+		if p, err := reg.GetPreferred(); err == nil {
+			s.sessionMgr.SetProvider(p)
+		}
+	}
+
 	// Create or reuse a session for this repo
 	if _, err := s.sessionMgr.GetOrCreate(ctx, r.ID, r.Path); err != nil {
 		return false, nil

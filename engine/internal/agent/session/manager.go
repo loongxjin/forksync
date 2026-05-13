@@ -41,6 +41,19 @@ func (m *Manager) ProviderName() string {
 	return m.provider.Name()
 }
 
+// SetProvider updates the agent provider and clears in-memory sessions so
+// subsequent resolutions pick up the new agent (e.g. after user changed config).
+func (m *Manager) SetProvider(p agent.AgentProvider) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.provider.Name() != p.Name() {
+		logger.Info("session: provider changed, clearing in-memory sessions",
+			"old", m.provider.Name(), "new", p.Name())
+		m.active = make(map[string]*agent.Session)
+	}
+	m.provider = p
+}
+
 // SetTTL configures the session expiration duration.
 func (m *Manager) SetTTL(d time.Duration) {
 	m.ttl = d
@@ -61,8 +74,13 @@ func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*ag
 	// 2. Check disk store
 	rec, err := m.store.Load(repoID)
 	if err == nil && rec.Status == string(types.SessionStatusActive) {
-		// Check if expired
-		if time.Since(rec.LastUsedAt) < m.ttl {
+		// If the user switched preferred agent, the cached session is stale.
+		// Invalidate it so a new session is created with the current provider.
+		if rec.AgentName != m.provider.Name() {
+			logger.Info("session: cached session agent mismatch, invalidating",
+				"repo", repoID, "cached", rec.AgentName, "current", m.provider.Name())
+			_ = m.store.UpdateStatus(repoID, string(types.SessionStatusExpired))
+		} else if time.Since(rec.LastUsedAt) < m.ttl {
 			sess := &agent.Session{
 				ID:        rec.SessionID,
 				Provider:  rec.AgentName,
