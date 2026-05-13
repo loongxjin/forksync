@@ -267,11 +267,18 @@ export function HomePage(): JSX.Element {
     })
   }, [repos])
 
+  // Track which repos are being resolved with auto-confirm so the streamResults
+  // effect knows to trigger summarization (only for auto-confirm, not pending confirm).
+  const autoConfirmRef = useRef<Set<string>>(new Set())
+
   // Conflict resolution handlers
   const handleResolve = useCallback(async (repo: Repo) => {
     setLocalLoading((prev) => ({ ...prev, [repo.name]: true }))
     try {
       const noConfirm = engineConfig?.Agent?.ConfirmBeforeCommit === false
+      if (noConfirm) {
+        autoConfirmRef.current.add(repo.name)
+      }
 
       // Always call `workflow continue resolve_with_agent` to create/advance the workflow.
       // When triggered without an existing workflow,
@@ -322,8 +329,15 @@ export function HomePage(): JSX.Element {
         setResolveResults((prev) => ({ ...prev, [repoName]: result }))
       }
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
-      // Summarize is handled by handleWorkflowContinue on explicit accept,
-      // not here — the user hasn't confirmed the resolution yet.
+      // For auto-confirm resolves, trigger summarization immediately since
+      // the merge has been committed. For pending confirmation, summarization
+      // is handled by handleWorkflowContinue on explicit accept.
+      if (result && autoConfirmRef.current.has(repoName)) {
+        autoConfirmRef.current.delete(repoName)
+        if (engineConfig?.Sync?.AutoSummary) {
+          engineApi.summarize(repoName).catch(() => {})
+        }
+      }
     }
     if (hasNew) {
       console.log('[HomePage] calling refresh after stream done')
