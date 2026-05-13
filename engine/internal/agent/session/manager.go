@@ -197,7 +197,7 @@ func (m *Manager) resolveWithOptionalStream(ctx context.Context, sess *agent.Ses
 		})
 
 			// Try adapter-specific streaming methods via type assertion.
-			// All concrete adapters (ClaudeAdapter, OpenCodeAdapter, DroidAdapter, CodexAdapter)
+			// All concrete adapters (ClaudeAdapter, OpenCodeAdapter, CodexAdapter)
 			// implement ResolveConflictsWithStream with the same signature.
 			if p, ok := m.provider.(interface {
 				ResolveConflictsWithStream(context.Context, *agent.Session, string, *agent.StreamWriter) (*agent.AgentResult, error)

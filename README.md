@@ -27,14 +27,14 @@ Maintaining forked repositories is tedious. Upstream authors keep shipping chang
 - ❌ **Resolve conflicts manually** — reading `<<<<<<<` markers for hours
 - ❌ **Give up and re-fork** — losing your local modifications
 
-**ForkSync solves this.** It automatically syncs your forks and uses AI coding agents (Claude Code, OpenCode, Droid, Codex) to resolve merge conflicts — so you never have to touch conflict markers again.
+**ForkSync solves this.** It automatically syncs your forks and uses AI coding agents (Claude Code, OpenCode, Codex) to resolve merge conflicts — so you never have to touch conflict markers again.
 
 ## ✨ Key Features
 
 | Feature | Description |
 |---------|-------------|
 | 🔄 **Auto Sync** | Periodically fetches and merges upstream changes (configurable interval) |
-| 🤖 **AI Conflict Resolution** | Delegates merge conflicts to AI agents (Claude Code, OpenCode, Droid, Codex) |
+| 🤖 **AI Conflict Resolution** | Delegates merge conflicts to AI agents (Claude Code, OpenCode, Codex) |
 | 🖥️ **Desktop App** | Polished Electron GUI — dashboard, conflict viewer, settings |
 | ⌨️ **CLI** | Full-featured command-line tool for terminal workflows |
 | 🔍 **Directory Scanner** | Recursively scans any directory to discover and batch-add fork repos |
@@ -159,7 +159,6 @@ This is the core feature that sets ForkSync apart. When a sync produces merge co
 |-------|--------|:------------:|
 | Claude Code | `claude` | ✅ |
 | OpenCode | `opencode` | ✅ |
-| Droid | `droid` | ✅ |
 | Codex | `codex` | ✅ |
 
 Agents are auto-discovered via `PATH`. Set a preferred agent in config:
@@ -262,7 +261,7 @@ sync:
 
 agent:
   preferred: "claude"
-  priority: [claude, opencode, droid, codex]
+  priority: [claude, opencode, codex]
   timeout: "10m"
   conflict_strategy: "agent_resolve"
   confirm_before_commit: true
@@ -298,7 +297,7 @@ forksync/
 ├── engine/                      # Go CLI engine
 │   ├── cmd/                     # Cobra commands
 │   ├── internal/
-│   │   ├── agent/               # AI agent adapters (Claude, OpenCode, Droid, Codex)
+│   │   ├── agent/               # AI agent adapters (Claude, OpenCode, Codex)
 │   │   │   └── session/         # Session lifecycle management
 │   │   ├── config/              # Viper-based YAML config
 │   │   ├── conflict/            # Merge conflict detection

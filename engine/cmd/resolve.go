@@ -67,7 +67,7 @@ Examples:
 }
 
 func init() {
-	resolveCmd.Flags().StringVar(&resolveAgent, "agent", "", "specify agent to use (claude, opencode, droid, codex)")
+	resolveCmd.Flags().StringVar(&resolveAgent, "agent", "", "specify agent to use (claude, opencode, codex)")
 	resolveCmd.Flags().BoolVar(&resolveNoConfirm, "no-confirm", false, "auto-commit without user confirmation")
 	resolveCmd.Flags().BoolVar(&resolveReject, "reject", false, "reject last resolution and rollback")
 	resolveCmd.Flags().BoolVar(&resolveAccept, "accept", false, "accept all conflicts as resolved")

@@ -12,7 +12,7 @@ import (
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Manage AI agent integrations",
-	Long:  "Detect, list, and manage AI agent CLI integrations (Claude Code, OpenCode, Droid, Codex).",
+	Long:  "Detect, list, and manage AI agent CLI integrations (Claude Code, OpenCode, Codex).",
 }
 
 var agentListCmd = &cobra.Command{
@@ -110,7 +110,6 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 			outputText("Install one of the following to enable auto-conflict resolution:")
 			outputText("  • Claude Code: https://docs.anthropic.com/en/docs/claude-code")
 			outputText("  • OpenCode:    https://github.com/opencode-ai/opencode")
-			outputText("  • Droid:       https://github.com/nicepkg/droid")
 			outputText("  • Codex:       https://github.com/openai/codex")
 			return nil
 		}

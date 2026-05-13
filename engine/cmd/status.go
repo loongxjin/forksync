@@ -523,6 +523,6 @@ func printStatusText(repos []types.Repo, agents []types.AgentInfo, preferredAgen
 		outputText("Agents detected: %s", preferredAgent)
 	} else {
 		outputText("")
-		outputText("No AI agents detected. Install Claude Code, OpenCode, Droid, or Codex for auto-conflict resolution.")
+		outputText("No AI agents detected. Install Claude Code, OpenCode, or Codex for auto-conflict resolution.")
 	}
 }

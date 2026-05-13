@@ -27,14 +27,14 @@
 - ❌ **手动解决冲突** — 在 `<<<<<<<` 标记中翻来覆去读几个小时
 - ❌ **放弃重新 Fork** — 丢失你自己的本地修改
 
-**ForkSync 解决了这个问题。** 它自动同步你的 Fork 仓库，并在出现合并冲突时调用 AI 编码助手（Claude Code、OpenCode、Droid、Codex）自动解决 — 你再也不用手动处理冲突标记。
+**ForkSync 解决了这个问题。** 它自动同步你的 Fork 仓库，并在出现合并冲突时调用 AI 编码助手（Claude Code、OpenCode、Codex）自动解决 — 你再也不用手动处理冲突标记。
 
 ## ✨ 核心功能
 
 | 功能 | 说明 |
 |------|------|
 | 🔄 **自动同步** | 定时拉取并合并上游变更（可自定义间隔） |
-| 🤖 **AI 冲突解决** | 将合并冲突委托给 AI Agent（Claude Code、OpenCode、Droid、Codex）自动处理 |
+| 🤖 **AI 冲突解决** | 将合并冲突委托给 AI Agent（Claude Code、OpenCode、Codex）自动处理 |
 | 🖥️ **桌面应用** | 精致的 Electron GUI — 仪表盘、冲突查看器、设置页 |
 | ⌨️ **命令行工具** | 功能完整的 CLI，适合终端工作流 |
 | 🔍 **目录扫描** | 递归扫描任意目录，自动发现并批量添加 Fork 仓库 |
@@ -159,7 +159,6 @@ cd app && npm install && npm run dev
 |-------|-----------|:-------:|
 | Claude Code | `claude` | ✅ |
 | OpenCode | `opencode` | ✅ |
-| Droid | `droid` | ✅ |
 | Codex | `codex` | ✅ |
 
 Agent 通过系统 `PATH` 自动发现。在配置文件中设置首选 Agent：
@@ -262,7 +261,7 @@ sync:
 
 agent:
   preferred: "claude"
-  priority: [claude, opencode, droid, codex]
+  priority: [claude, opencode, codex]
   timeout: "10m"
   conflict_strategy: "agent_resolve"
   confirm_before_commit: true
@@ -298,7 +297,7 @@ forksync/
 ├── engine/                      # Go CLI 引擎
 │   ├── cmd/                     # Cobra 命令
 │   ├── internal/
-│   │   ├── agent/               # AI Agent 适配器（Claude、OpenCode、Droid、Codex）
+│   │   ├── agent/               # AI Agent 适配器（Claude、OpenCode、Codex）
 │   │   │   └── session/         # 会话生命周期管理
 │   │   ├── config/              # 基于 Viper 的 YAML 配置
 │   │   ├── conflict/            # 合并冲突检测

@@ -64,7 +64,7 @@ func TestManager_SaveAndReload(t *testing.T) {
 		},
 		Agent: AgentConfig{
 			Preferred:           "claude",
-			Priority:            []string{"claude", "opencode", "droid", "codex"},
+			Priority:            []string{"claude", "opencode", "codex"},
 			Timeout:             "10m",
 			ConflictStrategy:    "agent_resolve",
 			ResolveStrategy:     "preserve_ours",
@@ -100,7 +100,7 @@ func TestManager_SaveAndReload(t *testing.T) {
 	assert.True(t, loadedCfg.Sync.AutoLaunch)
 
 	assert.Equal(t, "claude", loadedCfg.Agent.Preferred)
-	assert.Equal(t, []string{"claude", "opencode", "droid", "codex"}, loadedCfg.Agent.Priority)
+	assert.Equal(t, []string{"claude", "opencode", "codex"}, loadedCfg.Agent.Priority)
 	assert.Equal(t, "10m", loadedCfg.Agent.Timeout)
 	assert.Equal(t, "agent_resolve", loadedCfg.Agent.ConflictStrategy)
 	assert.Equal(t, "preserve_ours", loadedCfg.Agent.ResolveStrategy)

@@ -99,7 +99,7 @@ func (m *Manager) Load() (*Config, error) {
 	m.viper.SetDefault("sync.summary_agent", "")
 	m.viper.SetDefault("sync.summary_language", "zh")
 	m.viper.SetDefault("sync.summary_timeout", "3m")
-	m.viper.SetDefault("agent.priority", []string{"claude", "opencode", "droid", "codex"})
+	m.viper.SetDefault("agent.priority", []string{"claude", "opencode", "codex"})
 	m.viper.SetDefault("agent.timeout", "10m")
 	m.viper.SetDefault("agent.conflict_strategy", "agent_resolve")
 	m.viper.SetDefault("agent.resolve_strategy", "preserve_ours")

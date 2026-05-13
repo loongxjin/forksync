@@ -13,7 +13,7 @@ import (
 )
 
 // baseAdapter provides shared logic for simple CLI-based agent adapters
-// (Droid, OpenCode, Codex) that follow the same pattern:
+// (OpenCode, Codex) that follow the same pattern:
 //   - build CLI args with optional session ID
 //   - exec the binary and capture combined output
 //   - extract session ID from text output

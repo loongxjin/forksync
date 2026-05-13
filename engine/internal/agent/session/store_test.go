@@ -103,7 +103,7 @@ func TestSessionStore_ListAll(t *testing.T) {
 	records := []*SessionRecord{
 		{RepoID: "repo-1", AgentName: "claude", SessionID: "sess-1", Status: "active"},
 		{RepoID: "repo-2", AgentName: "opencode", SessionID: "sess-2", Status: "active"},
-		{RepoID: "repo-3", AgentName: "droid", SessionID: "sess-3", Status: "expired"},
+		{RepoID: "repo-3", AgentName: "codex", SessionID: "sess-3", Status: "expired"},
 	}
 
 	for _, r := range records {

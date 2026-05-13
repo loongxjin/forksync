@@ -18,13 +18,6 @@ func TestOpenCodeAdapter_Name(t *testing.T) {
 	}
 }
 
-func TestDroidAdapter_Name(t *testing.T) {
-	a := NewDroidAdapter()
-	if a.Name() != "droid" {
-		t.Errorf("Name() = %q; want %q", a.Name(), "droid")
-	}
-}
-
 func TestCodexAdapter_Name(t *testing.T) {
 	a := NewCodexAdapter()
 	if a.Name() != "codex" {
@@ -33,10 +26,8 @@ func TestCodexAdapter_Name(t *testing.T) {
 }
 
 func TestAllAdapters_Interface(t *testing.T) {
-	// Compile-time check that all adapters satisfy AgentProvider
 	var _ AgentProvider = NewClaudeAdapter()
 	var _ AgentProvider = NewOpenCodeAdapter()
-	var _ AgentProvider = NewDroidAdapter()
 	var _ AgentProvider = NewCodexAdapter()
 }
 
@@ -118,42 +109,6 @@ func TestOpenCodeAdapter_BuildArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			args := OpenCodeBuildArgs(tt.sessionID, tt.prompt)
-			if len(args) != len(tt.wantArgs) {
-				t.Fatalf("args = %v; want %v", args, tt.wantArgs)
-			}
-			for i, got := range args {
-				if got != tt.wantArgs[i] {
-					t.Errorf("args[%d] = %q; want %q", i, got, tt.wantArgs[i])
-				}
-			}
-		})
-	}
-}
-
-func TestDroidAdapter_BuildArgs(t *testing.T) {
-	tests := []struct {
-		name      string
-		sessionID string
-		prompt    string
-		wantArgs  []string
-	}{
-		{
-			name:      "new session",
-			sessionID: "",
-			prompt:    "resolve conflicts",
-			wantArgs:  []string{"exec", "--auto", "high", "resolve conflicts"},
-		},
-		{
-			name:      "resume session",
-			sessionID: "sess-789",
-			prompt:    "resolve more",
-			wantArgs:  []string{"exec", "--auto", "high", "--session-id", "sess-789", "resolve more"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			args := DroidBuildArgs(tt.sessionID, tt.prompt)
 			if len(args) != len(tt.wantArgs) {
 				t.Fatalf("args = %v; want %v", args, tt.wantArgs)
 			}

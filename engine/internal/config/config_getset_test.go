@@ -49,7 +49,7 @@ func TestManager_Get_SliceKey(t *testing.T) {
 	// Default value
 	val, err := m.Get("agent.priority")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"claude", "opencode", "droid", "codex"}, val)
+	assert.Equal(t, []string{"claude", "opencode", "codex"}, val)
 
 	// After set
 	err = m.Set("agent.priority", `["opencode","claude"]`)

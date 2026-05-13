@@ -15,7 +15,6 @@ const DefaultTimeout = 3 * time.Minute
 var summaryAgentArgs = map[string][]string{
 	"claude":   {"--print", "--dangerously-skip-permissions"},
 	"opencode": {"run"},
-	"droid":    {"exec", "--auto", "high"},
 	"codex":    {"exec", "--dangerously-bypass-approvals-and-sandbox"},
 }
 
@@ -35,7 +34,7 @@ func NewExecutorWithTimeout(timeout time.Duration) *Executor {
 }
 
 // Summarize calls the specified agent CLI to generate a summary of the given commits.
-// agentName is the binary name (e.g. "claude", "opencode", "droid", "codex"). If empty, returns an error.
+// agentName is the binary name (e.g. "claude", "opencode", "codex"). If empty, returns an error.
 func (e *Executor) Summarize(ctx context.Context, commits []CommitInfo, lang string, agentName string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()

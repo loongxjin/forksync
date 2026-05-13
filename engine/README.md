@@ -102,7 +102,7 @@ forksync resolve my-repo --accept
 6. 确认后 `git add` + `git commit`
 
 ### `agent`
-管理 AI agent 集成。支持检测 Claude Code、OpenCode、Droid、Codex。
+管理 AI agent 集成。支持检测 Claude Code、OpenCode、Codex。
 
 ```bash
 forksync agent list       # 列出所有支持的 agent 及安装状态
@@ -142,11 +142,10 @@ github:
   token: ""                  # GitHub PAT，提高 API 限流
 
 agent:
-  preferred: ""              # 首选 agent（claude/opencode/droid/codex）
+  preferred: ""              # 首选 agent（claude/opencode/codex）
   priority:                  # agent 优先级顺序
     - claude
     - opencode
-    - droid
     - codex
   timeout: "10m"             # agent 操作超时
   conflict_strategy: "preserve_ours"  # 冲突解决策略
@@ -236,7 +235,6 @@ engine/
     │   ├── registry.go      # 自动发现与注册
     │   ├── claude.go        # Claude Code 适配器
     │   ├── opencode.go      # OpenCode 适配器
-    │   ├── droid.go         # Droid 适配器
     │   ├── codex.go         # Codex 适配器
     │   └── session/         # 会话管理 (创建/恢复/过期清理)
     ├── notify/              # macOS 系统通知 (osascript)
@@ -249,7 +247,6 @@ engine/
 |-------|--------|-----------|---------|----------|
 | Claude Code | `claude` | `claude --print <prompt>` | `--dangerously-skip-permissions` | `--resume <id>` |
 | OpenCode | `opencode` | `opencode run <message>` | run 模式自动执行 | `--session <id>` |
-| Droid | `droid` | `droid exec --auto high <prompt>` | `--auto high` | `--session-id <id>` |
 | Codex | `codex` | `codex <prompt>` | `--dangerously-bypass-approvals-and-sandbox` | `resume --last` |
 
 ForkSync 自动检测 PATH 中已安装的 agent，按配置的优先级选择。

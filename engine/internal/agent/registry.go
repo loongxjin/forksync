@@ -19,7 +19,6 @@ func NewRegistry(preferred string) *Registry {
 		providers: []AgentProvider{
 			NewClaudeAdapter(),
 			NewOpenCodeAdapter(),
-			NewDroidAdapter(),
 			NewCodexAdapter(),
 		},
 		preferred: preferred,
@@ -59,7 +58,7 @@ func (r *Registry) GetPreferred() (AgentProvider, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("no agent CLI found; install Claude Code, OpenCode, Droid, or Codex")
+	return nil, fmt.Errorf("no agent CLI found; install Claude Code, OpenCode, or Codex")
 }
 
 // GetByName returns a specific agent provider by name.

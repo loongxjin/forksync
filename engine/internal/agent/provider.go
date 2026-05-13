@@ -12,7 +12,7 @@ import (
 )
 
 // AgentProvider defines the interface for interacting with an AI coding agent CLI.
-// Each supported agent (Claude, OpenCode, Droid, Codex) implements this interface.
+// Each supported agent (Claude, OpenCode, Codex) implements this interface.
 type AgentProvider interface {
 	// Name returns the agent's identifier (e.g., "claude", "opencode").
 	Name() string
