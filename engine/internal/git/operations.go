@@ -443,7 +443,15 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 	outputStr := string(output)
 
 	if err != nil {
-		if strings.Contains(outputStr, "CONFLICT") {
+		// git merge exit code 1 = conflict (locale-independent).
+		// Also check "冲突" for non-English locales.
+		isConflict := strings.Contains(outputStr, "CONFLICT") || strings.Contains(outputStr, "冲突")
+		if !isConflict {
+			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+				isConflict = true
+			}
+		}
+		if isConflict {
 			conflicts := o.DetectConflicts(ctx, repo.Path)
 			logger.Warn("git: mergeCLI detected CONFLICT",
 				"repo", repo.Name,
