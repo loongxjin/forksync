@@ -805,7 +805,7 @@ func (o *Operations) StageFile(ctx context.Context, repoPath, file string) error
 
 // StageAll stages all changes.
 func (o *Operations) StageAll(ctx context.Context, repoPath string) error {
-	_, err := o.runGitCombined(ctx, repoPath, "add", "-A")
+	_, err := o.runGitCombined(ctx, repoPath, "add", "-u")
 	return err
 }
 

@@ -114,6 +114,7 @@ func BuildConflictPrompt(files []string, strategy string) string {
 	sb.WriteString("2. 确保解决后的代码语法正确、逻辑完整\n")
 	sb.WriteString("3. 保持与项目现有代码风格一致\n")
 	sb.WriteString("4. 不要引入任何无关的修改\n")
+	sb.WriteString("5. 不要执行 git add 或 git commit，文件会被自动暂存\n")
 
 	return sb.String()
 }
