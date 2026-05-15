@@ -71,7 +71,7 @@ func (a *baseAdapter) ResolveConflicts(ctx context.Context, session *Session, pr
 	return &AgentResult{
 		Success:   true,
 		SessionID: sessionID,
-		Summary:   truncateOutput(output, maxSummaryLength),
+		Summary:   extractSummary(output, maxSummaryLength),
 	}, nil
 }
 
@@ -190,7 +190,7 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 		sessionID = session.ID
 	}
 
-	summary := truncateOutput(output, maxSummaryLength)
+	summary := extractSummary(output, maxSummaryLength)
 	logger.Debug("[TRACE] baseAdapter: agent process completed", "agent", a.name, "sessionID", sessionID)
 	_ = sw.WriteEvent(StreamEvent{
 		Type:      StreamEventDone,

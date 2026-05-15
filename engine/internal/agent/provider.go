@@ -172,7 +172,7 @@ func resolutionMethod(language string) string {
 		sb.WriteString("   - If accepting upstream: adopt the upstream logic, but keep any local additions whose purpose is still valid\n")
 		sb.WriteString("   - If balanced: merge both sets of logic gracefully, preserving each side's intent\n")
 		sb.WriteString("6. After resolving, verify the file compiles / passes syntax checks if possible.\n")
-		sb.WriteString("7. Finally, briefly report what you did and why.\n")
+		sb.WriteString("7. Finally, under a `## Resolution Summary` heading, briefly report what you did and why.\n")
 	} else {
 		sb.WriteString("\n## 解决方法\n\n")
 		sb.WriteString("不要急于直接编辑文件。请按以下步骤进行：\n\n")
@@ -187,7 +187,7 @@ func resolutionMethod(language string) string {
 		sb.WriteString("   - 接受上游时：采用上游逻辑，但保留仍有效的本地补充功能\n")
 		sb.WriteString("   - 智能合并时：优雅整合双方逻辑，不丢失任何一方的有效意图\n")
 		sb.WriteString("6. 解决完成后，如果可能，检查文件能否通过编译或语法检查。\n")
-		sb.WriteString("7. 最后，简要报告你做了什么、为什么这样解决。\n")
+		sb.WriteString("7. 最后，请用 `## 解决总结` 作为独立标题，简要总结你做了什么、为什么这样解决。\n")
 	}
 	return sb.String()
 }
@@ -264,8 +264,20 @@ func extractSessionID(output string) string {
 // maxSummaryLength is the maximum character length for agent summary output.
 const maxSummaryLength = 500
 
-// truncateOutput limits output to maxLen runes for summaries.
-func truncateOutput(output string, maxLen int) string {
+// extractSummary finds the agent's final summary by looking for a marker heading
+// and returning everything after it. Falls back to the last maxLen runes.
+func extractSummary(output string, maxLen int) string {
+	markers := []string{"\n## 解决总结\n", "\n## Resolution Summary\n"}
+	for _, marker := range markers {
+		if idx := strings.Index(output, marker); idx >= 0 {
+			summary := strings.TrimSpace(output[idx+len(marker):])
+			if utf8.RuneCountInString(summary) <= maxLen {
+				return summary
+			}
+			runes := []rune(summary)
+			return string(runes[:maxLen]) + "..."
+		}
+	}
 	if utf8.RuneCountInString(output) <= maxLen {
 		return output
 	}

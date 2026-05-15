@@ -81,7 +81,7 @@ func (a *ClaudeAdapter) ResolveConflicts(ctx context.Context, session *Session, 
 	return &AgentResult{
 		Success:   true,
 		SessionID: session.ID,
-		Summary:   truncateOutput(result.Text, maxSummaryLength),
+		Summary:   extractSummary(result.Text, maxSummaryLength),
 	}, nil
 }
 
@@ -266,7 +266,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 	}
 
 	resultText := resultTextBuilder.String()
-	summary := truncateOutput(resultText, maxSummaryLength)
+	summary := extractSummary(resultText, maxSummaryLength)
 
 	_ = sw.WriteEvent(StreamEvent{
 		Type:      StreamEventDone,
