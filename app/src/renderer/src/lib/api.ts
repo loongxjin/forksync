@@ -38,8 +38,9 @@ export interface EngineAPI {
   remove(name: string): Promise<ApiResponse<RemoveData>>
   resolve(
     name: string,
-    opts?: { agent?: string; noConfirm?: boolean }
+    opts?: { agent?: string; noConfirm?: boolean; prepare?: boolean; retry?: boolean; manual?: boolean }
   ): Promise<ApiResponse<ResolveData>>
+  resolvePrepare(name: string): Promise<ApiResponse<ResolveData>>
   resolveAccept(name: string): Promise<ApiResponse<AcceptData>>
   resolveReject(name: string): Promise<ApiResponse<RejectData>>
   agentList(): Promise<ApiResponse<AgentListData>>
@@ -73,7 +74,6 @@ export interface EngineAPI {
   postSyncRemove(repoName: string, cmdId: string): Promise<ApiResponse<PostSyncCommandsData>>
 
   // Workflow
-  workflowContinue(name: string, action: string): Promise<ApiResponse<{ repoId: string; repoName: string; status: string; workflow?: SyncWorkflow }>>
 
   // AI Summary
   summarize(repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>>

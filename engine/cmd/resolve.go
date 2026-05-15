@@ -28,6 +28,9 @@ var (
 	resolveReject    bool   // --reject
 	resolveAccept    bool   // --accept
 	resolveStream    bool   // --stream
+	resolvePrepare   bool   // --prepare (mark workflow ready for agent)
+	resolveRetry     bool   // --retry (used with --accept to retry commit)
+	resolveManual    bool   // --manual (used with --accept after manual resolution)
 
 	// signalsToWatch lists OS signals that should trigger status rollback
 	// when the Go process is killed during agent conflict resolution.
@@ -72,6 +75,9 @@ func init() {
 	resolveCmd.Flags().BoolVar(&resolveReject, "reject", false, "reject last resolution and rollback")
 	resolveCmd.Flags().BoolVar(&resolveAccept, "accept", false, "accept all conflicts as resolved")
 	resolveCmd.Flags().BoolVar(&resolveStream, "stream", false, "stream agent output as NDJSON")
+	resolveCmd.Flags().BoolVar(&resolvePrepare, "prepare", false, "mark workflow as ready for agent (no agent run)")
+	resolveCmd.Flags().BoolVar(&resolveRetry, "retry", false, "retry commit (use with --accept)")
+	resolveCmd.Flags().BoolVar(&resolveManual, "manual", false, "manual resolution (use with --accept)")
 	rootCmd.AddCommand(resolveCmd)
 }
 
@@ -86,6 +92,11 @@ func runResolve(cmd *cobra.Command, args []string) error {
 	r, ok := store.GetByName(args[0])
 	if !ok {
 		return fmt.Errorf("repository %q not found", args[0])
+	}
+
+	// Handle --prepare: mark workflow ready for agent (lightweight, no agent run)
+	if resolvePrepare {
+		return runResolvePrepare(cmd, r, store)
 	}
 
 	// Handle --accept
@@ -487,10 +498,44 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 	}
 
 	// Delegate stage → commit → workflow → post-sync → history to the shared function.
-	return finalizeCommitWithWorkflow(cmd.Context(), r, store, newGitOps(cfg), commitWorkflowParams{
+	params := commitWorkflowParams{
 		commitMsg:     types.CommitMsgAgentResolved,
-		recordHistory: true,
-	})
+		recordHistory: !resolveRetry,
+		skipAgentAndAccept: resolveManual,
+	}
+	if resolveManual {
+		params.commitMsg = types.CommitMsgManualResolved
+	}
+	return finalizeCommitWithWorkflow(cmd.Context(), r, store, newGitOps(cfg), params)
+}
+
+// runResolvePrepare marks the workflow as ready for agent resolution without actually
+// running the agent. Used by the Electron frontend as a lightweight pre-step before
+// spawning resolve --stream.
+func runResolvePrepare(cmd *cobra.Command, r types.Repo, store repo.Store) error {
+	wf := r.Workflow
+	if wf == nil {
+		wf = newWorkflowFromRepo(r)
+	}
+	syncpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
+	syncpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
+	// Restore accept_changes from skipped to pending so it can be used later.
+	for i := range wf.Steps {
+		if wf.Steps[i].Step == types.StepAcceptChanges && wf.Steps[i].Status == types.StepStatusSkipped {
+			wf.Steps[i].Status = types.StepStatusPending
+			wf.Steps[i].Message = ""
+			wf.Steps[i].EndedAt = nil
+		}
+	}
+	wf.Status = types.WorkflowRunning
+	r.Workflow = wf
+	r.Status = types.RepoStatusConflict
+	r.ErrorMessage = ""
+	if err := store.Update(r); err != nil {
+		logger.Error("resolve: failed to update repo for prepare", "repo", r.Name, "error", err)
+	}
+	outputWorkflowResult(r)
+	return nil
 }
 
 // toConflictFiles converts string paths to ConflictFile slices.

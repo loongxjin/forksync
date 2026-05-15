@@ -287,7 +287,7 @@ export function HomePage(): JSX.Element {
       // When triggered from WorkflowSteps (existing workflow), it advances the steps.
       // Either way, the backend returns the updated repo with workflow so the UI
       // can immediately show WorkflowSteps.
-      const wfRes = await engineApi.workflowContinue(repo.name, 'resolve_with_agent')
+      const wfRes = await engineApi.resolvePrepare(repo.name)
       if (!wfRes.success) {
         showToast?.(wfRes.error ?? 'Workflow continue failed', 'error')
         return
@@ -331,7 +331,7 @@ export function HomePage(): JSX.Element {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
       // For auto-confirm resolves, trigger summarization immediately since
       // the merge has been committed. For pending confirmation, summarization
-      // is handled by handleWorkflowContinue on explicit accept.
+      // is handled by handleAccept on explicit accept.
       if (result && autoConfirmRef.current.has(repoName)) {
         autoConfirmRef.current.delete(repoName)
         if (engineConfig?.Sync?.AutoSummary) {
@@ -350,46 +350,78 @@ export function HomePage(): JSX.Element {
     }
   }, [streamResults, loadHistory, engineConfig])
 
-  const handleWorkflowContinue = useCallback(async (repoName: string, action: string) => {
+  const handleRetryCommit = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
-    if (action === 'abort' || action === 'reject') {
-      clearStream(repoName)
-    }
     try {
-      const res = await engineApi.workflowContinue(repoName, action)
+      const res = await engineApi.resolve(repoName, { accept: true, retry: true })
       if (!res.success) {
-        showToast?.(res.error ?? `Workflow action ${action} failed`, 'error')
+        showToast?.(res.error ?? 'Retry commit failed', 'error')
       } else {
-        // Clean up resolveResults on accept or reject
         setResolveResults((prev) => {
           const next = { ...prev }
           delete next[repoName]
           return next
         })
-        if (engineConfig?.Sync?.AutoSummary && (action === 'accept' || action === 'continue_manual')) {
-          // Fire-and-forget AI summarization after resolving conflicts via workflow
-          engineApi.summarize(repoName).catch(() => {
-            // ignore background summary errors
-          })
+      }
+      await refresh()
+      loadHistory()
+    } catch (err) {
+      showToast?.(`Retry commit failed: ${(err as Error).message}`, 'error')
+      await refresh()
+    } finally {
+      setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
+    }
+  }, [refresh, loadHistory, showToast])
+
+  const handleAccept = useCallback(async (repoName: string) => {
+    setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
+    try {
+      const res = await engineApi.resolveAccept(repoName)
+      if (!res.success) {
+        showToast?.(res.error ?? 'Accept failed', 'error')
+      } else {
+        setResolveResults((prev) => {
+          const next = { ...prev }
+          delete next[repoName]
+          return next
+        })
+        if (engineConfig?.Sync?.AutoSummary) {
+          engineApi.summarize(repoName).catch(() => {})
         }
       }
       await refresh()
       loadHistory()
     } catch (err) {
-      showToast?.(`Workflow action ${action} failed: ${(err as Error).message}`, 'error')
+      showToast?.(`Accept failed: ${(err as Error).message}`, 'error')
       await refresh()
     } finally {
       setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
     }
-  }, [refresh, loadHistory, showToast, engineConfig, clearStream])
-
-  const handleAccept = useCallback(async (repoName: string) => {
-    await handleWorkflowContinue(repoName, 'accept')
-  }, [handleWorkflowContinue])
+  }, [refresh, loadHistory, showToast, engineConfig])
 
   const handleReject = useCallback(async (repoName: string) => {
-    await handleWorkflowContinue(repoName, 'reject')
-  }, [handleWorkflowContinue])
+    setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
+    clearStream(repoName)
+    try {
+      const res = await engineApi.resolveReject(repoName)
+      if (!res.success) {
+        showToast?.(res.error ?? 'Reject failed', 'error')
+      } else {
+        setResolveResults((prev) => {
+          const next = { ...prev }
+          delete next[repoName]
+          return next
+        })
+      }
+      await refresh()
+    } catch (err) {
+      showToast?.(`Reject failed: ${(err as Error).message}`, 'error')
+      await refresh()
+    } finally {
+      setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
+    }
+  }, [refresh, showToast, clearStream])
+
 
   const handleViewTerminal = useCallback((repoName: string) => {
     setTerminalDrawerRepo(repoName)
@@ -564,10 +596,10 @@ export function HomePage(): JSX.Element {
                         resolveResult={resolveResults[repo.name] ?? null}
                         onResolveWithAgent={() => handleResolve(repo)}
                         onOpenIDE={() => window.api.ideOpen(repo.path, 'default')}
-                        onAbort={() => handleWorkflowContinue(repo.name, 'abort')}
-                        onAccept={() => handleWorkflowContinue(repo.name, 'accept')}
-                        onReject={() => handleWorkflowContinue(repo.name, 'reject')}
-                        onRetryCommit={() => handleWorkflowContinue(repo.name, 'retry_commit')}
+                        onAbort={() => handleReject(repo.name)}
+                        onAccept={() => handleAccept(repo.name)}
+                        onReject={() => handleReject(repo.name)}
+                        onRetryCommit={() => handleRetryCommit(repo.name)}
                         onViewTerminal={() => handleViewTerminal(repo.name)}
                         onViewDiff={() => setDiffDrawerRepo(repo.name)}
                         loading={agentLoading || !!localLoading[repo.name]}

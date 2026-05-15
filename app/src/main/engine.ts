@@ -141,16 +141,20 @@ export class EngineClient {
   /** `forksync resolve <name> [--agent <name>] [--no-confirm] --json` */
   async resolve(
     name: string,
-    opts?: { agent?: string; noConfirm?: boolean }
+    opts?: { agent?: string; noConfirm?: boolean; prepare?: boolean; retry?: boolean; manual?: boolean }
   ): Promise<ApiResponse<ResolveData>> {
     const args = ['resolve', name]
-    if (opts?.agent) {
-      args.push('--agent', opts.agent)
-    }
-    if (opts?.noConfirm) {
-      args.push('--no-confirm')
-    }
+    if (opts?.prepare) args.push('--prepare')
+    if (opts?.agent) args.push('--agent', opts.agent)
+    if (opts?.noConfirm) args.push('--no-confirm')
+    if (opts?.retry) args.push('--retry')
+    if (opts?.manual) args.push('--manual')
     return this.exec<ResolveData>(args, LONG_TIMEOUT_MS)
+  }
+
+  /** `forksync resolve <name> --prepare --json` (lightweight workflow state update) */
+  async resolvePrepare(name: string): Promise<ApiResponse<ResolveData>> {
+    return this.resolve(name, { prepare: true })
   }
 
   /**
@@ -488,10 +492,6 @@ export class EngineClient {
     return this.exec<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName, '--retry'], LONG_TIMEOUT_MS)
   }
 
-  /** `forksync workflow continue <name> --action <action> --json` */
-  async workflowContinue(name: string, action: string): Promise<ApiResponse<WorkflowContinueData>> {
-    return this.exec<WorkflowContinueData>(['workflow', 'continue', name, '--action', action])
-  }
 
   // -----------------------------------------------------------------------
   // Private — spawn + parse logic

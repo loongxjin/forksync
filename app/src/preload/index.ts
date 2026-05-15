@@ -39,8 +39,10 @@ const api = {
     ipcRenderer.invoke('engine:remove', name),
   resolve: (
     name: string,
-    opts?: { agent?: string; noConfirm?: boolean }
+    opts?: { agent?: string; noConfirm?: boolean; prepare?: boolean; retry?: boolean; manual?: boolean }
   ): Promise<ApiResponse<ResolveData>> => ipcRenderer.invoke('engine:resolve', name, opts),
+  resolvePrepare: (name: string): Promise<ApiResponse<ResolveData>> =>
+    ipcRenderer.invoke('engine:resolvePrepare', name),
   resolveAccept: (name: string): Promise<ApiResponse<AcceptData>> =>
     ipcRenderer.invoke('engine:resolveAccept', name),
   resolveReject: (name: string): Promise<ApiResponse<RejectData>> =>
@@ -70,9 +72,7 @@ const api = {
     ipcRenderer.invoke('engine:summarize', repoName),
   summarizeRetry: (repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> =>
     ipcRenderer.invoke('engine:summarizeRetry', repoName),
-  workflowContinue: (name: string, action: string): Promise<ApiResponse<{ repoId: string; repoName: string; status: string; workflow?: SyncWorkflow }>> =>
-    ipcRenderer.invoke('engine:workflowContinue', name, action),
-
+  
   // Agent resolve streaming
   resolveStreamStart: (name: string, opts?: { agent?: string; noConfirm?: boolean }): void =>
     ipcRenderer.send('engine:resolveStream:start', name, opts),

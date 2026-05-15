@@ -94,10 +94,14 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     'engine:resolve',
-    async (_event, name: string, opts?: { agent?: string; noConfirm?: boolean }) => {
+    async (_event, name: string, opts?: { agent?: string; noConfirm?: boolean; prepare?: boolean; retry?: boolean; manual?: boolean }) => {
       return e.resolve(assertString(name, 'name'), opts)
     }
   )
+
+  ipcMain.handle('engine:resolvePrepare', async (_event, name: string) => {
+    return e.resolvePrepare(assertString(name, 'name'))
+  })
 
   ipcMain.handle('engine:resolveAccept', async (_event, name: string) => {
     return e.resolveAccept(assertString(name, 'name'))
@@ -166,13 +170,6 @@ export function registerIpcHandlers(): void {
     return e.summarizeRetry(assertString(repoName, 'repoName'))
   })
 
-  ipcMain.handle('engine:workflowContinue', async (_event, name: string, action: string) => {
-    const safeAction = assertString(action, 'action')
-    if (!['accept', 'reject', 'abort', 'resolve_with_agent', 'retry_commit', 'continue_manual'].includes(safeAction)) {
-      throw new Error(`Invalid action: ${safeAction}`)
-    }
-    return e.workflowContinue(assertString(name, 'name'), safeAction)
-  })
 
   // --- Agent resolve streaming (fire-and-forget start, push events) ---
 
