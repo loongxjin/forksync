@@ -107,7 +107,7 @@ func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*ag
 // If resuming an existing session fails (e.g. the agent CLI lost it),
 // it transparently creates a new session and retries.
 // An optional streamWriter enables real-time NDJSON streaming of agent output.
-func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string, conflictFiles []string, strategy string, sw *agent.StreamWriter) (*agent.AgentResult, error) {
+func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string, conflictFiles []string, strategy string, language string, sw *agent.StreamWriter) (*agent.AgentResult, error) {
 	logger.Debug("[TRACE] session: ResolveConflicts ENTRY", "repo", repoID, "strategy", strategy, "streaming", sw != nil, "conflictFiles", conflictFiles)
 
 	// Ensure session exists — reuse active or create new
@@ -121,9 +121,9 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 	// the actual task.
 	var prompt string
 	if sess.IsNew {
-		prompt = agent.BuildInitialConflictPrompt(conflictFiles, strategy)
+		prompt = agent.BuildInitialConflictPrompt(conflictFiles, strategy, language)
 	} else {
-		prompt = agent.BuildConflictPrompt(conflictFiles, strategy)
+		prompt = agent.BuildConflictPrompt(conflictFiles, strategy, language)
 	}
 
 	// Call agent — use streaming if a StreamWriter is provided and the
@@ -143,7 +143,7 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 				return nil, fmt.Errorf("resume failed (%v); recreate session also failed: %w", err, retryErr)
 		}
 		// Retry with merged prompt (this is a new session too)
-		prompt = agent.BuildInitialConflictPrompt(conflictFiles, strategy)
+		prompt = agent.BuildInitialConflictPrompt(conflictFiles, strategy, language)
 		result, err = m.resolveWithOptionalStream(ctx, sess, prompt, conflictFiles, sw)
 		if err != nil {
 			if updateErr := m.store.UpdateStatus(repoID, string(types.SessionStatusFailed)); updateErr != nil {

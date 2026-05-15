@@ -175,10 +175,16 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	defer cancel()
 
 	streamWriter, closeLogWriter := setupResolveStreamWriter(cfgMgr.ConfigDir(), r.Name)
+
+	// Determine prompt language from config
+	language := "zh"
+	if cfg != nil && cfg.Sync.SummaryLanguage != "" {
+		language = cfg.Sync.SummaryLanguage
+	}
 	defer closeLogWriter()
 
 	logger.Debug("[TRACE] resolve: calling sessionMgr.ResolveConflicts", "repo", r.Name, "hasStreamWriter", streamWriter != nil, "isJSON", isJSON())
-	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy, streamWriter)
+	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy, language, streamWriter)
 	logger.Debug("[TRACE] resolve: sessionMgr.ResolveConflicts returned", "repo", r.Name, "err", err, "resultNil", result == nil)
 	if err != nil {
 		logger.Error("resolve: agent resolve failed", "repo", r.Name, "error", err)

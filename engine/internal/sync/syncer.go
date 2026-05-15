@@ -530,6 +530,12 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	// Determine resolve sub-strategy for the agent prompt
 	resolveStrategy := s.resolveStrategyOrDefault()
 
+	// Determine prompt language from config
+	language := "zh"
+	if s.cfg != nil && s.cfg.Sync.SummaryLanguage != "" {
+		language = s.cfg.Sync.SummaryLanguage
+	}
+
 	// Set up log writer for auto-sync background runs so users can replay later
 	var streamWriter *agent.StreamWriter
 	lw, lwErr := agent.NewLogWriter(s.configDir, r.Name)
@@ -543,7 +549,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	}
 
 	// Resolve conflicts via agent
-	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy, streamWriter)
+	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy, language, streamWriter)
 	if err != nil {
 			logger.Error("sync: agent resolve failed",
 			"repo", r.Name,

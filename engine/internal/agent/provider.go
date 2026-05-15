@@ -84,38 +84,133 @@ type AgentResult struct {
 }
 
 // BuildConflictPrompt constructs the prompt sent to the agent for conflict resolution.
-// This is used when resuming an existing session that has already received
-// the initial system prompt.
-func BuildConflictPrompt(files []string, strategy string) string {
+// language is "zh" or "en", defaults to Chinese if unrecognized.
+func BuildConflictPrompt(files []string, strategy string, language string) string {
 	var sb strings.Builder
 
-	sb.WriteString("以下文件存在合并冲突，请解决它们：\n\n")
+	sb.WriteString(conflictFileList(files, language))
+	sb.WriteString(mergeStrategyText(strategy, language))
+	sb.WriteString(resolutionMethod(language))
+	sb.WriteString(requirements(language))
+
+	return sb.String()
+}
+
+func conflictFileList(files []string, language string) string {
+	var sb strings.Builder
+	if language == "en" {
+		sb.WriteString("The following files have merge conflicts. Please resolve them:\n\n")
+	} else {
+		sb.WriteString("以下文件存在合并冲突，请解决它们：\n\n")
+	}
 	for _, f := range files {
 		sb.WriteString(fmt.Sprintf("  %s\n", f))
 	}
+	return sb.String()
+}
 
-	sb.WriteString("\n## 合并策略\n\n")
-	switch strategy {
-	case types.ResolveStrategyPreserveOurs:
-		sb.WriteString("保留我们的自定义修改，接受上游的非冲突变更。\n")
-		sb.WriteString("当双方的修改矛盾不可调和，优先保留本地（ours）的版本。\n")
-	case types.ResolveStrategyPreserveTheirs:
-		sb.WriteString("优先接受上游的变更，仅在必要处保留本地修改。\n")
-		sb.WriteString("当双方的修改矛盾不可调和，优先采用上游（theirs）的版本。\n")
-	case types.ResolveStrategyBalanced:
-		sb.WriteString("智能合并，尽量同时保留双方的修改。\n")
-		sb.WriteString("只有当双方修改了完全相同的行且无法自动整合时才需要取舍。\n")
-	default:
-		sb.WriteString("保留我们的自定义修改，接受上游的非冲突变更。\n")
+func  mergeStrategyText(strategy string, language string) string {
+	var sb strings.Builder
+	en := language == "en"
+
+	if en {
+		sb.WriteString("\n## Merge Strategy\n\n")
+	} else {
+		sb.WriteString("\n## 合并策略\n\n")
 	}
 
-	sb.WriteString("\n## 要求\n\n")
-	sb.WriteString("1. 移除所有冲突标记（<<<<<<<, =======, >>>>>>>）并保留正确的代码\n")
-	sb.WriteString("2. 确保解决后的代码语法正确、逻辑完整\n")
-	sb.WriteString("3. 保持与项目现有代码风格一致\n")
-	sb.WriteString("4. 不要引入任何无关的修改\n")
-	sb.WriteString("5. 不要执行 git add 或 git commit，文件会被自动暂存\n")
+	switch strategy {
+	case types.ResolveStrategyPreserveOurs:
+		if en {
+			sb.WriteString("Preserve our custom modifications and accept upstream non-conflicting changes.\n")
+			sb.WriteString("When both sides conflict irreconcilably, prefer the local (ours) version.\n")
+		} else {
+			sb.WriteString("保留我们的自定义修改，接受上游的非冲突变更。\n")
+			sb.WriteString("当双方的修改矛盾不可调和，优先保留本地（ours）的版本。\n")
+		}
+	case types.ResolveStrategyPreserveTheirs:
+		if en {
+			sb.WriteString("Prefer upstream changes and keep local modifications only where necessary.\n")
+			sb.WriteString("When both sides conflict irreconcilably, prefer the upstream (theirs) version.\n")
+		} else {
+			sb.WriteString("优先接受上游的变更，仅在必要处保留本地修改。\n")
+			sb.WriteString("当双方的修改矛盾不可调和，优先采用上游（theirs）的版本。\n")
+		}
+	case types.ResolveStrategyBalanced:
+		if en {
+			sb.WriteString("Merge intelligently, preserving changes from both sides where possible.\n")
+			sb.WriteString("Only choose between them when both modified the exact same lines.\n")
+		} else {
+			sb.WriteString("智能合并，尽量同时保留双方的修改。\n")
+			sb.WriteString("只有当双方修改了完全相同的行且无法自动整合时才需要取舍。\n")
+		}
+	default:
+		if en {
+			sb.WriteString("Preserve our custom modifications and accept upstream non-conflicting changes.\n")
+		} else {
+			sb.WriteString("保留我们的自定义修改，接受上游的非冲突变更。\n")
+		}
+	}
+	return sb.String()
+}
 
+func resolutionMethod(language string) string {
+	en := language == "en"
+	var sb strings.Builder
+
+	if en {
+		sb.WriteString("\n## How to Resolve\n\n")
+		sb.WriteString("Do NOT rush to edit files immediately. Follow this process:\n\n")
+		sb.WriteString("1. For each conflicting file, first read the file to understand the conflict blocks.\n")
+		sb.WriteString("2. Use `git log` on the conflicting file to find the commits that introduced each side:\n")
+		sb.WriteString("   - For the local side: `git log HEAD...MERGE_HEAD -- <file>`\n")
+		sb.WriteString("   - For the upstream side: `git log MERGE_HEAD...HEAD -- <file>`\n")
+		sb.WriteString("3. Use `git show <commit>` or `git log -p` to read the full diff and commit message.\n")
+		sb.WriteString("4. Understand WHY each change was made — what problem it solved, what feature it added.\n")
+		sb.WriteString("5. After understanding both sides, resolve the conflict:\n")
+		sb.WriteString("   - If preserving local: keep the local logic intact, but also adopt any upstream improvements that do not conflict\n")
+		sb.WriteString("   - If accepting upstream: adopt the upstream logic, but keep any local additions whose purpose is still valid\n")
+		sb.WriteString("   - If balanced: merge both sets of logic gracefully, preserving each side's intent\n")
+		sb.WriteString("6. After resolving, verify the file compiles / passes syntax checks if possible.\n")
+		sb.WriteString("7. Finally, briefly report what you did and why.\n")
+	} else {
+		sb.WriteString("\n## 解决方法\n\n")
+		sb.WriteString("不要急于直接编辑文件。请按以下步骤进行：\n\n")
+		sb.WriteString("1. 先阅读每个冲突文件，理解冲突块的内容。\n")
+		sb.WriteString("2. 使用 `git log` 查找冲突双方各自的提交记录：\n")
+		sb.WriteString("   - 查看本地修改的提交：`git log HEAD...MERGE_HEAD -- <文件>`\n")
+		sb.WriteString("   - 查看上游修改的提交：`git log MERGE_HEAD...HEAD -- <文件>`\n")
+		sb.WriteString("3. 使用 `git show <提交>` 或 `git log -p` 查看完整的改动和提交信息。\n")
+		sb.WriteString("4. 理解每次修改的意图——它解决了什么问题、实现了什么功能、为什么要这样改。\n")
+		sb.WriteString("5. 在充分理解双方意图之后，再进行冲突解决：\n")
+		sb.WriteString("   - 保留本地时：保持本地逻辑完整，同时采纳上游不冲突的改进\n")
+		sb.WriteString("   - 接受上游时：采用上游逻辑，但保留仍有效的本地补充功能\n")
+		sb.WriteString("   - 智能合并时：优雅整合双方逻辑，不丢失任何一方的有效意图\n")
+		sb.WriteString("6. 解决完成后，如果可能，检查文件能否通过编译或语法检查。\n")
+		sb.WriteString("7. 最后，简要报告你做了什么、为什么这样解决。\n")
+	}
+	return sb.String()
+}
+
+func requirements(language string) string {
+	en := language == "en"
+	var sb strings.Builder
+
+	if en {
+		sb.WriteString("\n## Requirements\n\n")
+		sb.WriteString("1. Remove all conflict markers (<<<<<<<, =======, >>>>>>>) and keep the correct code\n")
+		sb.WriteString("2. Ensure the resolved code is syntactically correct and logically complete\n")
+		sb.WriteString("3. Stay consistent with the existing code style of the project\n")
+		sb.WriteString("4. Do not introduce unrelated changes\n")
+		sb.WriteString("5. Do NOT run git add or git commit — files will be staged automatically\n")
+	} else {
+		sb.WriteString("\n## 要求\n\n")
+		sb.WriteString("1. 移除所有冲突标记（<<<<<<<, =======, >>>>>>>）并保留正确的代码\n")
+		sb.WriteString("2. 确保解决后的代码语法正确、逻辑完整\n")
+		sb.WriteString("3. 保持与项目现有代码风格一致\n")
+		sb.WriteString("4. 不要引入任何无关的修改\n")
+		sb.WriteString("5. 不要执行 git add 或 git commit，文件会被自动暂存\n")
+	}
 	return sb.String()
 }
 
@@ -123,18 +218,20 @@ func BuildConflictPrompt(files []string, strategy string) string {
 // It combines the system-level role definition with the actual conflict task
 // into a single prompt, so the agent receives the full context and task together
 // and does not start working prematurely.
-func BuildInitialConflictPrompt(conflictFiles []string, strategy string) string {
+func BuildInitialConflictPrompt(conflictFiles []string, strategy string, language string) string {
 	var sb strings.Builder
 
-	sb.WriteString("你是一个专业的 Git 合并冲突解决助手。你正在处理一个 fork 仓库与上游仓库之间的合并冲突。\n\n")
-	sb.WriteString("## 你的任务\n\n")
-	sb.WriteString("仔细阅读每个冲突文件，理解冲突的原因和双方的意图，然后根据指定的合并策略解决所有冲突。\n\n")
-	sb.WriteString("## 工作方式\n\n")
-	sb.WriteString("- 直接读取并编辑文件，从磁盘上消除冲突\n")
-	sb.WriteString("- 如果需要理解项目上下文，可以自行查看项目中的其他文件（如 README、配置文件等）\n")
-	sb.WriteString("- 解决完所有冲突后，简要报告你做了什么\n\n")
+	if language == "en" {
+		sb.WriteString("You are a professional Git merge conflict resolver. You are handling merge conflicts between a fork repository and its upstream.\n\n")
+		sb.WriteString("## Your Role\n\n")
+		sb.WriteString("Your job is not to mechanically pick one side or the other. You must understand WHY each side made its changes — by reading commit history and commit messages — and then make an informed, intelligent resolution that preserves the intent of both sides.\n\n")
+	} else {
+		sb.WriteString("你是一个专业的 Git 合并冲突解决助手。你正在处理一个 fork 仓库与上游仓库之间的合并冲突。\n\n")
+		sb.WriteString("## 你的角色\n\n")
+		sb.WriteString("你的任务不是机械地选择冲突的某一方，而是通过查阅提交历史和提交信息，理解每一处修改背后的原因和意图，然后做出有依据的、优雅的合并决策，保留双方代码的真正价值。\n\n")
+	}
 
-	sb.WriteString(BuildConflictPrompt(conflictFiles, strategy))
+	sb.WriteString(BuildConflictPrompt(conflictFiles, strategy, language))
 
 	return sb.String()
 }

@@ -146,7 +146,7 @@ func TestBuildConflictPrompt(t *testing.T) {
 	files := []string{"pkg/handler.go", "internal/service/user.go"}
 	strategy := "preserve_ours"
 
-	prompt := BuildConflictPrompt(files, strategy)
+	prompt := BuildConflictPrompt(files, strategy, "zh")
 
 	if len(prompt) == 0 {
 		t.Error("prompt should not be empty")
