@@ -36,7 +36,6 @@
 |-------|--------|---------|
 | Claude Code | `claude` | `npm install -g @anthropic-ai/claude-code` |
 | OpenCode | `opencode` | `go install github.com/opencode-ai/opencode@latest` |
-| Droid | `droid` | 参见官方文档 |
 | Codex | `codex` | `npm install -g @openai/codex` |
 
 ---

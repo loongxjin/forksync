@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔀 ForkSync
+# ForkSync
 
 **Auto-sync your GitHub fork repos — resolve conflicts with AI.**
 
@@ -23,30 +23,33 @@
 
 Maintaining forked repositories is tedious. Upstream authors keep shipping changes, and every sync risks merge conflicts. You either:
 
-- ❌ **Forget to sync** — your fork falls behind, missing bug fixes and features
-- ❌ **Resolve conflicts manually** — reading `<<<<<<<` markers for hours
-- ❌ **Give up and re-fork** — losing your local modifications
+- **Forget to sync** — your fork falls behind, missing bug fixes and features
+- **Resolve conflicts manually** — reading `<<<<<<<` markers for hours
+- **Give up and re-fork** — losing your local modifications
 
 **ForkSync solves this.** It automatically syncs your forks and uses AI coding agents (Claude Code, OpenCode, Codex) to resolve merge conflicts — so you never have to touch conflict markers again.
 
-## ✨ Key Features
+## Key Features
 
 | Feature | Description |
 |---------|-------------|
-| 🔄 **Auto Sync** | Periodically fetches and merges upstream changes (configurable interval) |
-| 🤖 **AI Conflict Resolution** | Delegates merge conflicts to AI agents (Claude Code, OpenCode, Codex) |
-| 🖥️ **Desktop App** | Polished Electron GUI — dashboard, conflict viewer, settings |
-| ⌨️ **CLI** | Full-featured command-line tool for terminal workflows |
-| 🔍 **Directory Scanner** | Recursively scans any directory to discover and batch-add fork repos |
-| 📝 **Sync History** | SQLite-backed history with filters, AI-generated summaries, and cleanup |
-| 🔔 **System Notifications** | macOS native alerts on sync success, conflicts, or errors |
-| 🖥️ **IDE Integration** | Open repos directly in VSCode, Cursor, or Trae |
-| 🌐 **i18n** | Multi-language interface |
-| ⚙️ **Flexible Strategies** | `preserve_ours` / `preserve_theirs` / `balanced` / `agent_resolve` |
+| **Auto Sync** | Periodically fetches and merges upstream changes (configurable interval) |
+| **AI Conflict Resolution** | Delegates merge conflicts to AI agents with git-aware prompts |
+| **Workflow-guided UI** | Step-by-step workflow: fetch → merge → detect conflicts → agent resolve → review → commit |
+| **Live Agent Terminal** | Real-time streaming view of agent output (stdout, tool calls, errors) during resolution |
+| **Desktop App** | Polished Electron GUI — dashboard, workflow steps, settings |
+| **CLI** | Full-featured command-line tool for terminal workflows |
+| **Directory Scanner** | Recursively scans any directory to discover and batch-add fork repos |
+| **Sync History** | SQLite-backed history with filters, AI-generated summaries, and cleanup |
+| **System Notifications** | Desktop native alerts on sync success, conflicts, or errors |
+| **IDE Integration** | Open repos directly in VSCode, Cursor, or Trae |
+| **Post-sync Commands** | Execute custom scripts after a successful sync (e.g. `pip install`, `npm build`) |
+| **i18n** | Multi-language interface (Chinese / English) |
+| **Multiple Agents** | Switch between Claude Code and OpenCode freely |
 
 ---
 
-## 📦 Install
+## Install
 
 ### Download
 
@@ -77,7 +80,7 @@ cd engine && go build -o forksync . && ./forksync --help
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Configure GitHub Token (Recommended)
 
@@ -124,7 +127,11 @@ forksync serve
 forksync resolve my-fork
 
 # Use a specific agent, auto-commit
-forksync resolve my-fork --agent claude --no-confirm
+forksync resolve my-fork --agent opencode --no-confirm
+
+# Accept / reject a resolution
+forksync resolve my-fork --accept
+forksync resolve my-fork --reject
 ```
 
 ### 5. Launch Desktop App
@@ -135,21 +142,21 @@ cd app && npm install && npm run dev
 
 ---
 
-## 🤖 AI Conflict Resolution
+## AI Conflict Resolution
 
 This is the core feature that sets ForkSync apart. When a sync produces merge conflicts, ForkSync can automatically delegate resolution to an AI coding agent:
 
 ```
 ┌─────────────┐    conflict     ┌───────────────┐    resolve    ┌────────────────┐
 │   Upstream   │ ──────────────▶ │  ForkSync     │ ────────────▶│  AI Agent      │
-│   Change     │                 │  detects      │              │  (Claude/etc.) │
-└─────────────┘                 │  conflict     │              └───────┬────────┘
-                                └───────────────┘                      │
+│   Change     │                 │  detects      │              │  (Claude /     │
+└─────────────┘                 │  conflict     │              │   OpenCode)    │
+                                └───────────────┘              └───────┬────────┘
                                                                        │ resolved
                                                                        ▼
                                 ┌───────────────┐              ┌────────────────┐
                                 │  ForkSync     │ ◀───────────│  Verify &      │
-                                │  commits      │   commit    │  Commit        │
+                                │  commits      │   commit    │  Stage         │
                                 └───────────────┘              └────────────────┘
 ```
 
@@ -166,83 +173,116 @@ Agents are auto-discovered via `PATH`. Set a preferred agent in config:
 ```yaml
 agent:
   preferred: "claude"
-  conflict_strategy: "agent_resolve"
 ```
 
-**Resolution strategies:**
+**Conflict resolution strategies:**
 
-| Strategy | Behavior |
-|----------|----------|
-| `preserve_ours` | Keep local changes, accept non-conflicting upstream |
-| `preserve_theirs` | Prefer upstream changes |
-| `balanced` | Smart merge preserving both sides |
-| `agent_resolve` | Delegate to AI agent |
+| Strategy | Config key | Behavior |
+|----------|-----------|----------|
+| Auto-resolve with agent | `conflict_strategy: agent_resolve` | Agent resolves conflicts automatically |
+| Manual resolve | `conflict_strategy: manual` | Pause at workflow — user chooses to resolve with agent or manually |
+| Preserve local | `resolve_strategy: preserve_ours` | Agent told to keep local changes, accept upstream non-conflicting |
+| Preserve upstream | `resolve_strategy: preserve_theirs` | Agent told to prefer upstream changes |
+| Balanced | `resolve_strategy: balanced` | Agent told to smart-merge preserving both sides |
+
+**Confirmation modes:**
+
+| Config | Behavior |
+|--------|----------|
+| `confirm_before_commit: true` | After agent resolves, wait for user review and accept/reject |
+| `confirm_before_commit: false` | Auto-commit immediately after agent resolves |
+
+**Post-sync Commands:**
+
+Run custom scripts after each successful sync:
+
+```bash
+forksync post-sync add my-repo --name "install" --cmd "pip install -e ."
+forksync post-sync list my-repo
+forksync post-sync remove my-repo --id <cmd-id>
+```
 
 ---
 
-## 🖥️ Desktop App
+## Desktop App
 
 Built with **Electron** + **React** + **TypeScript** + **Tailwind CSS** + **shadcn/ui**.
 
-| Page | Description |
+| Section | Description |
 |------|-------------|
-| **Dashboard** | Overview: synced/conflict counts, recent activity, agent status |
-| **Repos** | Add, scan, sync, remove repositories |
-| **Conflicts** | List repos with conflicts, resolve via agents |
-| **Conflict Detail** | Diff viewer, agent summary, accept/reject resolution |
-| **History** | Sync timeline with filters and cleanup |
-| **Settings** | General settings, agent config, IDE preferences, theme |
+| **Dashboard** | Overview: repo statuses, recent sync activity |
+| **Repo List** | Expandable repo cards with workflow steps or detail panel |
+| **Workflow Steps** | Step-by-step progress: fetch → merge → check conflicts → resolve strategy → agent resolve → accept → commit |
+| **Agent Terminal** | Real-time streaming view of agent output during resolution |
+| **AI Summary** | After resolution, agent's git-history-aware summary in workflow |
+| **Diff Viewer** | Side-by-side diff preview when reviewing changes |
+| **History** | Sync timeline with filters, AI-generated summaries, and cleanup |
+| **Settings** | General, agent config, post-sync commands, IDE preferences |
 
 **Architecture:**
 
 ```
 ┌───────────────────────────────────┐
 │       Electron UI (React)          │
-│  Dashboard · Repos · Conflicts     │
-│  History · Settings · Detail       │
+│  Dashboard · Repos · Workflow      │
+│  Agent Terminal · History          │
 └───────────────┬───────────────────┘
                 │ IPC (contextBridge)
 ┌───────────────▼───────────────────┐
 │     EngineClient (TypeScript)      │
 │  Spawns Go binary, parses JSON     │
 └───────────────┬───────────────────┘
-                │ --json flag
+                │ --json / --stream flag
 ┌───────────────▼───────────────────┐
 │        Go CLI Engine (Cobra)       │
 │  add · sync · resolve · serve      │
 │  agent · config · history          │
+│  workflow · post-sync · summarize  │
 └───────────────────────────────────┘
 ```
 
 ---
 
-## ⌨️ CLI Reference
+## CLI Reference
 
 All commands support `--json` for structured output.
 
 ```bash
 # Repository management
 forksync add <path> [--upstream <url>]       # Add repo
-forksync remove <name>                       # Remove from tracking
-forksync scan <directory>                    # Batch-discover fork repos
+forksync remove <name>                        # Remove from tracking
+forksync scan <directory>                     # Batch-discover fork repos
 
 # Sync
-forksync sync [--all | <name>]              # Sync repos
-forksync serve [--interval 15m]             # Background sync service
-forksync status                             # Show all repo statuses
+forksync sync [--all | <name>]               # Sync repos
+forksync serve [--interval 15m]              # Background sync service
+forksync status                              # Show all repo statuses
 
 # AI conflict resolution
 forksync resolve <name> [--agent claude] [--no-confirm] [--accept] [--reject]
+forksync resolve <name> --stream             # Stream agent output as NDJSON (Electron)
+
+# Workflow management
+forksync workflow continue <name> --action {accept|reject|abort|resolve_with_agent|retry_commit|continue_manual}
+
+# Post-sync commands
+forksync post-sync list <name>
+forksync post-sync add <name> --name <name> --cmd <command>
+forksync post-sync remove <name> --id <cmd-id>
+
+# AI summarization
+forksync summarize <name> [--retry]          # Generate AI summary for last sync
 
 # Agent management
-forksync agent list                         # Detect installed agents
-forksync agent sessions                     # List active sessions
-forksync agent cleanup                      # Remove expired sessions
+forksync agent list                          # Detect installed agents
+forksync agent sessions                      # List active sessions
+forksync agent cleanup                       # Remove expired sessions
+forksync agent reset <name>                  # Remove session for specific repo
 
 # Configuration
-forksync config get                         # Show all config
-forksync config set <key> <value>           # Set config value
-forksync config keys                        # List available keys
+forksync config get                          # Show all config
+forksync config set <key> <value>            # Set config value
+forksync config keys                         # List available keys
 
 # History
 forksync history [--limit 20] [--cleanup [--keep-days 30]]
@@ -250,7 +290,7 @@ forksync history [--limit 20] [--cleanup [--keep-days 30]]
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 **Location:** `~/.forksync/config.yaml`
 
@@ -258,12 +298,18 @@ forksync history [--limit 20] [--cleanup [--keep-days 30]]
 sync:
   default_interval: "30m"
   sync_on_startup: true
+  auto_launch: false
+  auto_summary: true
+  summary_agent: "claude"
+  summary_language: "zh"               # zh / en
+  summary_timeout: "3m"
 
 agent:
   preferred: "claude"
   priority: [claude, opencode, codex]
   timeout: "10m"
-  conflict_strategy: "agent_resolve"
+  conflict_strategy: "agent_resolve"   # agent_resolve / manual
+  resolve_strategy: "preserve_ours"    # preserve_ours / preserve_theirs / balanced
   confirm_before_commit: true
   session_ttl: "24h"
 
@@ -285,29 +331,30 @@ proxy:
 | `~/.forksync/config.yaml` | User configuration |
 | `~/.forksync/repos.json` | Managed repository list |
 | `~/.forksync/sessions/<id>.json` | Agent session records |
-| `~/.forksync/db/forksync.db` | SQLite sync history |
+| `~/.forksync/agent-logs/<repo>/` | Agent stream log files (NDJSON) |
+| `~/.forksync/db/sync_history.db` | SQLite sync history |
 | `~/.forksync/logs/sync-*.log` | Daily-rotated log files |
 
 ---
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 forksync/
 ├── engine/                      # Go CLI engine
-│   ├── cmd/                     # Cobra commands
+│   ├── cmd/                     # Cobra commands (sync, resolve, workflow, agent, etc.)
 │   ├── internal/
 │   │   ├── agent/               # AI agent adapters (Claude, OpenCode, Codex)
 │   │   │   └── session/         # Session lifecycle management
 │   │   ├── config/              # Viper-based YAML config
 │   │   ├── conflict/            # Merge conflict detection
-│   │   ├── git/                 # Git operations (go-git + CLI fallback)
-│   │   ├── github/              # GitHub REST API client
+│   │   ├── git/                 # Git operations (native + CLI)
 │   │   ├── history/             # SQLite sync history store
 │   │   ├── logger/              # File logger with daily rotation
-│   │   ├── notify/              # macOS system notifications
+│   │   ├── notify/              # Desktop system notifications
 │   │   ├── repo/                # Repository JSON store (thread-safe)
 │   │   ├── scheduler/           # Background sync scheduler
+│   │   ├── summarizer/          # AI-powered sync commit summarizer
 │   │   └── sync/                # Core sync pipeline
 │   └── pkg/types/               # Shared types
 │
@@ -322,7 +369,7 @@ forksync/
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ```bash
 cd engine && go test ./... -v
@@ -332,10 +379,10 @@ cd engine && go test ./... -v
 
 ---
 
-## 🛠️ Development
+## Development
 
 See [Development Guide](./docs/DEVELOPMENT.md) for setup instructions and architecture details.
 
-## 📝 License
+## License
 
 [MIT](./LICENSE)
