@@ -186,7 +186,11 @@ func TestMerge_NoUpstream(t *testing.T) {
 	dir := setupTempGitRepo(t)
 	ops := NewOperations()
 
+	// When no upstream is configured, RemoteName() returns "origin".
+	// The temp repo has an origin remote, so merge should succeed.
 	repo := types.Repo{Path: dir}
-	_, err := ops.Merge(context.Background(), repo)
-	assert.Error(t, err, "Merge with no upstream should return error")
+	result, err := ops.Merge(context.Background(), repo)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.False(t, result.HasConflicts)
 }
