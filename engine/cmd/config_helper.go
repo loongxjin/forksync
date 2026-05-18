@@ -31,7 +31,7 @@ func updateRepoWithLog(r types.Repo, store repo.Store, action string) {
 }
 
 // newGitOps creates a git.Operations instance with proxy support if configured.
-func newGitOps(cfg *config.Config) *git.Operations {
+func newGitOps(cfg *config.Config) git.OperationsProvider {
 	if cfg != nil && cfg.Proxy.Enabled && cfg.Proxy.URL != "" {
 		return git.NewOperationsWithProxy(cfg.Proxy.URL)
 	}
