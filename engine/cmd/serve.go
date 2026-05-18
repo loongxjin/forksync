@@ -154,13 +154,13 @@ func newSessionManager(cfg *config.Config, cfgMgr *config.Manager) *session.Mana
 // It accepts an already-loaded store so the caller and syncer share the same instance.
 // Returns the syncer, store, and a cleanup function that must be deferred.
 func setupSyncer(cfg *config.Config, cfgMgr *config.Manager, store repo.Store) (*syncpkg.Syncer, func()) {
-	syncer := syncpkg.NewSyncerFromConfig(cfg, store, cfgMgr.ConfigDir())
+	var opts []syncpkg.Option
 
 	// Set up history store
 	var histCleanup func()
 	histStore, err := history.NewStore(cfgMgr.ConfigDir())
 	if err == nil {
-		syncer.SetHistoryStore(histStore)
+		opts = append(opts, syncpkg.WithHistoryStore(histStore))
 		histCleanup = func() { histStore.Close() }
 	} else {
 		histCleanup = func() {}
@@ -168,13 +168,14 @@ func setupSyncer(cfg *config.Config, cfgMgr *config.Manager, store repo.Store) (
 
 	// Set up agent session manager for auto conflict resolution
 	if mgr := newSessionManager(cfg, cfgMgr); mgr != nil {
-		syncer.SetSessionManager(mgr)
+		opts = append(opts, syncpkg.WithSessionManager(mgr))
 	}
 
 	// Set up notifier for background syncs (no frontend watching)
 	if cfg != nil && cfg.Notification.Enabled {
-		syncer.SetNotifier(notify.New())
+		opts = append(opts, syncpkg.WithNotifier(notify.New()))
 	}
 
+	syncer := syncpkg.NewSyncerFromConfig(cfg, store, cfgMgr.ConfigDir(), opts...)
 	return syncer, histCleanup
 }

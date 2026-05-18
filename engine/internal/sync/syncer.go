@@ -44,41 +44,40 @@ type Syncer struct {
 	active       map[string]bool // tracks repos currently syncing
 }
 
-// NewSyncer creates a new Syncer.
-func NewSyncer(store repo.Store) *Syncer {
-	return &Syncer{
+// Option configures a Syncer during construction.
+type Option func(*Syncer)
+
+// WithNotifier sets the notification handler.
+func WithNotifier(n *notify.Notifier) Option {
+	return func(s *Syncer) { s.notifier = n }
+}
+
+// WithHistoryStore sets the sync history store.
+func WithHistoryStore(h *history.Store) Option {
+	return func(s *Syncer) { s.historyStore = h }
+}
+
+// WithSummarizer sets the AI summarizer.
+func WithSummarizer(sm *summarizer.Summarizer) Option {
+	return func(s *Syncer) { s.summarizer = sm }
+}
+
+// WithSessionManager sets the agent session manager.
+func WithSessionManager(mgr *session.Manager) Option {
+	return func(s *Syncer) { s.sessionMgr = mgr }
+}
+
+// NewSyncer creates a new Syncer with the given store and options.
+func NewSyncer(store repo.Store, opts ...Option) *Syncer {
+	s := &Syncer{
 		gitOps: git.NewOperations(),
 		store:  store,
 		active: make(map[string]bool),
 	}
-}
-
-// SetNotifier sets the notification handler.
-func (s *Syncer) SetNotifier(n *notify.Notifier) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.notifier = n
-}
-
-// SetSessionManager sets the agent session manager for auto-conflict resolution.
-func (s *Syncer) SetSessionManager(mgr *session.Manager) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sessionMgr = mgr
-}
-
-// SetHistoryStore sets the sync history store for recording sync results.
-func (s *Syncer) SetHistoryStore(h *history.Store) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.historyStore = h
-}
-
-// SetSummarizer sets the AI summarizer for generating sync summaries.
-func (s *Syncer) SetSummarizer(sm *summarizer.Summarizer) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.summarizer = sm
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // pendingInfo holds agent resolution details when awaiting user confirmation.
@@ -834,20 +833,24 @@ func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg str
 }
 
 // NewSyncerFromConfig creates a Syncer using config defaults.
-func NewSyncerFromConfig(cfg *config.Config, store repo.Store, configDir string) *Syncer {
+func NewSyncerFromConfig(cfg *config.Config, store repo.Store, configDir string, opts ...Option) *Syncer {
 	var gitOps git.OperationsProvider
 	if cfg != nil && cfg.Proxy.Enabled && cfg.Proxy.URL != "" {
 		gitOps = git.NewOperationsWithProxy(cfg.Proxy.URL)
 	} else {
 		gitOps = git.NewOperations()
 	}
-	return &Syncer{
+	s := &Syncer{
 		gitOps:    gitOps,
 		store:     store,
 		cfg:       cfg,
 		configDir: configDir,
 		active:    make(map[string]bool),
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // notifyResult sends a notification based on the sync result.

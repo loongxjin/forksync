@@ -389,33 +389,25 @@ func TestUpdateRepoStatus_SetsError(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// SetNotifier
+// WithNotifier
 // ---------------------------------------------------------------------------
 
-func TestSetNotifier(t *testing.T) {
-	s := NewSyncer(newMockStore())
-	if s.notifier != nil {
-		t.Error("expected nil notifier initially")
-	}
+func TestWithNotifier(t *testing.T) {
 	n := notify.New()
-	s.SetNotifier(n)
+	s := NewSyncer(newMockStore(), WithNotifier(n))
 	if s.notifier != n {
-		t.Error("SetNotifier did not set the notifier")
+		t.Error("WithNotifier did not set the notifier")
 	}
 }
 
 // ---------------------------------------------------------------------------
-// SetSessionManager
+// WithSessionManager
 // ---------------------------------------------------------------------------
 
-func TestSetSessionManager(t *testing.T) {
-	s := NewSyncer(newMockStore())
-	if s.sessionMgr != nil {
-		t.Error("expected nil session manager initially")
-	}
-	s.SetSessionManager(nil)
+func TestWithSessionManager(t *testing.T) {
+	s := NewSyncer(newMockStore(), WithSessionManager(nil))
 	// Setting nil is valid — means no auto-resolve
 	if s.sessionMgr != nil {
-		t.Error("expected nil session manager after SetSessionManager(nil)")
+		t.Error("expected nil session manager after WithSessionManager(nil)")
 	}
 }
