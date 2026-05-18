@@ -290,6 +290,8 @@
   "notify": {
     "conflictsTitle": "Conflicts in {{count}} repo(s)",
     "conflictsBody": "{{names}} — {{files}} file(s) need resolution",
+    "resolvedTitle": "{{count}} repo(s) conflicts resolved",
+    "resolvedBody": "{{agent}} resolved conflicts for {{names}}, awaiting confirmation",
     "failedTitle": "Sync failed for {{count}} repo(s)",
     "failedBody": "{{names}}",
     "completeTitle": "Sync complete",

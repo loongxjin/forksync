@@ -290,6 +290,8 @@
   "notify": {
     "conflictsTitle": "{{count}} 个仓库存在冲突",
     "conflictsBody": "{{names}} — {{files}} 个文件需要解决",
+    "resolvedTitle": "{{count}} 个仓库冲突已解决",
+    "resolvedBody": "{{agent}} 已解决 {{names}} 的冲突，等待确认",
     "failedTitle": "{{count}} 个仓库同步失败",
     "failedBody": "{{names}}",
     "completeTitle": "同步完成",

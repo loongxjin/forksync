@@ -40,8 +40,9 @@ export function notifySyncResults(results: SyncResult[]): void {
   if (!results || results.length === 0) return
 
   const conflicts = results.filter(
-    (r) => r.status === 'conflict' || r.status === 'resolving'
+    (r) => r.status === 'conflict' || r.status === 'resolving' || r.status === 'waiting'
   )
+  const resolved = results.filter((r) => r.status === 'resolved')
   const errors = results.filter((r) => r.status === 'error')
   const synced = results.filter(
     (r) => r.status === 'up_to_date'
@@ -61,6 +62,17 @@ export function notifySyncResults(results: SyncResult[]): void {
     })
   }
 
+  // Agent resolved, awaiting user confirmation
+  if (resolved.length > 0) {
+    const repoNames = resolved.map((r) => r.repoName).join(', ')
+    const agent = resolved.map((r) => r.agentUsed ?? 'agent').join(', ')
+    showNotification({
+      title: t('notify.resolvedTitle', { count: resolved.length }),
+      body: t('notify.resolvedBody', { names: repoNames, agent }),
+      navigateTo: '/conflicts'
+    })
+  }
+
   // Error notification
   if (errors.length > 0) {
     const repoNames = errors.map((r) => r.repoName).join(', ')
@@ -71,8 +83,8 @@ export function notifySyncResults(results: SyncResult[]): void {
     })
   }
 
-  // Success summary (only if no conflicts/errors, to avoid notification spam)
-  if (conflicts.length === 0 && errors.length === 0 && synced.length > 0) {
+  // Success summary (only if no conflicts/errors/resolved, to avoid notification spam)
+  if (conflicts.length === 0 && resolved.length === 0 && errors.length === 0 && synced.length > 0) {
     const totalCommits = synced.reduce((sum, r) => sum + r.commitsPulled, 0)
     if (totalCommits > 0) {
       showNotification({

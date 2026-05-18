@@ -47,7 +47,10 @@ function flattenObject(obj: Record<string, unknown>, prefix = ''): Record<string
 function loadTranslations(): void {
   locale = detectLocale()
   try {
-    const langPath = join(__dirname, '..', 'renderer', 'src', 'i18n', 'locales', `${locale}.json`)
+    // __dirname = app/out/main, app.getAppPath() = app/
+    const langPath = app.isPackaged
+      ? join(process.resourcesPath, 'i18n', `${locale}.json`)
+      : join(app.getAppPath(), 'src', 'renderer', 'src', 'i18n', 'locales', `${locale}.json`)
     if (existsSync(langPath)) {
       const raw = readFileSync(langPath, 'utf-8')
       translations = flattenObject(JSON.parse(raw))
