@@ -13,7 +13,6 @@ import (
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/config"
-	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	respkg "github.com/loongxjin/forksync/engine/internal/resolve"
@@ -288,35 +287,6 @@ func resolveTimeout(cfg *config.Config) time.Duration {
 		}
 	}
 	return timeout
-}
-
-// verifyAgentResolution checks remaining conflict files and auto-stages those
-// that have been resolved (no conflict markers). Returns the list of truly unresolved files.
-func verifyAgentResolution(ctx context.Context, r types.Repo, remaining []string, cfg *config.Config) []string {
-	if len(remaining) == 0 {
-		return nil
-	}
-
-	gitOps := newGitOps(cfg)
-	var trulyUnresolved []string
-	for _, f := range remaining {
-		content, err := gitOps.GetConflictedContent(ctx, r.Path, f)
-		if err != nil {
-			trulyUnresolved = append(trulyUnresolved, f)
-			continue
-		}
-		if conflict.HasConflictMarkers(content) {
-			trulyUnresolved = append(trulyUnresolved, f)
-			continue
-		}
-		// Markers removed but not staged — auto-stage to mark as resolved
-		if stageErr := gitOps.StageFile(ctx, r.Path, f); stageErr != nil {
-			logger.Warn("resolve: auto-stage resolved file failed",
-				"repo", r.Name, "file", f, "error", stageErr)
-			trulyUnresolved = append(trulyUnresolved, f)
-		}
-	}
-	return trulyUnresolved
 }
 
 // handleUnresolvedConflicts updates repo status and outputs the result when

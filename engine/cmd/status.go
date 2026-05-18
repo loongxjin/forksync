@@ -29,16 +29,6 @@ func init() {
 // when there are many repos, but each individual operation is bounded.
 const statusTimeout = 30 * time.Second
 
-// staleWorkflowThreshold is the age after which an active workflow is considered stale.
-const staleWorkflowThreshold = 30 * time.Minute
-
-// resolvingStaleThreshold is the age after which a "resolving" status is considered
-// stale and safe to recover. Must be longer than the max agent resolve timeout.
-const resolvingStaleThreshold = 10 * time.Minute
-
-// actionStatusUpdate is the log action label for repo status refresh updates.
-const actionStatusUpdate = "status-update"
-
 func runStatus(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(cmd.Context(), statusTimeout)
 	defer cancel()
