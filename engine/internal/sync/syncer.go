@@ -24,7 +24,6 @@ import (
 const (
 	defaultTimeout         = 5 * time.Minute
 	defaultAgentTimeout    = 10 * time.Minute
-	postSyncCommandTimeout = 60 * time.Second
 	maxDiffSize            = 100 * 1024 // 100KB limit for diff output
 )
 
@@ -385,8 +384,8 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	s.saveWorkflow(r, wf)
 	result.Status = string(types.RepoStatusUpToDate)
 	s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
-	result.PostSyncResults = RunPostSyncCommands(ctx, r)
-	if postSyncErr := PostSyncError(result.PostSyncResults); postSyncErr != "" {
+	result.PostSyncResults = wfpkg.RunPostSyncCommands(ctx, r)
+	if postSyncErr := wfpkg.PostSyncError(result.PostSyncResults); postSyncErr != "" {
 		result.ErrorMessage = postSyncErr
 		s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, result.ErrorMessage)
 	}
@@ -438,8 +437,8 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 			MarkWorkflowDone(wf, types.WorkflowSuccess)
 			result.Status = string(types.RepoStatusUpToDate)
 			result.AutoResolved = len(mergeResult.Conflicts)
-			result.PostSyncResults = RunPostSyncCommands(ctx, r)
-			if postSyncErr := PostSyncError(result.PostSyncResults); postSyncErr != "" {
+			result.PostSyncResults = wfpkg.RunPostSyncCommands(ctx, r)
+			if postSyncErr := wfpkg.PostSyncError(result.PostSyncResults); postSyncErr != "" {
 				result.ErrorMessage = postSyncErr
 				s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, result.ErrorMessage)
 			} else {
@@ -752,23 +751,6 @@ func (s *Syncer) SyncAll(ctx context.Context) []*Result {
 	wg.Wait()
 
 	return results
-}
-
-// RunPostSyncCommands executes the repo's post-sync commands in order.
-// It stops on the first failure. The sync status remains "up_to_date" regardless.
-// Exported so resolve and workflow commands can also execute post-sync after
-// conflict resolution completes.
-//
-// Deprecated: Use workflow.RunPostSyncCommands instead.
-func RunPostSyncCommands(ctx context.Context, r types.Repo) []types.PostSyncResult {
-	return wfpkg.RunPostSyncCommands(ctx, r)
-}
-
-// PostSyncError returns a summary error message if any post-sync command failed.
-//
-// Deprecated: Use workflow.PostSyncError instead.
-func PostSyncError(results []types.PostSyncResult) string {
-	return wfpkg.PostSyncError(results)
 }
 
 func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg string) {
