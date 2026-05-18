@@ -20,11 +20,10 @@ import (
 
 // Resolver handles conflict resolution via agent CLIs.
 type Resolver struct {
-	gitOps     git.OperationsProvider
-	store      repo.Store
-	cfg        *config.Config
-	cfgMgr     *config.Manager
-	sessionMgr *session.Manager
+	gitOps git.OperationsProvider
+	store  repo.Store
+	cfg    *config.Config
+	cfgMgr *config.Manager
 }
 
 // NewResolver creates a Resolver with the given dependencies.
@@ -33,14 +32,12 @@ func NewResolver(
 	store repo.Store,
 	cfg *config.Config,
 	cfgMgr *config.Manager,
-	sessionMgr *session.Manager,
 ) *Resolver {
 	return &Resolver{
-		gitOps:     gitOps,
-		store:      store,
-		cfg:        cfg,
-		cfgMgr:     cfgMgr,
-		sessionMgr: sessionMgr,
+		gitOps: gitOps,
+		store:  store,
+		cfg:    cfg,
+		cfgMgr: cfgMgr,
 	}
 }
 

@@ -10,8 +10,7 @@ import (
 )
 
 // AdvanceStep updates a step to the given status and sets timestamps.
-//
-// Deprecated: Use workflow.Machine methods instead.
+// Internal to the sync package; callers outside sync should use workflow.Machine.
 func AdvanceStep(wf *types.SyncWorkflow, step types.WorkflowStep, status types.WorkflowStepStatus, message string) {
 	if wf == nil {
 		return
@@ -33,15 +32,13 @@ func AdvanceStep(wf *types.SyncWorkflow, step types.WorkflowStep, status types.W
 }
 
 // MarkStepSkipped marks a step as skipped.
-//
-// Deprecated: Use workflow.Machine methods instead.
+// Internal to the sync package; callers outside sync should use workflow.Machine.
 func MarkStepSkipped(wf *types.SyncWorkflow, step types.WorkflowStep) {
 	AdvanceStep(wf, step, types.StepStatusSkipped, "")
 }
 
 // MarkWorkflowDone marks the workflow as completed (success or failed).
-//
-// Deprecated: Use workflow.Machine.Complete() or Machine.Fail() instead.
+// Internal to the sync package; callers outside sync should use workflow.Machine.
 func MarkWorkflowDone(wf *types.SyncWorkflow, status types.WorkflowRunStatus) {
 	if wf == nil {
 		return

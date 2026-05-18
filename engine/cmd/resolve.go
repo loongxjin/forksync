@@ -106,7 +106,7 @@ func runResolve(cmd *cobra.Command, args []string) error {
 
 	// Handle --reject: rollback to pre-resolution state
 	if resolveReject {
-		return runResolveReject(cmd, r, store, cfg)
+		return runResolveReject(cmd, r, store, cfg, cfgMgr)
 	}
 
 	// Not in a conflict-related state
@@ -145,7 +145,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	}
 
 	cfgMgr := config.NewManager()
-	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr, nil)
+	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr)
 
 	// Parse timeout
 	timeout := resolveTimeout(cfg)
@@ -388,9 +388,8 @@ func showResolutionDiff(r types.Repo, diff string, result *agent.AgentResult, pr
 
 // runResolveReject rolls back the merge using git merge --abort,
 // restoring the repository to its pre-merge state.
-func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config) error {
-	cfgMgr := config.NewManager()
-	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr, nil)
+func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, cfgMgr *config.Manager) error {
+	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr)
 	repo, err := resolver.Reject(cmd.Context(), r)
 	if err != nil {
 		return err
@@ -401,7 +400,7 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 
 // runResolveAccept checks for remaining conflicts and completes the merge.
 func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, cfgMgr *config.Manager) error {
-	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr, nil)
+	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr)
 	repo, result, err := resolver.Accept(cmd.Context(), r, resolveManual, resolveRetry)
 
 	if err != nil && !result.Success {
@@ -435,7 +434,7 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 // spawning resolve --stream.
 func runResolvePrepare(cmd *cobra.Command, r types.Repo, store repo.Store) error {
 	cfg, cfgMgr := getSharedConfig()
-	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr, nil)
+	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr)
 	repo, err := resolver.Prepare(r)
 	if err != nil {
 		return err
