@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"path/filepath"
 	"sync"
 
@@ -49,4 +50,13 @@ func getSharedConfig() (*config.Config, *config.Manager) {
 		}
 	})
 	return sharedCfg, sharedCfgMgr
+}
+
+func loadRepoStore() (repo.Store, error) {
+	_, cfgMgr := getSharedConfig()
+	store := repo.NewJSONStore(cfgMgr.ConfigDir())
+	if err := store.Load(); err != nil {
+		return nil, fmt.Errorf("load repo store: %w", err)
+	}
+	return store, nil
 }
