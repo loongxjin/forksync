@@ -17,6 +17,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
+	respkg "github.com/loongxjin/forksync/engine/internal/resolve"
 	"github.com/loongxjin/forksync/engine/internal/workflow"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
@@ -436,105 +437,58 @@ func showResolutionDiff(r types.Repo, diff string, result *agent.AgentResult, pr
 // runResolveReject rolls back the merge using git merge --abort,
 // restoring the repository to its pre-merge state.
 func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config) error {
-	_, cfgMgr := getSharedConfig()
-	agent.DeleteAllLogs(cfgMgr.ConfigDir(), r.Name)
-	ctx := cmd.Context()
-	gitOps := newGitOps(cfg)
-
-	err := gitOps.AbortMerge(ctx, r.Path)
+	cfgMgr := config.NewManager()
+	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr, nil)
+	repo, err := resolver.Reject(cmd.Context(), r)
 	if err != nil {
-		logger.Warn("resolve: merge --abort failed", "repo", r.Name, "error", err)
+		return err
 	}
-
-	// Mark workflow as aborted (pending steps → Skipped, workflow → Failed)
-	// so cleanupStaleWorkflows recognizes it as an aborted workflow and cleans it up.
-	if r.Workflow != nil {
-		for i := range r.Workflow.Steps {
-			if r.Workflow.Steps[i].Status == types.StepStatusPending {
-				r.Workflow.Steps[i].Status = types.StepStatusSkipped
-				now := types.Time{Time: time.Now()}
-				r.Workflow.Steps[i].EndedAt = &now
-			}
-		}
-		workflow.MarkWorkflowDone(r.Workflow, types.WorkflowFailed)
-	}
-
-	r.Status = types.RepoStatusSyncNeeded
-	r.ErrorMessage = ""
-	updateRepoWithLog(r, store, "reject")
-
-	outputResult(types.RejectData{RepoID: r.ID, RolledBack: true}, "🔄 Rolled back merge for %s", r.Name)
+	outputResult(types.RejectData{RepoID: repo.ID, RolledBack: true}, "🔄 Rolled back merge for %s", repo.Name)
 	return nil
 }
 
 // runResolveAccept checks for remaining conflicts and completes the merge.
-func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, _ *config.Manager) error {
-	remaining := newGitOps(cfg).DetectConflicts(cmd.Context(), r.Path)
+func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, cfgMgr *config.Manager) error {
+	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr, nil)
+	repo, result, err := resolver.Accept(cmd.Context(), r, resolveManual, resolveRetry)
 
-	if len(remaining) > 0 {
+	if err != nil && !result.Success {
+		// Conflicts still unresolved
 		if isJSON() {
 			outputJSON(types.AcceptData{
-				RepoID:   r.ID,
+				RepoID:   repo.ID,
 				Resolved: false,
 			}, nil)
 		} else {
-			outputText("⚠️  %d conflicts still unresolved:", len(remaining))
-			for _, f := range remaining {
-				outputText("  - %s", f)
-			}
+			outputText("⚠️  %s", err.Error())
 		}
 		return nil
 	}
 
-	// Check if we're in a merge state
-	mergeHead := filepath.Join(r.Path, ".git", "MERGE_HEAD")
-	if _, err := os.Stat(mergeHead); err != nil {
-		r.Status = types.RepoStatusUpToDate
-		r.ErrorMessage = ""
-		updateRepoWithLog(r, store, "accept-no-merge")
-
-		outputResult(types.AcceptData{RepoID: r.ID, Resolved: true}, "✅ No merge in progress. Status updated.")
-		return nil
+	if result.Success && err == nil {
+		// Check if this was accept-no-merge (no MERGE_HEAD)
+		mergeHead := filepath.Join(repo.Path, ".git", "MERGE_HEAD")
+		if _, serr := os.Stat(mergeHead); serr != nil && repo.Status == types.RepoStatusUpToDate {
+			outputResult(types.AcceptData{RepoID: repo.ID, Resolved: true}, "✅ No merge in progress. Status updated.")
+			return nil
+		}
 	}
 
-	// Delegate stage → commit → workflow → post-sync → history to the shared function.
-	params := commitWorkflowParams{
-		commitMsg:     types.CommitMsgAgentResolved,
-		recordHistory: !resolveRetry,
-		skipAgentAndAccept: resolveManual,
-	}
-	if resolveManual {
-		params.commitMsg = types.CommitMsgManualResolved
-	}
-	return finalizeCommitWithWorkflow(cmd.Context(), r, store, newGitOps(cfg), params)
+	outputResult(types.AcceptData{RepoID: repo.ID, Resolved: true}, "✅ Accepted changes for %s", repo.Name)
+	return nil
 }
 
 // runResolvePrepare marks the workflow as ready for agent resolution without actually
 // running the agent. Used by the Electron frontend as a lightweight pre-step before
 // spawning resolve --stream.
 func runResolvePrepare(cmd *cobra.Command, r types.Repo, store repo.Store) error {
-	wf := r.Workflow
-	if wf == nil {
-		wf = workflow.NewWorkflowFromRepo(r)
+	cfg, cfgMgr := getSharedConfig()
+	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr, nil)
+	repo, err := resolver.Prepare(r)
+	if err != nil {
+		return err
 	}
-	workflow.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
-	workflow.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
-	// Restore accept_changes from skipped to pending so it can be used later.
-	for i := range wf.Steps {
-		if wf.Steps[i].Step == types.StepAcceptChanges && wf.Steps[i].Status == types.StepStatusSkipped {
-			wf.Steps[i].Status = types.StepStatusPending
-			wf.Steps[i].Message = ""
-			wf.Steps[i].EndedAt = nil
-		}
-	}
-	wf.Status = types.WorkflowRunning
-	r.Workflow = wf
-	r.Status = types.RepoStatusConflict
-	r.ErrorMessage = ""
-	if err := store.Update(r); err != nil {
-		logger.Error("resolve: failed to update repo for prepare", "repo", r.Name, "error", err)
-	}
-	outputWorkflowResult(r)
+	outputWorkflowResult(repo)
 	return nil
 }
 
