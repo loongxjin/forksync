@@ -15,7 +15,6 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
-	"github.com/loongxjin/forksync/engine/internal/summarizer"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 
 	wfpkg "github.com/loongxjin/forksync/engine/internal/workflow"
@@ -35,7 +34,6 @@ type Syncer struct {
 	notifier     *notify.Notifier
 	sessionMgr   *session.Manager
 	historyStore *history.Store
-	summarizer   *summarizer.Summarizer
 	configDir    string // base config directory (e.g. ~/.forksync)
 	mu           sync.Mutex
 	active       map[string]bool // tracks repos currently syncing
@@ -52,11 +50,6 @@ func WithNotifier(n *notify.Notifier) Option {
 // WithHistoryStore sets the sync history store.
 func WithHistoryStore(h *history.Store) Option {
 	return func(s *Syncer) { s.historyStore = h }
-}
-
-// WithSummarizer sets the AI summarizer.
-func WithSummarizer(sm *summarizer.Summarizer) Option {
-	return func(s *Syncer) { s.summarizer = sm }
 }
 
 // WithSessionManager sets the agent session manager.
