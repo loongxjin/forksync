@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
-	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/logger"
@@ -138,18 +137,15 @@ func runResolve(cmd *cobra.Command, args []string) error {
 }
 
 // resolveWithAgent resolves conflicts using an agent CLI.
-func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, store repo.Store, conflictPaths []string) error {
+func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, store repo.Store, _ []string) error {
 	// Determine which agent to use
 	provider, err := resolveAgentProvider(cfg)
 	if err != nil {
 		return err
 	}
 
-	// Create session manager
 	cfgMgr := config.NewManager()
-	sessionsDir := sessionsDir(cfgMgr)
-	sessionStore := session.NewSessionStore(sessionsDir)
-	sessionMgr := session.NewManager(sessionStore, provider)
+	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr, nil)
 
 	// Parse timeout
 	timeout := resolveTimeout(cfg)
@@ -165,13 +161,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	// "resolving" deadlock on disk.
 	defer func() {
 		if !resolved.Load() {
-			r.Status = types.RepoStatusConflict
-			r.ErrorMessage = "agent process exited unexpectedly, conflict resolution incomplete"
-			if r.Workflow != nil {
-				workflow.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusFailed, "agent process exited unexpectedly")
-				r.Workflow.Status = types.WorkflowFailed
-			}
-			updateRepoWithLog(r, store, "defer-rollback")
+			_, _ = resolver.Reject(cmd.Context(), r)
 		}
 	}()
 
@@ -187,17 +177,12 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	defer cancel()
 
 	streamWriter, closeLogWriter := setupResolveStreamWriter(cfgMgr.ConfigDir(), r.Name)
-
-	// Determine prompt language from config
-	language := "zh"
-	if cfg != nil && cfg.Sync.SummaryLanguage != "" {
-		language = cfg.Sync.SummaryLanguage
-	}
 	defer closeLogWriter()
 
-	logger.Debug("[TRACE] resolve: calling sessionMgr.ResolveConflicts", "repo", r.Name, "hasStreamWriter", streamWriter != nil, "isJSON", isJSON())
-	result, err := sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy, language, streamWriter)
-	logger.Debug("[TRACE] resolve: sessionMgr.ResolveConflicts returned", "repo", r.Name, "err", err, "resultNil", result == nil)
+	logger.Debug("[TRACE] resolve: calling resolver.ResolveWithAgent", "repo", r.Name, "hasStreamWriter", streamWriter != nil, "isJSON", isJSON())
+	res, err := resolver.ResolveWithAgent(ctx, r, provider, resolveStrategy, streamWriter)
+	logger.Debug("[TRACE] resolve: resolver.ResolveWithAgent returned", "repo", r.Name, "err", err, "resultNil", res == nil)
+
 	if err != nil {
 		logger.Error("resolve: agent resolve failed", "repo", r.Name, "error", err)
 		if streamWriter != nil {
@@ -208,47 +193,17 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 				Success:   false,
 			})
 		}
-		resolved.Store(true) // agent finished (with error) — we handle the status
-		r.Status = types.RepoStatusConflict
-		r.ErrorMessage = fmt.Sprintf("agent resolve failed: %v", err)
-		if r.Workflow != nil {
-			workflow.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusFailed, err.Error())
-			r.Workflow.Status = types.WorkflowFailed
-		}
-		updateRepoWithLog(r, store, "agent-error")
+		resolved.Store(true)
 		return fmt.Errorf("agent resolve: %w", err)
 	}
-	logger.Info("resolve: agent resolve completed", "repo", r.Name, "success", result != nil && result.Success)
 
-	// Verify: check for remaining conflict markers
-	gitOps := newGitOps(cfg)
-	trulyUnresolved := verifyAgentResolution(ctx, r, gitOps.DetectConflicts(ctx, r.Path), cfg)
-	if len(trulyUnresolved) > 0 {
-		return handleUnresolvedConflicts(conflictResolution{repo: r, store: store, agentResult: result, provider: provider, resolvedFlag: &resolved}, trulyUnresolved)
+	if len(res.Unresolved) > 0 {
+		resolved.Store(true)
+		return handleUnresolvedConflicts(conflictResolution{repo: res.Repo, store: store, agentResult: res.AgentResult, provider: provider, resolvedFlag: &resolved}, res.Unresolved)
 	}
 
-	// Get diff for user confirmation
-	diffBytes, _ := newGitOps(cfg).Diff(ctx, r.Path)
-	diff := string(diffBytes)
-
-	result.Diff = diff
-	result.ResolvedFiles = conflictPaths
-	result.AgentName = provider.Name()
-
-		// Update status — agent resolved successfully
-		resolved.Store(true)
-		r.Status = types.RepoStatusResolved
-		r.ErrorMessage = ""
-		if r.Workflow == nil {
-			r.Workflow = workflow.NewWorkflowFromRepo(r)
-		}
-		// Mark completed steps as Success (workflow.NewWorkflowFromRepo initializes them as Pending/Success for fetch/merge/check_conflicts)
-		workflow.AdvanceStep(r.Workflow, types.StepResolveStrategy, types.StepStatusSuccess, "")
-		workflow.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusSuccess,
-			fmt.Sprintf("resolved by %s", provider.Name()))
-		workflow.AdvanceStep(r.Workflow, types.StepAcceptChanges, types.StepStatusWaiting, "")
-		r.Workflow.Status = types.WorkflowWaiting
-		updateRepoWithLog(r, store, "resolved")
+	r = res.Repo
+	resolved.Store(true)
 
 	// Auto-confirm or wait for user
 	confirmBeforeCommit := true
@@ -272,14 +227,11 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	}
 
 	// Show diff and wait for confirmation
-	// In --stream mode, skip outputJSON() since the NDJSON stream on stdout is
-	// being consumed by the Electron process. The final result is already
-	// delivered via the done stream event.
 	if !resolveStream {
 		logger.Debug("[TRACE] resolve: calling showResolutionDiff (non-stream)", "repo", r.Name)
-		showResolutionDiff(r, diff, result, provider)
+		showResolutionDiff(r, res.Diff, res.AgentResult, provider)
 	} else {
-		logger.Debug("[TRACE] resolve: skipping showResolutionDiff (stream mode — result already sent via done event)", "repo", r.Name)
+		logger.Debug("[TRACE] resolve: skipping showResolutionDiff (stream mode)", "repo", r.Name)
 	}
 	return nil
 }

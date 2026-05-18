@@ -166,6 +166,7 @@ func (r *Resolver) ResolveWithAgent(
 	repo types.Repo,
 	provider agent.AgentProvider,
 	strategy string,
+	streamWriter *agent.StreamWriter,
 ) (*AgentResult, error) {
 	// Create session manager
 	var sessionsDir string
@@ -186,7 +187,7 @@ func (r *Resolver) ResolveWithAgent(
 		language = r.cfg.Sync.SummaryLanguage
 	}
 
-	result, err := sessionMgr.ResolveConflicts(ctx, repo.ID, repo.Path, conflictPaths, strategy, language, nil)
+	result, err := sessionMgr.ResolveConflicts(ctx, repo.ID, repo.Path, conflictPaths, strategy, language, streamWriter)
 	if err != nil {
 		logger.Error("resolve: agent resolve failed", "repo", repo.Name, "error", err)
 		return nil, fmt.Errorf("agent resolve: %w", err)
