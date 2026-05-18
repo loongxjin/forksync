@@ -5,29 +5,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/loongxjin/forksync/engine/internal/workflow"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
-// newWorkflow creates a new SyncWorkflow with all steps initialized to pending.
-func newWorkflow(runID string) *types.SyncWorkflow {
-	now := time.Now()
-	return &types.SyncWorkflow{
-		RunID:     runID,
-		Status:    types.WorkflowRunning,
-		StartedAt: now,
-		Steps: []types.WorkflowStepRecord{
-			{Step: types.StepFetch, Status: types.StepStatusPending},
-			{Step: types.StepMerge, Status: types.StepStatusPending},
-			{Step: types.StepCheckConflicts, Status: types.StepStatusPending},
-			{Step: types.StepResolveStrategy, Status: types.StepStatusPending},
-			{Step: types.StepAgentResolve, Status: types.StepStatusPending},
-			{Step: types.StepAcceptChanges, Status: types.StepStatusPending},
-			{Step: types.StepCommit, Status: types.StepStatusPending},
-		},
-	}
-}
-
 // AdvanceStep updates a step to the given status and sets timestamps.
+//
+// Deprecated: Use workflow.Machine methods instead.
 func AdvanceStep(wf *types.SyncWorkflow, step types.WorkflowStep, status types.WorkflowStepStatus, message string) {
 	if wf == nil {
 		return
@@ -49,11 +33,15 @@ func AdvanceStep(wf *types.SyncWorkflow, step types.WorkflowStep, status types.W
 }
 
 // MarkStepSkipped marks a step as skipped.
+//
+// Deprecated: Use workflow.Machine methods instead.
 func MarkStepSkipped(wf *types.SyncWorkflow, step types.WorkflowStep) {
 	AdvanceStep(wf, step, types.StepStatusSkipped, "")
 }
 
 // MarkWorkflowDone marks the workflow as completed (success or failed).
+//
+// Deprecated: Use workflow.Machine.Complete() or Machine.Fail() instead.
 func MarkWorkflowDone(wf *types.SyncWorkflow, status types.WorkflowRunStatus) {
 	if wf == nil {
 		return
@@ -66,6 +54,11 @@ func MarkWorkflowDone(wf *types.SyncWorkflow, status types.WorkflowRunStatus) {
 // IsTerminalStepStatus returns true if the step status is a terminal state.
 func IsTerminalStepStatus(s types.WorkflowStepStatus) bool {
 	return s == types.StepStatusSuccess || s == types.StepStatusFailed || s == types.StepStatusSkipped
+}
+
+// newWorkflow creates a new SyncWorkflow with all steps initialized to pending.
+func newWorkflow(runID string) *types.SyncWorkflow {
+	return workflow.NewMachine(types.Repo{ID: runID}, nil).Workflow()
 }
 
 // findStep finds a step record by step ID.
@@ -82,7 +75,6 @@ func findStep(wf *types.SyncWorkflow, step types.WorkflowStep) *types.WorkflowSt
 }
 
 // workflowFromResult rebuilds a lightweight workflow from a sync result for display purposes.
-// Used when a completed sync returns its final state.
 func workflowFromResult(result *Result) *types.SyncWorkflow {
 	if result == nil {
 		return nil
@@ -95,7 +87,6 @@ func workflowFromResult(result *Result) *types.SyncWorkflow {
 	switch result.Status {
 	case string(types.RepoStatusUpToDate):
 		if result.CommitsPulled == 0 {
-			// No-op: fetch found nothing to sync
 			MarkStepSkipped(wf, types.StepCheckConflicts)
 			MarkStepSkipped(wf, types.StepResolveStrategy)
 			MarkStepSkipped(wf, types.StepAgentResolve)
@@ -105,7 +96,6 @@ func workflowFromResult(result *Result) *types.SyncWorkflow {
 			return wf
 		}
 
-		// Success with commits
 		AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
 		MarkStepSkipped(wf, types.StepResolveStrategy)
 		MarkStepSkipped(wf, types.StepAgentResolve)
@@ -142,7 +132,6 @@ func workflowFromResult(result *Result) *types.SyncWorkflow {
 		return wf
 
 	case string(types.RepoStatusError):
-		// Determine which step failed based on error message
 		if result.ErrorMessage != "" {
 			if strings.Contains(result.ErrorMessage, "fetch failed") {
 				AdvanceStep(wf, types.StepFetch, types.StepStatusFailed, result.ErrorMessage)

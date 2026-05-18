@@ -17,7 +17,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
-	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
+	"github.com/loongxjin/forksync/engine/internal/workflow"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -167,7 +167,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 			r.Status = types.RepoStatusConflict
 			r.ErrorMessage = "agent process exited unexpectedly, conflict resolution incomplete"
 			if r.Workflow != nil {
-				syncpkg.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusFailed, "agent process exited unexpectedly")
+				workflow.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusFailed, "agent process exited unexpectedly")
 				r.Workflow.Status = types.WorkflowFailed
 			}
 			updateRepoWithLog(r, store, "defer-rollback")
@@ -211,7 +211,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		r.Status = types.RepoStatusConflict
 		r.ErrorMessage = fmt.Sprintf("agent resolve failed: %v", err)
 		if r.Workflow != nil {
-			syncpkg.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusFailed, err.Error())
+			workflow.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusFailed, err.Error())
 			r.Workflow.Status = types.WorkflowFailed
 		}
 		updateRepoWithLog(r, store, "agent-error")
@@ -239,13 +239,13 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 		r.Status = types.RepoStatusResolved
 		r.ErrorMessage = ""
 		if r.Workflow == nil {
-			r.Workflow = newWorkflowFromRepo(r)
+			r.Workflow = workflow.NewWorkflowFromRepo(r)
 		}
-		// Mark completed steps as Success (newWorkflowFromRepo initializes them as Pending/Success for fetch/merge/check_conflicts)
-		syncpkg.AdvanceStep(r.Workflow, types.StepResolveStrategy, types.StepStatusSuccess, "")
-		syncpkg.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusSuccess,
+		// Mark completed steps as Success (workflow.NewWorkflowFromRepo initializes them as Pending/Success for fetch/merge/check_conflicts)
+		workflow.AdvanceStep(r.Workflow, types.StepResolveStrategy, types.StepStatusSuccess, "")
+		workflow.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusSuccess,
 			fmt.Sprintf("resolved by %s", provider.Name()))
-		syncpkg.AdvanceStep(r.Workflow, types.StepAcceptChanges, types.StepStatusWaiting, "")
+		workflow.AdvanceStep(r.Workflow, types.StepAcceptChanges, types.StepStatusWaiting, "")
 		r.Workflow.Status = types.WorkflowWaiting
 		updateRepoWithLog(r, store, "resolved")
 
@@ -317,7 +317,7 @@ func installSignalGuard(r *types.Repo, store repo.Store, resolved *atomic.Bool) 
 			r.Status = types.RepoStatusConflict
 			r.ErrorMessage = "agent process was terminated, conflict resolution incomplete"
 			if r.Workflow != nil {
-				syncpkg.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusFailed, "agent process was terminated")
+				workflow.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusFailed, "agent process was terminated")
 				r.Workflow.Status = types.WorkflowFailed
 			}
 			updateRepoWithLog(*r, store, "signal-rollback")
@@ -456,7 +456,7 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 				r.Workflow.Steps[i].EndedAt = &now
 			}
 		}
-		syncpkg.MarkWorkflowDone(r.Workflow, types.WorkflowFailed)
+		workflow.MarkWorkflowDone(r.Workflow, types.WorkflowFailed)
 	}
 
 	r.Status = types.RepoStatusSyncNeeded
@@ -515,10 +515,10 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 func runResolvePrepare(cmd *cobra.Command, r types.Repo, store repo.Store) error {
 	wf := r.Workflow
 	if wf == nil {
-		wf = newWorkflowFromRepo(r)
+		wf = workflow.NewWorkflowFromRepo(r)
 	}
-	syncpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
-	syncpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
+	workflow.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
+	workflow.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
 	// Restore accept_changes from skipped to pending so it can be used later.
 	for i := range wf.Steps {
 		if wf.Steps[i].Step == types.StepAcceptChanges && wf.Steps[i].Status == types.StepStatusSkipped {
