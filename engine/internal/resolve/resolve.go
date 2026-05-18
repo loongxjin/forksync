@@ -19,24 +19,28 @@ import (
 
 // Resolver handles conflict resolution via agent CLIs.
 type Resolver struct {
-	gitOps git.OperationsProvider
-	store  repo.Store
-	cfg    *config.Config
-	cfgMgr *config.Manager
+	gitOps     git.OperationsProvider
+	store      repo.Store
+	cfg        *config.Config
+	cfgMgr     *config.Manager
+	sessionMgr *session.Manager
 }
 
 // NewResolver creates a Resolver with the given dependencies.
+// sessionMgr is optional (can be nil); only ResolveWithAgent requires it.
 func NewResolver(
 	gitOps git.OperationsProvider,
 	store repo.Store,
 	cfg *config.Config,
 	cfgMgr *config.Manager,
+	sessionMgr *session.Manager,
 ) *Resolver {
 	return &Resolver{
-		gitOps: gitOps,
-		store:  store,
-		cfg:    cfg,
-		cfgMgr: cfgMgr,
+		gitOps:     gitOps,
+		store:      store,
+		cfg:        cfg,
+		cfgMgr:     cfgMgr,
+		sessionMgr: sessionMgr,
 	}
 }
 
@@ -157,20 +161,16 @@ type AgentResult struct {
 }
 
 // ResolveWithAgent runs the full agent resolution flow.
+// r.sessionMgr must be set (via NewResolver) before calling this method.
 func (r *Resolver) ResolveWithAgent(
 	ctx context.Context,
 	repo types.Repo,
-	provider agent.AgentProvider,
 	strategy string,
 	streamWriter *agent.StreamWriter,
 ) (*AgentResult, error) {
-	// Create session manager
-	var sessionsDir string
-	if r.cfgMgr != nil {
-		sessionsDir = filepath.Join(r.cfgMgr.ConfigDir(), "sessions")
+	if r.sessionMgr == nil {
+		return nil, fmt.Errorf("resolve: session manager not configured")
 	}
-	sessionStore := session.NewSessionStore(sessionsDir)
-	sessionMgr := session.NewManager(sessionStore, provider)
 
 	conflictPaths := r.gitOps.DetectConflicts(ctx, repo.Path)
 	if len(conflictPaths) == 0 {
@@ -183,7 +183,7 @@ func (r *Resolver) ResolveWithAgent(
 		language = r.cfg.Sync.SummaryLanguage
 	}
 
-	result, err := sessionMgr.ResolveConflicts(ctx, repo.ID, repo.Path, conflictPaths, strategy, language, streamWriter)
+	result, err := r.sessionMgr.ResolveConflicts(ctx, repo.ID, repo.Path, conflictPaths, strategy, language, streamWriter)
 	if err != nil {
 		logger.Error("resolve: agent resolve failed", "repo", repo.Name, "error", err)
 		return nil, fmt.Errorf("agent resolve: %w", err)
@@ -202,11 +202,13 @@ func (r *Resolver) ResolveWithAgent(
 		}, nil
 	}
 
+	agentName := r.sessionMgr.ProviderName()
+
 	// Get diff for user confirmation
 	diffBytes, _ := r.gitOps.Diff(ctx, repo.Path)
 	result.Diff = string(diffBytes)
 	result.ResolvedFiles = conflictPaths
-	result.AgentName = provider.Name()
+	result.AgentName = agentName
 
 	// Update status — agent resolved successfully
 	if repo.Workflow == nil {
@@ -214,7 +216,7 @@ func (r *Resolver) ResolveWithAgent(
 	}
 	workflow.AdvanceStep(repo.Workflow, types.StepResolveStrategy, types.StepStatusSuccess, "")
 	workflow.AdvanceStep(repo.Workflow, types.StepAgentResolve, types.StepStatusSuccess,
-		fmt.Sprintf("resolved by %s", provider.Name()))
+		fmt.Sprintf("resolved by %s", agentName))
 	workflow.AdvanceStep(repo.Workflow, types.StepAcceptChanges, types.StepStatusWaiting, "")
 	repo.Workflow.Status = types.WorkflowWaiting
 	repo.Status = types.RepoStatusResolved

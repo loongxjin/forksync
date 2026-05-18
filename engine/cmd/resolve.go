@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/loongxjin/forksync/engine/internal/agent"
+	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
@@ -144,7 +145,12 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	}
 
 	cfgMgr := config.NewManager()
-	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr)
+
+	sessionsDir := filepath.Join(cfgMgr.ConfigDir(), "sessions")
+	sessionStore := session.NewSessionStore(sessionsDir)
+	sessionMgr := session.NewManager(sessionStore, provider)
+
+	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr, sessionMgr)
 
 	// Parse timeout
 	timeout := resolveTimeout(cfg)
@@ -179,7 +185,7 @@ func resolveWithAgent(cmd *cobra.Command, cfg *config.Config, r types.Repo, stor
 	defer closeLogWriter()
 
 	logger.Debug("[TRACE] resolve: calling resolver.ResolveWithAgent", "repo", r.Name, "hasStreamWriter", streamWriter != nil, "isJSON", isJSON())
-	res, err := resolver.ResolveWithAgent(ctx, r, provider, resolveStrategy, streamWriter)
+	res, err := resolver.ResolveWithAgent(ctx, r, resolveStrategy, streamWriter)
 	logger.Debug("[TRACE] resolve: resolver.ResolveWithAgent returned", "repo", r.Name, "err", err, "resultNil", res == nil)
 
 	if err != nil {
@@ -359,7 +365,7 @@ func showResolutionDiff(r types.Repo, diff string, result *agent.AgentResult, pr
 // runResolveReject rolls back the merge using git merge --abort,
 // restoring the repository to its pre-merge state.
 func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, cfgMgr *config.Manager) error {
-	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr)
+	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr, nil)
 	repo, err := resolver.Reject(cmd.Context(), r)
 	if err != nil {
 		return err
@@ -370,7 +376,7 @@ func runResolveReject(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 
 // runResolveAccept checks for remaining conflicts and completes the merge.
 func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *config.Config, cfgMgr *config.Manager) error {
-	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr)
+	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr, nil)
 	repo, result, err := resolver.Accept(cmd.Context(), r, resolveManual, resolveRetry)
 
 	if err != nil && !result.Success {
@@ -404,7 +410,7 @@ func runResolveAccept(cmd *cobra.Command, r types.Repo, store repo.Store, cfg *c
 // spawning resolve --stream.
 func runResolvePrepare(cmd *cobra.Command, r types.Repo, store repo.Store) error {
 	cfg, cfgMgr := getSharedConfig()
-	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr)
+	resolver := respkg.NewResolver(newGitOps(cfg), store, cfg, cfgMgr, nil)
 	repo, err := resolver.Prepare(r)
 	if err != nil {
 		return err
