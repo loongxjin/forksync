@@ -32,7 +32,7 @@ const (
 
 // Syncer handles repository synchronization.
 type Syncer struct {
-	gitOps       *git.Operations
+	gitOps       git.OperationsProvider
 	store        repo.Store
 	cfg          *config.Config
 	notifier     *notify.Notifier
@@ -835,7 +835,7 @@ func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg str
 
 // NewSyncerFromConfig creates a Syncer using config defaults.
 func NewSyncerFromConfig(cfg *config.Config, store repo.Store, configDir string) *Syncer {
-	var gitOps *git.Operations
+	var gitOps git.OperationsProvider
 	if cfg != nil && cfg.Proxy.Enabled && cfg.Proxy.URL != "" {
 		gitOps = git.NewOperationsWithProxy(cfg.Proxy.URL)
 	} else {

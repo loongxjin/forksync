@@ -23,7 +23,42 @@ import (
 // errStop is a sentinel error used to break out of iterator ForEach loops.
 var errStop = errors.New("stop")
 
+// OperationsProvider defines the interface for git operations.
+// All sync and resolve logic depends on this interface, not the concrete type.
+type OperationsProvider interface {
+	// --- Repo-centric (takes types.Repo) ---
+	Fetch(ctx context.Context, repo types.Repo) error
+	Status(ctx context.Context, repo types.Repo) (*StatusResult, error)
+	Merge(ctx context.Context, repo types.Repo) (*MergeResult, error)
+	ResolveUpstreamRef(ctx context.Context, r types.Repo) string
+
+	// --- Path-centric (takes repoPath string) ---
+	IsGitRepo(ctx context.Context, path string) bool
+	IsMergingState(ctx context.Context, repoPath string) (bool, []string, error)
+	DetectConflicts(ctx context.Context, repoPath string) []string
+	GetConflictedContent(ctx context.Context, repoPath, filePath string) (string, error)
+	Diff(ctx context.Context, repoPath string) ([]byte, error)
+	DiffStaged(ctx context.Context, repoPath string) ([]byte, error)
+	GetHEAD(ctx context.Context, repoPath string) (string, error)
+	GetPreMergeHEAD(ctx context.Context, repoPath string) (string, error)
+	StageFile(ctx context.Context, repoPath, file string) error
+	StageAll(ctx context.Context, repoPath string) error
+	Commit(ctx context.Context, repoPath, message string) error
+	CommitNoEdit(ctx context.Context, repoPath string) error
+	AbortMerge(ctx context.Context, repoPath string) error
+	CheckStaged(ctx context.Context, repoPath string) error
+
+	// --- Info queries ---
+	GetRemotes(ctx context.Context, repoPath string) ([]RemoteInfo, error)
+	FindRemoteURL(ctx context.Context, repoPath, remoteName string) string
+	GetLocalBranches(ctx context.Context, repoPath string) ([]string, error)
+	GetRemoteBranches(ctx context.Context, repoPath string, remoteName string) ([]string, error)
+	GetCommitLog(ctx context.Context, repoPath, oldHEAD, upstreamRef string) ([]CommitInfo, error)
+}
+
 // Operations provides git operations with go-git primary and CLI fallback.
+var _ OperationsProvider = (*Operations)(nil)
+
 type Operations struct {
 	proxyURL string
 	mu       sync.Mutex // protects os.Setenv calls for go-git proxy

@@ -34,7 +34,7 @@ type commitWorkflowParams struct {
 // finalizeCommitWithWorkflow handles the common pattern: stage → CommitNoEdit → fallback Commit →
 // update workflow → update status. This is the shared implementation for accept, retry_commit,
 // and continue_manual actions.
-func finalizeCommitWithWorkflow(ctx context.Context, r types.Repo, store repo.Store, gitOps *git.Operations, params commitWorkflowParams) error {
+func finalizeCommitWithWorkflow(ctx context.Context, r types.Repo, store repo.Store, gitOps git.OperationsProvider, params commitWorkflowParams) error {
 	if err := gitOps.StageAll(ctx, r.Path); err != nil {
 		logger.Warn("workflow: stage all failed", "repo", r.Name, "error", err)
 	}

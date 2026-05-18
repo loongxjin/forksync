@@ -118,7 +118,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 // processScannedRepo handles the per-directory logic for scanning a git repo.
 // It returns nil if the directory should be skipped.
-func processScannedRepo(ctx context.Context, dir string, gitOps *git.Operations, ghClient *github.Client) *types.ScannedRepo {
+func processScannedRepo(ctx context.Context, dir string, gitOps git.OperationsProvider, ghClient *github.Client) *types.ScannedRepo {
 	// Get remotes
 	remotes, _ := gitOps.GetRemotes(ctx, dir)
 	originURL := findRemoteURL(remotes, "origin")

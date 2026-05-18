@@ -58,7 +58,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("list repos: %w", err)
 	}
 
-	var gitOps *git.Operations
+	var gitOps git.OperationsProvider
 	gitOps = newGitOps(cfg)
 
 	// Build exclude set for quick lookup
@@ -112,7 +112,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 // refreshRepoStatus refreshes a single repo's ahead/behind counts and reconciles
 // stale conflict states (e.g. user resolved externally).
-func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps *git.Operations, store repo.Store) {
+func refreshRepoStatus(ctx context.Context, repos []types.Repo, idx int, gitOps git.OperationsProvider, store repo.Store) {
 	r := repos[idx]
 
 	// For repos already in conflict/resolving/resolved/waiting state, re-check the actual
@@ -248,7 +248,7 @@ func isAbortedWorkflow(wf *types.SyncWorkflow) bool {
 // and corrects the stored status if the user has resolved externally.
 // It also rebuilds a lightweight workflow for repos that were in an active state
 // before app restart (see spec §7.2).
-func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, gitOps *git.Operations, store repo.Store) {
+func reconcileConflictStatus(ctx context.Context, repos []types.Repo, idx int, gitOps git.OperationsProvider, store repo.Store) {
 	r := repos[idx]
 
 	// If the agent is actively resolving, do not interfere at all.
@@ -431,7 +431,7 @@ func rebuildWorkflow(r types.Repo, point workflowRebuildPoint, extraMsg ...strin
 // syncing or error state before app restart.
 // It only acts if the workflow started more than 30 minutes ago,
 // to avoid interfering with an actively running sync.
-func rebuildWorkflowForSyncingOrError(ctx context.Context, repos []types.Repo, idx int, gitOps *git.Operations, store repo.Store) {
+func rebuildWorkflowForSyncingOrError(ctx context.Context, repos []types.Repo, idx int, gitOps git.OperationsProvider, store repo.Store) {
 	r := repos[idx]
 
 	// If the repo has an active workflow that started recently, assume sync
