@@ -10,7 +10,6 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
-	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
@@ -155,9 +154,9 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 		s.mu.Unlock()
 		result.Status = string(types.RepoStatusError)
 		result.ErrorMessage = "sync already in progress"
-		result.Workflow = newWorkflow(r.ID)
-		advanceStep(result.Workflow, types.StepFetch, types.StepStatusFailed, "sync already in progress")
-		markWorkflowDone(result.Workflow, types.WorkflowFailed)
+		result.Workflow = wfpkg.NewWorkflow(r.ID)
+		wfpkg.AdvanceStep(result.Workflow, types.StepFetch, types.StepStatusFailed, "sync already in progress")
+		wfpkg.MarkWorkflowDone(result.Workflow, types.WorkflowFailed)
 		s.finalizeResult(result)
 		return result
 	}
@@ -170,7 +169,7 @@ func (s *Syncer) SyncRepo(ctx context.Context, r types.Repo) *Result {
 	s.mu.Unlock()
 
 	// Initialize workflow
-	wf := newWorkflow(r.ID)
+	wf := wfpkg.NewWorkflow(r.ID)
 	result.Workflow = wf
 	s.saveWorkflow(r, wf)
 
@@ -208,12 +207,12 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 			// All conflicts were resolved but not staged — now auto-staged.
 			// MERGE_HEAD still exists, transition to resolved state for user confirmation.
 			result.Status = string(types.RepoStatusResolved)
-			advanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
-			advanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
-			advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
-			advanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
-			markStepSkipped(wf, types.StepAgentResolve)
-			advanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
+			wfpkg.AdvanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
+			wfpkg.AdvanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
+			wfpkg.AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
+			wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
+			wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
+			wfpkg.AdvanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
 			wf.Status = types.WorkflowWaiting
 			s.updateRepoStatus(r.ID, types.RepoStatusResolved, "")
 			s.saveWorkflow(r, wf)
@@ -224,9 +223,9 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 		result.ConflictFiles = unmergedFiles
 		result.ErrorMessage = "repository has unresolved merge conflicts, please resolve conflicts before syncing"
 		result.ConflictsFound = len(unmergedFiles)
-		advanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
-		advanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
-		advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
+		wfpkg.AdvanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
+		wfpkg.AdvanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
+		wfpkg.AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
 			fmt.Sprintf("%d files have conflicts", len(unmergedFiles)))
 		// If a workflow exists and was waiting at resolve_strategy, preserve waiting status
 		if r.Workflow != nil && findStep(r.Workflow, types.StepResolveStrategy) != nil &&
@@ -236,9 +235,9 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 			s.updateRepoStatus(r.ID, types.RepoStatusWaiting, result.ErrorMessage)
 		} else {
 			result.Status = string(types.RepoStatusConflict)
-			advanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
-			markStepSkipped(wf, types.StepAgentResolve)
-			markStepSkipped(wf, types.StepAcceptChanges)
+			wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
+			wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
+			wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
 			wf.Status = types.WorkflowWaiting
 			s.updateRepoStatus(r.ID, types.RepoStatusConflict, result.ErrorMessage)
 		}
@@ -255,8 +254,8 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 	if r.Status == types.RepoStatusConflict || r.Status == types.RepoStatusResolving || r.Status == types.RepoStatusResolved || r.Status == types.RepoStatusWaiting {
 		result.Status = string(types.RepoStatusConflict)
 		result.ErrorMessage = fmt.Sprintf("repository is in %s state, please resolve conflicts before syncing", r.Status)
-		advanceStep(wf, types.StepFetch, types.StepStatusFailed, result.ErrorMessage)
-		markWorkflowDone(wf, types.WorkflowFailed)
+		wfpkg.AdvanceStep(wf, types.StepFetch, types.StepStatusFailed, result.ErrorMessage)
+		wfpkg.MarkWorkflowDone(wf, types.WorkflowFailed)
 		s.saveWorkflow(r, wf)
 		// DO NOT call finalizeResult — this is not a real sync, don't pollute history
 		s.logResult(result)
@@ -270,8 +269,8 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 // It advances the given step to failed, marks the workflow done, sets the result status/message,
 // updates repo status, optionally notifies, saves workflow, and finalizes the result.
 func (s *Syncer) failSync(r types.Repo, result *Result, wf *types.SyncWorkflow, step types.WorkflowStep, errMsg string, notify bool) *Result {
-	advanceStep(wf, step, types.StepStatusFailed, errMsg)
-	markWorkflowDone(wf, types.WorkflowFailed)
+	wfpkg.AdvanceStep(wf, step, types.StepStatusFailed, errMsg)
+	wfpkg.MarkWorkflowDone(wf, types.WorkflowFailed)
 	result.Status = string(types.RepoStatusError)
 	result.ErrorMessage = errMsg
 	s.updateRepoStatus(r.ID, types.RepoStatusError, result.ErrorMessage)
@@ -310,12 +309,12 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	}
 
 	// Step 1: Fetch
-	advanceStep(wf, types.StepFetch, types.StepStatusRunning, "")
+	wfpkg.AdvanceStep(wf, types.StepFetch, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 	if err := s.gitOps.Fetch(ctx, r); err != nil {
 		return s.failSync(r, result, wf, types.StepFetch, fmt.Sprintf("fetch failed: %v", err), true)
 	}
-	advanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
+	wfpkg.AdvanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
 	s.saveWorkflow(r, wf)
 
 	// Step 2: Check ahead/behind
@@ -333,13 +332,13 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	)
 
 	if statusResult.BehindBy == 0 {
-		advanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
-		markStepSkipped(wf, types.StepCheckConflicts)
-		markStepSkipped(wf, types.StepResolveStrategy)
-		markStepSkipped(wf, types.StepAgentResolve)
-		markStepSkipped(wf, types.StepAcceptChanges)
-		advanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-		markWorkflowDone(wf, types.WorkflowSuccess)
+		wfpkg.AdvanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
+		wfpkg.MarkStepSkipped(wf, types.StepCheckConflicts)
+		wfpkg.MarkStepSkipped(wf, types.StepResolveStrategy)
+		wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
+		wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
+		wfpkg.AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
+		wfpkg.MarkWorkflowDone(wf, types.WorkflowSuccess)
 		result.Status = string(types.RepoStatusUpToDate)
 		result.CommitsPulled = 0
 		s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
@@ -357,31 +356,31 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 		wf.OldHEAD = head
 	}
 
-	advanceStep(wf, types.StepMerge, types.StepStatusRunning, "")
+	wfpkg.AdvanceStep(wf, types.StepMerge, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 	mergeResult, err := s.gitOps.Merge(ctx, r)
 	if err != nil {
 		return s.failSync(r, result, wf, types.StepMerge, fmt.Sprintf("merge failed: %v", err), true)
 	}
-	advanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
+	wfpkg.AdvanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
 	s.saveWorkflow(r, wf)
 
 	// Step 4: Check conflicts
-	advanceStep(wf, types.StepCheckConflicts, types.StepStatusRunning, "")
+	wfpkg.AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 	if mergeResult.HasConflicts {
-		advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
+		wfpkg.AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
 			fmt.Sprintf("%d files have conflicts", len(mergeResult.Conflicts)))
 		s.saveWorkflow(r, wf)
 		return s.handleMergeConflicts(ctx, r, result, mergeResult)
 	}
-	advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
-	markStepSkipped(wf, types.StepResolveStrategy)
-	markStepSkipped(wf, types.StepAgentResolve)
-	markStepSkipped(wf, types.StepAcceptChanges)
+	wfpkg.AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
+	wfpkg.MarkStepSkipped(wf, types.StepResolveStrategy)
+	wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
+	wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
 
 	// Step 7: Commit (and post-sync)
-	advanceStep(wf, types.StepCommit, types.StepStatusRunning, "")
+	wfpkg.AdvanceStep(wf, types.StepCommit, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 	result.Status = string(types.RepoStatusUpToDate)
 	s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
@@ -390,8 +389,8 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 		result.ErrorMessage = postSyncErr
 		s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, result.ErrorMessage)
 	}
-	advanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-	markWorkflowDone(wf, types.WorkflowSuccess)
+	wfpkg.AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
+	wfpkg.MarkWorkflowDone(wf, types.WorkflowSuccess)
 	s.saveWorkflow(r, wf)
 	s.notifyResult(r.Name, result)
 	s.finalizeResult(result)
@@ -406,7 +405,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	result.ConflictFiles = mergeResult.Conflicts
 
 	// Step 5: Resolve strategy (decision point)
-	advanceStep(wf, types.StepResolveStrategy, types.StepStatusRunning, "")
+	wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 
 	// Determine auto-resolve strategy from global config
@@ -424,18 +423,18 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	)
 
 	if autoAgentResolve && s.sessionMgr != nil {
-		advanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
-		advanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
+		wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
+		wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
 		s.saveWorkflow(r, wf)
 
 		resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)
 		if resolved {
 			// Agent resolved and auto-committed
-			advanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
+			wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
 				fmt.Sprintf("resolved by %s", s.sessionMgr.ProviderName()))
-			markStepSkipped(wf, types.StepAcceptChanges)
-			advanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-			markWorkflowDone(wf, types.WorkflowSuccess)
+			wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
+			wfpkg.AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
+			wfpkg.MarkWorkflowDone(wf, types.WorkflowSuccess)
 			result.Status = string(types.RepoStatusUpToDate)
 			result.AutoResolved = len(mergeResult.Conflicts)
 			result.PostSyncResults = wfpkg.RunPostSyncCommands(ctx, r)
@@ -452,9 +451,9 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 		}
 		if pending != nil {
 			// Agent resolved but needs confirmation
-			advanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
+			wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
 				fmt.Sprintf("resolved by %s", pending.Agent))
-			advanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
+			wfpkg.AdvanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
 			wf.Status = types.WorkflowWaiting
 			result.Status = string(types.RepoStatusResolved)
 			result.AgentUsed = pending.Agent
@@ -475,8 +474,8 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 			return result
 		}
 		// Agent failed
-		advanceStep(wf, types.StepAgentResolve, types.StepStatusFailed, "agent failed to resolve conflicts")
-		markWorkflowDone(wf, types.WorkflowFailed)
+		wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusFailed, "agent failed to resolve conflicts")
+		wfpkg.MarkWorkflowDone(wf, types.WorkflowFailed)
 		result.Status = string(types.RepoStatusConflict)
 		s.updateRepoStatus(r.ID, types.RepoStatusConflict, "")
 		s.saveWorkflow(r, wf)
@@ -486,9 +485,9 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	}
 
 	// Manual resolve path: pause at resolve_strategy
-	advanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
-	markStepSkipped(wf, types.StepAgentResolve)
-	markStepSkipped(wf, types.StepAcceptChanges)
+	wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
+	wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
+	wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
 	wf.Status = types.WorkflowWaiting
 	result.Status = string(types.RepoStatusWaiting)
 	s.updateRepoStatus(r.ID, types.RepoStatusWaiting, "")
@@ -662,7 +661,7 @@ func (s *Syncer) verifyAndStageResolvedFiles(ctx context.Context, r types.Repo, 
 		if err != nil {
 			continue
 		}
-		if conflict.HasConflictMarkers(content) {
+		if git.HasConflictMarkers(content) {
 			stillConflicted = append(stillConflicted, file)
 		}
 	}
@@ -899,45 +898,6 @@ func (s *Syncer) finalizeResult(result *Result) {
 	s.logResult(result)
 }
 
-// --- Workflow helper functions (package-private) ---
-
-func advanceStep(wf *types.SyncWorkflow, step types.WorkflowStep, status types.WorkflowStepStatus, message string) {
-	if wf == nil {
-		return
-	}
-	now := types.Time{Time: time.Now()}
-	for i := range wf.Steps {
-		if wf.Steps[i].Step == step {
-			wf.Steps[i].Status = status
-			wf.Steps[i].Message = message
-			if status == types.StepStatusRunning && wf.Steps[i].StartedAt == nil {
-				wf.Steps[i].StartedAt = &now
-			}
-			if wfpkg.IsTerminalStepStatus(status) {
-				wf.Steps[i].EndedAt = &now
-			}
-			break
-		}
-	}
-}
-
-func markStepSkipped(wf *types.SyncWorkflow, step types.WorkflowStep) {
-	advanceStep(wf, step, types.StepStatusSkipped, "")
-}
-
-func markWorkflowDone(wf *types.SyncWorkflow, status types.WorkflowRunStatus) {
-	if wf == nil {
-		return
-	}
-	wf.Status = status
-	now := types.Time{Time: time.Now()}
-	wf.FinishedAt = &now
-}
-
-func newWorkflow(runID string) *types.SyncWorkflow {
-	return wfpkg.NewWorkflow(runID)
-}
-
 func findStep(wf *types.SyncWorkflow, step types.WorkflowStep) *types.WorkflowStepRecord {
 	if wf == nil {
 		return nil
@@ -954,77 +914,77 @@ func workflowFromResult(result *Result) *types.SyncWorkflow {
 	if result == nil {
 		return nil
 	}
-	wf := newWorkflow(result.RepoID)
-	advanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
-	advanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
+	wf := wfpkg.NewWorkflow(result.RepoID)
+	wfpkg.AdvanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
+	wfpkg.AdvanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
 
 	switch result.Status {
 	case string(types.RepoStatusUpToDate):
 		if result.CommitsPulled == 0 {
-			markStepSkipped(wf, types.StepCheckConflicts)
-			markStepSkipped(wf, types.StepResolveStrategy)
-			markStepSkipped(wf, types.StepAgentResolve)
-			markStepSkipped(wf, types.StepAcceptChanges)
-			advanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-			markWorkflowDone(wf, types.WorkflowSuccess)
+			wfpkg.MarkStepSkipped(wf, types.StepCheckConflicts)
+			wfpkg.MarkStepSkipped(wf, types.StepResolveStrategy)
+			wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
+			wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
+			wfpkg.AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
+			wfpkg.MarkWorkflowDone(wf, types.WorkflowSuccess)
 			return wf
 		}
 
-		advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
-		markStepSkipped(wf, types.StepResolveStrategy)
-		markStepSkipped(wf, types.StepAgentResolve)
-		markStepSkipped(wf, types.StepAcceptChanges)
-		advanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-		markWorkflowDone(wf, types.WorkflowSuccess)
+		wfpkg.AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
+		wfpkg.MarkStepSkipped(wf, types.StepResolveStrategy)
+		wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
+		wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
+		wfpkg.AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
+		wfpkg.MarkWorkflowDone(wf, types.WorkflowSuccess)
 		return wf
 
 	case string(types.RepoStatusConflict):
-		advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
+		wfpkg.AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
 			fmt.Sprintf("%d files have conflicts", len(result.ConflictFiles)))
-		advanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
-		markStepSkipped(wf, types.StepAgentResolve)
-		markStepSkipped(wf, types.StepAcceptChanges)
+		wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
+		wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
+		wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
 		wf.Status = types.WorkflowWaiting
 		return wf
 
 	case string(types.RepoStatusResolving):
-		advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
+		wfpkg.AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
 			fmt.Sprintf("%d files have conflicts", result.ConflictsFound))
-		advanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
-		advanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
-		markStepSkipped(wf, types.StepAcceptChanges)
+		wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
+		wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
+		wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
 		return wf
 
 	case string(types.RepoStatusResolved):
-		advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
+		wfpkg.AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
 			fmt.Sprintf("%d files have conflicts", result.ConflictsFound))
-		advanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
-		advanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
+		wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
+		wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
 			fmt.Sprintf("resolved by %s", result.AgentUsed))
-		advanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
+		wfpkg.AdvanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
 		wf.Status = types.WorkflowWaiting
 		return wf
 
 	case string(types.RepoStatusError):
 		if result.ErrorMessage != "" {
 			if strings.Contains(result.ErrorMessage, "fetch failed") {
-				advanceStep(wf, types.StepFetch, types.StepStatusFailed, result.ErrorMessage)
+				wfpkg.AdvanceStep(wf, types.StepFetch, types.StepStatusFailed, result.ErrorMessage)
 			} else if strings.Contains(result.ErrorMessage, "merge failed") {
-				advanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
-				advanceStep(wf, types.StepMerge, types.StepStatusFailed, result.ErrorMessage)
+				wfpkg.AdvanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
+				wfpkg.AdvanceStep(wf, types.StepMerge, types.StepStatusFailed, result.ErrorMessage)
 			} else if strings.Contains(result.ErrorMessage, "commit") {
-				advanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
-				markStepSkipped(wf, types.StepResolveStrategy)
-				markStepSkipped(wf, types.StepAgentResolve)
-				markStepSkipped(wf, types.StepAcceptChanges)
-				advanceStep(wf, types.StepCommit, types.StepStatusFailed, result.ErrorMessage)
+				wfpkg.AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess, "")
+				wfpkg.MarkStepSkipped(wf, types.StepResolveStrategy)
+				wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
+				wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
+				wfpkg.AdvanceStep(wf, types.StepCommit, types.StepStatusFailed, result.ErrorMessage)
 			} else {
-				advanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
-				advanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
-				advanceStep(wf, types.StepCheckConflicts, types.StepStatusFailed, result.ErrorMessage)
+				wfpkg.AdvanceStep(wf, types.StepFetch, types.StepStatusSuccess, "")
+				wfpkg.AdvanceStep(wf, types.StepMerge, types.StepStatusSuccess, "")
+				wfpkg.AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusFailed, result.ErrorMessage)
 			}
 		}
-		markWorkflowDone(wf, types.WorkflowFailed)
+		wfpkg.MarkWorkflowDone(wf, types.WorkflowFailed)
 		return wf
 	}
 

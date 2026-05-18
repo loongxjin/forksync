@@ -10,7 +10,6 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
-	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
@@ -247,7 +246,7 @@ func verifyAgentResolution(ctx context.Context, gitOps git.OperationsProvider, r
 			trulyUnresolved = append(trulyUnresolved, f)
 			continue
 		}
-		if conflict.HasConflictMarkers(content) {
+		if git.HasConflictMarkers(content) {
 			trulyUnresolved = append(trulyUnresolved, f)
 			continue
 		}

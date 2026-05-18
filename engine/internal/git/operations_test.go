@@ -194,3 +194,25 @@ func TestMerge_NoUpstream(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.False(t, result.HasConflicts)
 }
+
+func TestHasConflictMarkers(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{"conflict markers", "<<<<<<< HEAD\nfoo\n=======\nbar\n>>>>>>> upstream", true},
+		{"only open marker", "<<<<<<< HEAD\nfoo", false},
+		{"no markers", "hello world", false},
+		{"empty", "", false},
+		{"equals and close only", "=======\n>>>>>>> upstream", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HasConflictMarkers(tt.content)
+			if got != tt.want {
+				t.Errorf("HasConflictMarkers() = %v; want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loongxjin/forksync/engine/internal/conflict"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	git "github.com/go-git/go-git/v5"
@@ -608,7 +607,7 @@ func (o *Operations) FilterResolvedFiles(ctx context.Context, repoPath string, u
 			stillConflicted = append(stillConflicted, file)
 			continue
 		}
-		if conflict.HasConflictMarkers(content) {
+		if HasConflictMarkers(content) {
 			logger.Debug("git: FilterResolvedFiles file still has conflict markers", "file", file)
 			stillConflicted = append(stillConflicted, file)
 		} else {
@@ -916,4 +915,11 @@ func (o *Operations) ResolveUpstreamRef(ctx context.Context, r types.Repo) strin
 		branch = types.DefaultBranch
 	}
 	return fmt.Sprintf("%s/%s", remoteName, r.GetRemoteBranchForLocal(branch))
+}
+
+// HasConflictMarkers checks if content contains unresolved conflict markers.
+func HasConflictMarkers(content string) bool {
+	return strings.Contains(content, "<<<<<<< ") &&
+		strings.Contains(content, "=======") &&
+		strings.Contains(content, ">>>>>>> ")
 }
