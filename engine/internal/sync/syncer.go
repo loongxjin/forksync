@@ -289,13 +289,13 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	// Set timeout — use agent timeout if auto-resolve is configured,
 	// otherwise the default 5 minutes may SIGKILL long-running agents.
 	timeout := defaultTimeout
-	if s.shouldUseAgentResolve(r) {
+	if s.shouldUseAgentResolve() {
 		timeout = agentResolveTimeout(s.cfg)
 	}
 	logger.Info("sync: executeSync starting",
 		"repo", r.Name,
 		"timeout", timeout,
-		"agent_resolve", s.shouldUseAgentResolve(r),
+		"agent_resolve", s.shouldUseAgentResolve(),
 	)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -621,7 +621,7 @@ func (s *Syncer) resolveStrategyOrDefault() string {
 }
 
 // shouldUseAgentResolve checks whether agent auto-resolve is configured globally.
-func (s *Syncer) shouldUseAgentResolve(r types.Repo) bool {
+func (s *Syncer) shouldUseAgentResolve() bool {
 	if s.cfg != nil {
 		return s.cfg.Agent.ConflictStrategy == types.StrategyAgentResolve
 	}
@@ -935,7 +935,7 @@ func markWorkflowDone(wf *types.SyncWorkflow, status types.WorkflowRunStatus) {
 }
 
 func newWorkflow(runID string) *types.SyncWorkflow {
-	return wfpkg.NewMachine(types.Repo{ID: runID}, nil).Workflow()
+	return wfpkg.NewWorkflow(runID)
 }
 
 func findStep(wf *types.SyncWorkflow, step types.WorkflowStep) *types.WorkflowStepRecord {

@@ -48,7 +48,7 @@ func FinalizeCommit(
 		if err2 := gitOps.Commit(ctx, r.Path, params.CommitMsg); err2 != nil {
 			wf := r.Workflow
 			if wf == nil {
-				wf = newWorkflow(r.ID)
+				wf = NewWorkflow(r.ID)
 			}
 			advanceStep(wf, types.StepCommit, types.StepStatusFailed, fmt.Sprintf("commit failed: %v", err2))
 			wf.Status = types.WorkflowFailed
@@ -65,7 +65,7 @@ func FinalizeCommit(
 	// Success path
 	wf := r.Workflow
 	if wf == nil {
-		wf = newWorkflow(r.ID)
+		wf = NewWorkflow(r.ID)
 	}
 	if params.SkipAgentAndAccept {
 		markStepSkipped(wf, types.StepAgentResolve)
