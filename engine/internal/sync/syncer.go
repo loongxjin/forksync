@@ -218,8 +218,8 @@ func (s *Syncer) checkConflictState(ctx context.Context, r types.Repo, result *R
 		wfpkg.AdvanceStep(wf, types.StepCheckConflicts, types.StepStatusSuccess,
 			fmt.Sprintf("%d files have conflicts", len(unmergedFiles)))
 		// If a workflow exists and was waiting at resolve_strategy, preserve waiting status
-		if r.Workflow != nil && findStep(r.Workflow, types.StepResolveStrategy) != nil &&
-			findStep(r.Workflow, types.StepResolveStrategy).Status == types.StepStatusWaiting {
+		if r.Workflow != nil && wfpkg.FindStep(r.Workflow, types.StepResolveStrategy) != nil &&
+			wfpkg.FindStep(r.Workflow, types.StepResolveStrategy).Status == types.StepStatusWaiting {
 			result.Status = string(types.RepoStatusWaiting)
 			wf.Status = types.WorkflowWaiting
 			s.updateRepoStatus(r.ID, types.RepoStatusWaiting, result.ErrorMessage)
@@ -886,16 +886,4 @@ func (s *Syncer) logResult(result *Result) {
 func (s *Syncer) finalizeResult(result *Result) {
 	s.recordHistory(result)
 	s.logResult(result)
-}
-
-func findStep(wf *types.SyncWorkflow, step types.WorkflowStep) *types.WorkflowStepRecord {
-	if wf == nil {
-		return nil
-	}
-	for i := range wf.Steps {
-		if wf.Steps[i].Step == step {
-			return &wf.Steps[i]
-		}
-	}
-	return nil
 }

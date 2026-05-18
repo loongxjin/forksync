@@ -81,3 +81,16 @@ func MarkStepSkipped(wf *types.SyncWorkflow, step types.WorkflowStep) {
 func MarkWorkflowDone(wf *types.SyncWorkflow, status types.WorkflowRunStatus) {
 	markWorkflowDone(wf, status)
 }
+
+// FindStep returns the step record for the given step type, or nil if not found.
+func FindStep(wf *types.SyncWorkflow, step types.WorkflowStep) *types.WorkflowStepRecord {
+	if wf == nil {
+		return nil
+	}
+	for i := range wf.Steps {
+		if wf.Steps[i].Step == step {
+			return &wf.Steps[i]
+		}
+	}
+	return nil
+}
