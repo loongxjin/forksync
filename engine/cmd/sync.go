@@ -3,11 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/logger"
-	"github.com/loongxjin/forksync/engine/internal/notify"
-	"github.com/loongxjin/forksync/engine/internal/repo"
-	syncpkg "github.com/loongxjin/forksync/engine/internal/sync"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/cobra"
 )
@@ -33,7 +29,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	syncer, cleanup := setupSyncerWithNotifier(cfg, cfgMgr, store)
+	syncer, cleanup := setupSyncer(cfg, cfgMgr, store)
 	defer cleanup()
 	defer logger.Close()
 
@@ -93,17 +89,4 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-// setupSyncerWithNotifier creates a fully configured Syncer with all dependencies
-// including the notifier.
-func setupSyncerWithNotifier(cfg *config.Config, cfgMgr *config.Manager, store repo.Store) (*syncpkg.Syncer, func()) {
-	syncer, cleanup := setupSyncer(cfg, cfgMgr, store)
-
-	// Set up notifier if enabled in config
-	if cfg != nil && cfg.Notification.Enabled {
-		syncer.SetNotifier(notify.New())
-	}
-
-	return syncer, cleanup
 }

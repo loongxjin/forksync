@@ -15,6 +15,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
+	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	sched "github.com/loongxjin/forksync/engine/internal/scheduler"
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -168,6 +169,11 @@ func setupSyncer(cfg *config.Config, cfgMgr *config.Manager, store repo.Store) (
 	// Set up agent session manager for auto conflict resolution
 	if mgr := newSessionManager(cfg, cfgMgr); mgr != nil {
 		syncer.SetSessionManager(mgr)
+	}
+
+	// Set up notifier for background syncs (no frontend watching)
+	if cfg != nil && cfg.Notification.Enabled {
+		syncer.SetNotifier(notify.New())
 	}
 
 	return syncer, histCleanup
