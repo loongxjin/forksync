@@ -370,23 +370,6 @@ export interface ConfigSetData {
   value: unknown
 }
 
-/** IPC channel names for Electron main↔renderer communication */
-export type EngineChannel =
-  | 'engine:status'
-  | 'engine:syncAll'
-  | 'engine:syncRepo'
-  | 'engine:scan'
-  | 'engine:add'
-  | 'engine:remove'
-  | 'engine:resolve'
-  | 'engine:resolveAccept'
-  | 'engine:resolveReject'
-  | 'engine:agentList'
-  | 'engine:agentSessions'
-  | 'engine:agentCleanup'
-  | 'engine:agentReset'
-  | 'engine:history'
-
 /** EngineClient method parameter types */
 export interface ResolveOptions {
   agent?: string
