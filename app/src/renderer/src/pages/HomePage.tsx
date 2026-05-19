@@ -19,6 +19,7 @@ import { ScanDialog } from '@/components/ScanDialog'
 import { RepoSettingsDialog } from '@/components/RepoSettingsDialog'
 import { engineApi } from '@/lib/api'
 import { useAutoSummarize } from '@/hooks/useAutoSummarize'
+import { useToastContext } from '@/contexts/ToastContext'
 import type { Repo, RepoStatus, ResolveData, SyncHistoryRecord } from '@/types/engine'
 import { RotateCw, RefreshCw, FolderOpen, ChevronDown, ChevronRight, CheckCircle2, Zap, XCircle, Search, Plus } from 'lucide-react'
 
@@ -26,9 +27,10 @@ export function HomePage(): JSX.Element {
   const { t } = useTranslation()
   const {
     repos, scannedRepos, loading, initialized, error, refresh, syncAll, syncRepo,
-    scan, addRepo, removeRepo, updateRepoStatus, updateRepo, syncResults, showToast,
+    scan, addRepo, removeRepo, updateRepoStatus, updateRepo, syncResults,
     startupSyncDone, markStartupSyncDone
   } = useRepos()
+  const { showToast } = useToastContext()
   const {
     preferred, loading: agentLoading, error: agentError,
     resolveStream, loadAgentLog, clearStream, streamEvents, streamLive, streamResults

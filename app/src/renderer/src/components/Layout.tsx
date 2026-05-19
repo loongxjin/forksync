@@ -1,6 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { Toast } from './ui/toast'
-import { useRepos } from '@/contexts/RepoContext'
+import { useToastContext } from '@/contexts/ToastContext'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useSettingsDrawer } from '@/contexts/SettingsDrawerContext'
 import { useTranslation } from 'react-i18next'
@@ -132,7 +132,7 @@ function LinuxWindowControls(): JSX.Element {
 }
 
 export function Layout(): JSX.Element {
-  const { toast, hideToast } = useRepos()
+  const { toast, hideToast } = useToastContext()
   const { open, closeDrawer } = useSettingsDrawer()
 
   return (
