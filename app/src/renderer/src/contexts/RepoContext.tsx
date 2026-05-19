@@ -16,6 +16,7 @@ import { isConflictStatus } from '@/lib/utils'
 import type { ToastState } from '@/components/ui/toast'
 import i18n from '@/i18n'
 import { useSettings } from '@/contexts/SettingsContext'
+import { useAutoSummarize } from '@/hooks/useAutoSummarize'
 
 // ---------------------------------------------------------------------------
 // State & Actions
@@ -131,6 +132,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   const [state, dispatch] = useReducer(repoReducer, initialState)
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { engineConfig } = useSettings()
+  const { triggerSummarize } = useAutoSummarize()
 
   // Guard against concurrent refresh calls
   const refreshingRef = useRef(false)
@@ -235,13 +237,11 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       await refresh()
 
       // Fire-and-forget AI summarization for synced repos with commits
-      if (engineConfig?.Sync?.AutoSummary && res.success) {
+      if (res.success) {
         const results = res.data.results ?? []
         for (const r of results) {
           if (r.status === 'up_to_date' && (r.commitsPulled ?? 0) > 0) {
-            engineApi.summarize(r.repoName).catch(() => {
-              // ignore background summary errors
-            })
+            triggerSummarize(r.repoName)
           }
         }
       }
@@ -321,12 +321,10 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         await refresh()
 
         // Fire-and-forget AI summarization if auto_summary is enabled
-        if (engineConfig?.Sync?.AutoSummary && res.success) {
+        if (res.success) {
           const r = res.data.results?.find((x) => x.repoName === name)
           if (r && r.status === 'up_to_date' && (r.commitsPulled ?? 0) > 0) {
-            engineApi.summarize(name).catch(() => {
-              // ignore background summary errors
-            })
+            triggerSummarize(name)
           }
         }
       } catch (err) {

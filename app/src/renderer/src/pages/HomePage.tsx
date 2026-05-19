@@ -18,6 +18,7 @@ import { AddRepoDialog } from '@/components/AddRepoDialog'
 import { ScanDialog } from '@/components/ScanDialog'
 import { RepoSettingsDialog } from '@/components/RepoSettingsDialog'
 import { engineApi } from '@/lib/api'
+import { useAutoSummarize } from '@/hooks/useAutoSummarize'
 import type { Repo, RepoStatus, ResolveData, SyncHistoryRecord } from '@/types/engine'
 import { RotateCw, RefreshCw, FolderOpen, ChevronDown, ChevronRight, CheckCircle2, Zap, XCircle, Search, Plus } from 'lucide-react'
 
@@ -33,6 +34,7 @@ export function HomePage(): JSX.Element {
     resolveStream, loadAgentLog, clearStream, streamEvents, streamLive, streamResults
   } = useAgents()
   const { engineConfig } = useSettings()
+  const { triggerSummarize } = useAutoSummarize()
   const {
     records: history, loading: historyLoading, initialized: historyInitialized,
     lastLoadAt, loadHistory, clearHistory, updateRecord
@@ -332,11 +334,9 @@ export function HomePage(): JSX.Element {
       // For auto-confirm resolves, trigger summarization immediately since
       // the merge has been committed. For pending confirmation, summarization
       // is handled by handleAccept on explicit accept.
-      if (result && autoConfirmRef.current.has(repoName)) {
+        if (result && autoConfirmRef.current.has(repoName)) {
         autoConfirmRef.current.delete(repoName)
-        if (engineConfig?.Sync?.AutoSummary) {
-          engineApi.summarize(repoName).catch(() => {})
-        }
+        triggerSummarize(repoName)
       }
     }
     if (hasNew) {
@@ -385,9 +385,7 @@ export function HomePage(): JSX.Element {
           delete next[repoName]
           return next
         })
-        if (engineConfig?.Sync?.AutoSummary) {
-          engineApi.summarize(repoName).catch(() => {})
-        }
+        triggerSummarize(repoName)
       }
       await refresh()
       loadHistory()
