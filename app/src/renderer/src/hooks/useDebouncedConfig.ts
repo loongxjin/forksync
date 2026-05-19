@@ -73,16 +73,8 @@ export function useDebouncedConfigMap(
     for (const key of Object.keys(fields)) init[key] = false
     return init
   })
-  const isEditingRefs = useRef<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {}
-    for (const key of Object.keys(fields)) init[key] = false
-    return init
-  })
-  const prevRefs = useRef<Record<string, string>>(() => {
-    const init: Record<string, string> = {}
-    for (const key of Object.keys(fields)) init[key] = ''
-    return init
-  })
+  const isEditingRefs = useRef<Record<string, boolean>>({})
+  const prevRefs = useRef<Record<string, string>>({})
 
   const setValue = useCallback((key: string, value: string) => {
     setValues((prev) => ({ ...prev, [key]: value }))
@@ -96,7 +88,7 @@ export function useDebouncedConfigMap(
         prevRefs.current[key] = field.configValue!
       }
     }
-  }) // Re-run when field references change — callers should memoize `fields`
+  }, [fields])
 
   // Debounced save for each field
   useEffect(() => {
