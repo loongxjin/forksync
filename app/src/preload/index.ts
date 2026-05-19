@@ -22,10 +22,10 @@ import type {
   EngineConfig,
   ConfigSetData,
   AgentStreamEvent,
-  SyncWorkflow
+  SyncWorkflow,
+  PostSyncCommand
 } from '../renderer/src/types/engine'
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '../renderer/src/types/ide'
-import type { PostSyncCommand } from './engine'
 
 const api = {
   status: (exclude?: string[]): Promise<ApiResponse<StatusData>> => ipcRenderer.invoke('engine:status', exclude),
