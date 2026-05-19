@@ -271,7 +271,7 @@ export function ScanDialog({
                           />
                         )}
                       </div>
-                    )}}
+                    )}
                   </div>
                 )
               })}
