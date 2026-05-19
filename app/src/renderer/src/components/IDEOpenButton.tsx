@@ -6,7 +6,7 @@ import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSettings } from '@/contexts/SettingsContext'
 import { useSettingsDrawer } from '@/contexts/SettingsDrawerContext'
-import { useRepos } from '@/contexts/RepoContext'
+import { useToastContext } from '@/contexts/ToastContext'
 import { Code, Loader2 } from 'lucide-react'
 
 interface IDEOpenButtonProps {
@@ -17,7 +17,7 @@ export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
   const { t } = useTranslation()
   const { getDefaultIDE, openInIDE, ideLoading } = useSettings()
   const { openDrawer } = useSettingsDrawer()
-  const { showToast } = useRepos()
+  const { showToast } = useToastContext()
   const [opening, setOpening] = useState(false)
 
   const defaultIDE = getDefaultIDE()

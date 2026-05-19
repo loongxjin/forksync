@@ -55,7 +55,8 @@ import type {
   HistoryData,
   EngineConfig,
   ConfigSetData,
-  AgentStreamEvent
+  AgentStreamEvent,
+  PostSyncCommand
 } from '../renderer/src/types/engine'
 
 /** Default timeout for quick commands (status, config, history, etc.) */
@@ -63,13 +64,6 @@ const DEFAULT_TIMEOUT_MS = 30 * 1000
 
 /** Timeout for long-running commands (sync, resolve with AI agents) */
 const LONG_TIMEOUT_MS = 10 * 60 * 1000
-
-/** Post-sync command — mirrors Go PostSyncCommand */
-export interface PostSyncCommand {
-  id: string
-  name: string
-  cmd: string
-}
 
 export class EngineClient {
   private binaryPath: string

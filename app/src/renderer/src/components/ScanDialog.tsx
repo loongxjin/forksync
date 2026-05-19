@@ -4,8 +4,8 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { ScannedRepo, BranchMapping } from '@/types/engine'
-import { ArrowRight } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
+import { BranchMappingInput } from '@/components/BranchMappingInput'
 
 interface ScanDialogProps {
   open: boolean
@@ -98,16 +98,12 @@ export function ScanDialog({
     }))
   }
 
-  const updateRepoBranchMapping = (repoPath: string, field: keyof BranchMapping, value: string): void => {
+  const updateRepoBranchMapping = (repoPath: string, mapping: BranchMapping): void => {
     setRepoBranchConfigs(prev => ({
       ...prev,
       [repoPath]: {
         ...prev[repoPath],
-        mapping: {
-          ...prev[repoPath]?.mapping,
-          localBranch: field === 'localBranch' ? value : (prev[repoPath]?.mapping?.localBranch || ''),
-          remoteBranch: field === 'remoteBranch' ? value : (prev[repoPath]?.mapping?.remoteBranch || '')
-        }
+        mapping
       }
     }))
   }
@@ -243,7 +239,7 @@ export function ScanDialog({
                       )}
                     </label>
                     
-                    {/* 单个分支映射配置面板 */}
+                    {/* Branch mapping config panel */}
                     {isExpanded && selected.has(repo.path) && (
                       <div className="border-t border-border bg-background/50 p-3 space-y-3">
                         <div className="flex items-center gap-2">
@@ -266,53 +262,13 @@ export function ScanDialog({
                         )}
                         
                         {config.enabled && (
-                          <div className="flex items-center gap-2 p-2 rounded bg-background border border-border">
-                            <div className="flex-1">
-                              {repo.localBranches && repo.localBranches.length > 0 ? (
-                                <select
-                                  value={config.mapping?.localBranch || ''}
-                                  onChange={(e) => updateRepoBranchMapping(repo.path, 'localBranch', e.target.value)}
-                                  className="w-full h-7 px-2 rounded border border-input bg-background text-xs"
-                                >
-                                  <option value="">{t('scanRepo.localBranch')}</option>
-                                  {repo.localBranches.map(branch => (
-                                    <option key={branch} value={branch}>{branch}</option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <input
-                                  type="text"
-                                  placeholder={t('scanRepo.localBranchPlaceholder')}
-                                  value={config.mapping?.localBranch || ''}
-                                  onChange={(e) => updateRepoBranchMapping(repo.path, 'localBranch', e.target.value)}
-                                  className="w-full h-7 px-2 rounded border border-input bg-background text-xs"
-                                />
-                              )}
-                            </div>
-                            <ArrowRight size={12} className="text-muted-foreground" />
-                            <div className="flex-1">
-                              {repo.remoteBranches && repo.remoteBranches.length > 0 ? (
-                                <select
-                                  value={config.mapping?.remoteBranch || ''}
-                                  onChange={(e) => updateRepoBranchMapping(repo.path, 'remoteBranch', e.target.value)}
-                                  className="w-full h-7 px-2 rounded border border-input bg-background text-xs"
-                                >
-                                  <option value="">{t('scanRepo.remoteBranch')}</option>
-                                  {repo.remoteBranches.map(branch => (
-                                    <option key={branch} value={branch}>{branch}</option>
-                                  ))}
-                                </select>
-                              ) : (
-                                <input
-                                  type="text"
-                                  placeholder={t('scanRepo.remoteBranchPlaceholder')}
-                                  value={config.mapping?.remoteBranch || ''}
-                                  onChange={(e) => updateRepoBranchMapping(repo.path, 'remoteBranch', e.target.value)}
-                                  className="w-full h-7 px-2 rounded border border-input bg-background text-xs"
-                                />
-                              )}
-                            </div>
-                          </div>
+                          <BranchMappingInput
+                            value={config.mapping}
+                            onChange={(mapping) => updateRepoBranchMapping(repo.path, mapping)}
+                            localBranches={repo.localBranches}
+                            remoteBranches={repo.remoteBranches}
+                            compact
+                          />
                         )}
                       </div>
                     )}
