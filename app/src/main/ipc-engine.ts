@@ -34,7 +34,6 @@ export function assertOptionalString(value: unknown, name: string): string | und
 
 export function assertSafePath(value: unknown, name: string): string {
   const str = assertString(value, name)
-  const { resolve, normalize } = require('path') as typeof import('path')
   const resolved = resolve(normalize(str))
   if (str.includes('..')) {
     throw new Error(`Invalid ${name}: path traversal detected`)
