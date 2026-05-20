@@ -22,7 +22,7 @@ import { useToastContext } from '@/contexts/ToastContext'
 // State & Actions
 // ---------------------------------------------------------------------------
 
-interface RepoState {
+export interface RepoState {
   repos: Repo[]
   scannedRepos: ScannedRepo[]
   syncResults: SyncResult[]
@@ -31,7 +31,7 @@ interface RepoState {
   error: string | null
 }
 
-type RepoAction =
+export type RepoAction =
   | { type: 'SET_LOADING'; loading: boolean }
   | { type: 'SET_INITIALIZED' }
   | { type: 'SET_REPOS'; repos: Repo[] }
@@ -43,7 +43,7 @@ type RepoAction =
   | { type: 'REMOVE_REPO'; repoId: string }
   | { type: 'SET_ERROR'; error: string | null }
 
-const initialState: RepoState = {
+export const initialState: RepoState = {
   repos: [],
   scannedRepos: [],
   syncResults: [],
@@ -52,7 +52,7 @@ const initialState: RepoState = {
   error: null
 }
 
-function repoReducer(state: RepoState, action: RepoAction): RepoState {
+export function repoReducer(state: RepoState, action: RepoAction): RepoState {
   switch (action.type) {
     case 'SET_LOADING':
       return { ...state, loading: action.loading, error: null }

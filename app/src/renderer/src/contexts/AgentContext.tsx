@@ -19,7 +19,7 @@ import { useLogger } from '@/hooks/useLogger'
 // State & Actions
 // ---------------------------------------------------------------------------
 
-interface AgentState {
+export interface AgentState {
   agents: AgentInfo[]
   preferred: string
   sessions: AgentSessionInfo[]
@@ -31,7 +31,7 @@ interface AgentState {
   streamResults: Record<string, ResolveData | null>
 }
 
-type AgentAction =
+export type AgentAction =
   | { type: 'SET_LOADING'; loading: boolean }
   | { type: 'SET_AGENTS'; agents: AgentInfo[]; preferred: string }
   | { type: 'SET_AGENTS_SILENT'; agents: AgentInfo[]; preferred: string }
@@ -44,7 +44,7 @@ type AgentAction =
   | { type: 'STREAM_LOAD'; repoName: string; events: AgentStreamEvent[]; isRunning: boolean }
   | { type: 'STREAM_CLEAR'; repoName: string }
 
-const initialState: AgentState = {
+export const initialState: AgentState = {
   agents: [],
   preferred: '',
   sessions: [],
@@ -56,7 +56,7 @@ const initialState: AgentState = {
   streamResults: {}
 }
 
-function agentReducer(state: AgentState, action: AgentAction): AgentState {
+export function agentReducer(state: AgentState, action: AgentAction): AgentState {
   switch (action.type) {
     case 'SET_LOADING':
       return { ...state, loading: action.loading, error: null }

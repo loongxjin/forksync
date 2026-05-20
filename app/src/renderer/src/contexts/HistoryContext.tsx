@@ -13,28 +13,28 @@ import {
 import type { SyncHistoryRecord } from '@shared/types/engine'
 import { engineApi } from '@/lib/api'
 
-interface HistoryState {
+export interface HistoryState {
   records: SyncHistoryRecord[]
   loading: boolean
   initialized: boolean
   lastLoadAt: number
 }
 
-type HistoryAction =
+export type HistoryAction =
   | { type: 'SET_LOADING'; loading: boolean }
   | { type: 'SET_RECORDS'; records: SyncHistoryRecord[] }
   | { type: 'CLEAR' }
   | { type: 'SET_ERROR' }
   | { type: 'UPDATE_RECORD'; repoName: string; updates: Partial<SyncHistoryRecord> }
 
-const initialState: HistoryState = {
+export const initialState: HistoryState = {
   records: [],
   loading: false,
   initialized: false,
   lastLoadAt: 0
 }
 
-function historyReducer(state: HistoryState, action: HistoryAction): HistoryState {
+export function historyReducer(state: HistoryState, action: HistoryAction): HistoryState {
   switch (action.type) {
     case 'SET_LOADING':
       return { ...state, loading: action.loading }

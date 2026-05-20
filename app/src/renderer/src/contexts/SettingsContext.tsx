@@ -21,7 +21,7 @@ import i18n from '@/i18n'
 
 type Theme = 'dark' | 'light' | 'system'
 
-interface SettingsState {
+export interface SettingsState {
   theme: Theme
   ideConfig: IDEConfig | null
   ideLoading: boolean
@@ -31,7 +31,7 @@ interface SettingsState {
   configError: string | null
 }
 
-type SettingsAction =
+export type SettingsAction =
   | { type: 'SET_THEME'; theme: Theme }
   | { type: 'SET_IDE_CONFIG'; config: IDEConfig }
   | { type: 'SET_IDE_LOADING'; loading: boolean }
@@ -40,7 +40,7 @@ type SettingsAction =
   | { type: 'SET_CONFIG_LOADING'; loading: boolean }
   | { type: 'SET_CONFIG_ERROR'; error: string | null }
 
-const initialState: SettingsState = {
+export const initialState: SettingsState = {
   theme: (() => { try { return (localStorage.getItem('forksync-theme') as Theme) || 'dark' } catch { return 'dark' as Theme } })(),
   ideConfig: null,
   ideLoading: true,
@@ -50,7 +50,7 @@ const initialState: SettingsState = {
   configError: null
 }
 
-function settingsReducer(state: SettingsState, action: SettingsAction): SettingsState {
+export function settingsReducer(state: SettingsState, action: SettingsAction): SettingsState {
   switch (action.type) {
     case 'SET_THEME':
       return { ...state, theme: action.theme }
