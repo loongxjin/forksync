@@ -1,4 +1,4 @@
-import { type RepoStatus } from '@/types/engine'
+import { type RepoStatus } from '@shared/types/engine'
 import { useTranslation } from 'react-i18next'
 import { CheckCircle2, Loader2, AlertTriangle, Zap, XCircle, Circle, PauseCircle } from 'lucide-react'
 

@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import type { WorkflowStep, WorkflowStepStatus } from '@/types/engine'
+import type { WorkflowStep, WorkflowStepStatus } from '@shared/types/engine'
 import {
   CheckCircle2,
   XCircle,

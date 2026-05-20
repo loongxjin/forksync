@@ -4,9 +4,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import type { BranchMapping } from '@/types/engine'
-import { ArrowRight } from 'lucide-react'
+import type { BranchMapping } from '@shared/types/engine'
 import { Modal } from '@/components/ui/modal'
+import { BranchMappingInput } from '@/components/BranchMappingInput'
 
 interface AddRepoDialogProps {
   open: boolean
@@ -96,14 +96,6 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
   const handleClose = (): void => {
     resetForm()
     onClose()
-  }
-
-  const updateBranchMapping = (field: keyof BranchMapping, value: string): void => {
-    setBranchMapping(prev => ({
-      ...prev,
-      localBranch: field === 'localBranch' ? value : (prev?.localBranch || ''),
-      remoteBranch: field === 'remoteBranch' ? value : (prev?.remoteBranch || '')
-    }))
   }
 
   return (
@@ -200,55 +192,12 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
                   {loadingBranches ? (
                     <div className="text-sm text-muted-foreground">{t('common.loading')}</div>
                   ) : (
-                    <div className="flex items-center gap-3 p-3 rounded-md border border-border bg-background/50">
-                      <div className="flex-1 space-y-1">
-                        <Label className="text-xs">{t('addRepo.localBranch')}</Label>
-                        {localBranches.length > 0 ? (
-                          <select
-                            value={branchMapping?.localBranch || ''}
-                            onChange={(e) => updateBranchMapping('localBranch', e.target.value)}
-                            className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm"
-                          >
-                            <option value="">{t('common.select')}</option>
-                            {localBranches.map(branch => (
-                              <option key={branch} value={branch}>{branch}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <Input
-                            placeholder={t('addRepo.localPlaceholder')}
-                            value={branchMapping?.localBranch || ''}
-                            onChange={(e) => updateBranchMapping('localBranch', e.target.value)}
-                            className="h-8"
-                          />
-                        )}
-                      </div>
-                      
-                      <ArrowRight size={16} className="text-muted-foreground" />
-                      
-                      <div className="flex-1 space-y-1">
-                        <Label className="text-xs">{t('addRepo.remoteBranch')}</Label>
-                        {remoteBranches.length > 0 ? (
-                          <select
-                            value={branchMapping?.remoteBranch || ''}
-                            onChange={(e) => updateBranchMapping('remoteBranch', e.target.value)}
-                            className="w-full h-8 px-2 rounded-md border border-input bg-background text-sm"
-                          >
-                            <option value="">{t('common.select')}</option>
-                            {remoteBranches.map(branch => (
-                              <option key={branch} value={branch}>{branch}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          <Input
-                            placeholder={t('addRepo.remotePlaceholder')}
-                            value={branchMapping?.remoteBranch || ''}
-                            onChange={(e) => updateBranchMapping('remoteBranch', e.target.value)}
-                            className="h-8"
-                          />
-                        )}
-                      </div>
-                    </div>
+                    <BranchMappingInput
+                      value={branchMapping}
+                      onChange={setBranchMapping}
+                      localBranches={localBranches}
+                      remoteBranches={remoteBranches}
+                    />
                   )}
                 </>
               )}

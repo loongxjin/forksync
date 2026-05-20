@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import type { RepoStatus } from '@/types/engine'
+import type { RepoStatus } from '@shared/types/engine'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))

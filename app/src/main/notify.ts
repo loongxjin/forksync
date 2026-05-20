@@ -7,7 +7,7 @@
 
 import { Notification, BrowserWindow } from 'electron'
 import { t } from './i18n'
-import type { SyncResult } from '../renderer/src/types/engine'
+import type { SyncResult } from '@shared/types/engine'
 import type { EngineClient } from './engine'
 import log from './logger'
 

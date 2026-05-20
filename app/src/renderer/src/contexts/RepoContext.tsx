@@ -10,28 +10,28 @@ import {
   useRef,
   type ReactNode
 } from 'react'
-import type { Repo, ScannedRepo, SyncResult, BranchMapping } from '@/types/engine'
+import type { Repo, ScannedRepo, SyncResult, BranchMapping } from '@shared/types/engine'
 import { engineApi } from '@/lib/api'
 import { isConflictStatus } from '@/lib/utils'
-import type { ToastState } from '@/components/ui/toast'
 import i18n from '@/i18n'
 import { useSettings } from '@/contexts/SettingsContext'
+import { useAutoSummarize } from '@/hooks/useAutoSummarize'
+import { useToastContext } from '@/contexts/ToastContext'
 
 // ---------------------------------------------------------------------------
 // State & Actions
 // ---------------------------------------------------------------------------
 
-interface RepoState {
+export interface RepoState {
   repos: Repo[]
   scannedRepos: ScannedRepo[]
   syncResults: SyncResult[]
   loading: boolean
   initialized: boolean
   error: string | null
-  toast: ToastState
 }
 
-type RepoAction =
+export type RepoAction =
   | { type: 'SET_LOADING'; loading: boolean }
   | { type: 'SET_INITIALIZED' }
   | { type: 'SET_REPOS'; repos: Repo[] }
@@ -42,20 +42,17 @@ type RepoAction =
   | { type: 'SET_REPO_STATUS'; repoId: string; status: Repo['status'] }
   | { type: 'REMOVE_REPO'; repoId: string }
   | { type: 'SET_ERROR'; error: string | null }
-  | { type: 'SHOW_TOAST'; message: string; toastType: ToastState['type'] }
-  | { type: 'HIDE_TOAST' }
 
-const initialState: RepoState = {
+export const initialState: RepoState = {
   repos: [],
   scannedRepos: [],
   syncResults: [],
   loading: false,
   initialized: false,
-  error: null,
-  toast: { message: '', visible: false, type: 'info' }
+  error: null
 }
 
-function repoReducer(state: RepoState, action: RepoAction): RepoState {
+export function repoReducer(state: RepoState, action: RepoAction): RepoState {
   switch (action.type) {
     case 'SET_LOADING':
       return { ...state, loading: action.loading, error: null }
@@ -88,13 +85,6 @@ function repoReducer(state: RepoState, action: RepoAction): RepoState {
       }
     case 'SET_ERROR':
       return { ...state, error: action.error, loading: false }
-    case 'SHOW_TOAST':
-      return {
-        ...state,
-        toast: { message: action.message, visible: true, type: action.toastType }
-      }
-    case 'HIDE_TOAST':
-      return { ...state, toast: { ...state.toast, visible: false } }
     default:
       return state
   }
@@ -113,8 +103,6 @@ interface RepoContextValue extends RepoState {
   removeRepo: (name: string) => Promise<void>
   updateRepoStatus: (repoId: string, status: Repo['status']) => void
   updateRepo: (repo: Repo) => void
-  showToast: (message: string, type?: ToastState['type']) => void
-  hideToast: () => void
   startupSyncDone: boolean
   markStartupSyncDone: () => void
 }
@@ -125,12 +113,11 @@ const RepoContext = createContext<RepoContextValue | null>(null)
 // Provider
 // ---------------------------------------------------------------------------
 
-const TOAST_DURATION = 2000 // 2 seconds
-
 export function RepoProvider({ children }: { children: ReactNode }): JSX.Element {
   const [state, dispatch] = useReducer(repoReducer, initialState)
-  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { engineConfig } = useSettings()
+  const { triggerSummarize } = useAutoSummarize()
+  const { showToast } = useToastContext()
 
   // Guard against concurrent refresh calls
   const refreshingRef = useRef(false)
@@ -235,13 +222,11 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       await refresh()
 
       // Fire-and-forget AI summarization for synced repos with commits
-      if (engineConfig?.Sync?.AutoSummary && res.success) {
+      if (res.success) {
         const results = res.data.results ?? []
         for (const r of results) {
           if (r.status === 'up_to_date' && (r.commitsPulled ?? 0) > 0) {
-            engineApi.summarize(r.repoName).catch(() => {
-              // ignore background summary errors
-            })
+            triggerSummarize(r.repoName)
           }
         }
       }
@@ -252,28 +237,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       stopSyncPoll()
       syncingAllRef.current = false
     }
-  }, [state, refresh, engineConfig, startSyncPoll, stopSyncPoll])
-
-  // Toast functions must be defined before syncRepo to avoid TDZ error
-  const hideToast = useCallback(() => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current)
-      toastTimeoutRef.current = null
-    }
-    dispatch({ type: 'HIDE_TOAST' })
-  }, [])
-
-  const showToast = useCallback((message: string, toastType: ToastState['type'] = 'info') => {
-    // Clear any existing timeout
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current)
-    }
-    dispatch({ type: 'SHOW_TOAST', message, toastType })
-    // Auto-hide after duration
-    toastTimeoutRef.current = setTimeout(() => {
-      dispatch({ type: 'HIDE_TOAST' })
-    }, TOAST_DURATION)
-  }, [])
+  }, [state, refresh, engineConfig, showToast, startSyncPoll, stopSyncPoll])
 
   // Track syncing repos to prevent duplicate sync requests
   const syncingReposRef = useRef<Set<string>>(new Set())
@@ -321,12 +285,10 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         await refresh()
 
         // Fire-and-forget AI summarization if auto_summary is enabled
-        if (engineConfig?.Sync?.AutoSummary && res.success) {
+        if (res.success) {
           const r = res.data.results?.find((x) => x.repoName === name)
           if (r && r.status === 'up_to_date' && (r.commitsPulled ?? 0) > 0) {
-            engineApi.summarize(name).catch(() => {
-              // ignore background summary errors
-            })
+            triggerSummarize(name)
           }
         }
       } catch (err) {
@@ -402,7 +364,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
 
   return (
     <RepoContext.Provider
-      value={{ ...state, refresh, syncAll, syncRepo, scan, addRepo, removeRepo, updateRepoStatus, updateRepo, showToast, hideToast, startupSyncDone: startupSyncDoneRef.current, markStartupSyncDone }}
+      value={{ ...state, refresh, syncAll, syncRepo, scan, addRepo, removeRepo, updateRepoStatus, updateRepo, startupSyncDone: startupSyncDoneRef.current, markStartupSyncDone }}
     >
       {children}
     </RepoContext.Provider>
