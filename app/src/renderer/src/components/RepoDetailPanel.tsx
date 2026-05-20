@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { engineApi } from '@/lib/api'
-import type { Repo, PostSyncCommand } from '@/types/engine'
+import type { Repo, PostSyncCommand } from '@shared/types/engine'
 
 interface RepoDetailPanelProps {
   repo: Repo

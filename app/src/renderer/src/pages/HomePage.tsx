@@ -19,13 +19,15 @@ import { ScanDialog } from '@/components/ScanDialog'
 import { RepoSettingsDialog } from '@/components/RepoSettingsDialog'
 import { engineApi } from '@/lib/api'
 import { useAutoSummarize } from '@/hooks/useAutoSummarize'
+import { useLogger } from '@/hooks/useLogger'
 import { useToastContext } from '@/contexts/ToastContext'
 import { HistoryRow } from '@/components/HistoryRow'
-import type { Repo, RepoStatus, ResolveData, SyncHistoryRecord } from '@/types/engine'
+import type { Repo, RepoStatus, ResolveData, SyncHistoryRecord } from '@shared/types/engine'
 import { RotateCw, RefreshCw, FolderOpen, ChevronDown, ChevronRight, Search, Plus } from 'lucide-react'
 
 export function HomePage(): JSX.Element {
   const { t } = useTranslation()
+  const logger = useLogger('HomePage')
   const {
     repos, scannedRepos, loading, initialized, error, refresh, syncAll, syncRepo,
     scan, addRepo, removeRepo, updateRepoStatus, updateRepo, syncResults,
@@ -329,7 +331,7 @@ export function HomePage(): JSX.Element {
     let hasNew = false
     for (const [repoName, result] of Object.entries(streamResults)) {
       hasNew = true
-      console.log('[HomePage] stream result for', repoName, 'result:', result ? 'non-null' : 'null')
+      logger.log('stream result for', repoName, 'result:', result ? 'non-null' : 'null')
       if (result) {
         setResolveResults((prev) => ({ ...prev, [repoName]: result }))
       }
@@ -343,11 +345,11 @@ export function HomePage(): JSX.Element {
       }
     }
     if (hasNew) {
-      console.log('[HomePage] calling refresh after stream done')
+      logger.log('calling refresh after stream done')
       refreshRef.current().then(() => {
-        console.log('[HomePage] refresh completed after stream done')
+        logger.log('refresh completed after stream done')
       }).catch((e) => {
-        console.error('[HomePage] refresh failed after stream done', e)
+        logger.error('refresh failed after stream done', e)
       })
       loadHistory()
     }
@@ -593,7 +595,7 @@ export function HomePage(): JSX.Element {
                       <WorkflowSteps
                         repo={repo}
                         streamEvents={streamEvents[repo.name] ?? []}
-                        isStreamLive={streamLive.has(repo.name)}
+                        isStreamLive={!!streamLive[repo.name]}
                         resolveResult={resolveResults[repo.name] ?? null}
                         onResolveWithAgent={() => handleResolve(repo)}
                         onOpenIDE={() => window.api.ideOpen(repo.path, 'default')}
@@ -714,7 +716,7 @@ export function HomePage(): JSX.Element {
         }}
         repoName={terminalDrawerRepo ?? ''}
         events={terminalDrawerRepo ? (streamEvents[terminalDrawerRepo] ?? []) : []}
-        isLive={terminalDrawerRepo ? streamLive.has(terminalDrawerRepo) : false}
+        isLive={terminalDrawerRepo ? !!streamLive[terminalDrawerRepo] : false}
       />
 
       {/* Diff Drawer */}

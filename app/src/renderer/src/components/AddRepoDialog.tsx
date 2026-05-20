@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import type { BranchMapping } from '@/types/engine'
+import type { BranchMapping } from '@shared/types/engine'
 import { Modal } from '@/components/ui/modal'
 import { BranchMappingInput } from '@/components/BranchMappingInput'
 

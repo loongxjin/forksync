@@ -8,9 +8,10 @@ import {
   SheetClose
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import type { AgentStreamEvent } from '@/types/engine'
+import type { AgentStreamEvent } from '@shared/types/engine'
 import { Terminal, X, Wrench, AlertTriangle, CheckCircle2, XCircle, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useLogger } from '@/hooks/useLogger'
 
 interface AgentTerminalDrawerProps {
   open: boolean
@@ -54,6 +55,7 @@ export function AgentTerminalDrawer({
   isLive
 }: AgentTerminalDrawerProps): JSX.Element {
   const { t } = useTranslation()
+  const logger = useLogger('AgentTerminal')
   const scrollRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
   const [userScrolled, setUserScrolled] = useState(false)
@@ -66,7 +68,7 @@ export function AgentTerminalDrawer({
     if (events.length !== prevEventsLenRef.current) {
       const typeDist: Record<string, number> = {}
       for (const ev of events) { typeDist[ev.t] = (typeDist[ev.t] || 0) + 1 }
-      console.log('[AgentTerminal] events changed for', repoName, 'count:', events.length, '(was:', prevEventsLenRef.current, '), types:', JSON.stringify(typeDist), ', isLive:', isLive)
+      logger.log('events changed for', repoName, 'count:', events.length, '(was:', prevEventsLenRef.current, '), types:', JSON.stringify(typeDist), ', isLive:', isLive)
       prevEventsLenRef.current = events.length
     }
   }, [events, repoName, isLive])

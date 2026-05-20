@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DiffViewer } from '@/components/DiffViewer'
 import { StepItem } from '@/components/StepItem'
-import type { Repo, ResolveData, AgentStreamEvent } from '@/types/engine'
+import type { Repo, ResolveData, AgentStreamEvent } from '@shared/types/engine'
 import { cn } from '@/lib/utils'
+import { shouldShowStepDetail, shouldShowResolveDetails } from '@/lib/workflow-helpers'
 import { Bot, Monitor, GitPullRequestClosed, RotateCcw, Terminal, Eye, FileDiff, X, FileText, AlertTriangle } from 'lucide-react'
 
 interface WorkflowStepsProps {
@@ -58,9 +59,7 @@ export function WorkflowSteps({
   const agentResult = resolveResult?.agentResult
   const conflicts = resolveResult?.conflicts ?? []
   const diff = agentResult?.diff
-  const showResolveDetails = resolveResult && (
-    agentResult?.agentName || agentResult?.summary || conflicts.length > 0 || resolveResult?.commitError
-  )
+  const showResolveDetails = shouldShowResolveDetails(resolveResult)
 
   const getStepProps = (index: number) => {
     const step = steps[index]
@@ -78,19 +77,7 @@ export function WorkflowSteps({
           const isAgentResolveRunning = stepRecord.step === 'agent_resolve' && stepRecord.status === 'running'
           const isWaiting = stepRecord.status === 'waiting'
 
-          // Should we show resolve details after this step?
-          const showDetailsAfterAgentResolve =
-            stepRecord.step === 'agent_resolve' &&
-            (stepRecord.status === 'success' || stepRecord.status === 'failed')
-          const agentResolveFinished = steps.some(
-            s => s.step === 'agent_resolve' && (s.status === 'success' || s.status === 'failed')
-          )
-          const showDetailsAfterAcceptWaiting =
-            stepRecord.step === 'accept_changes' &&
-            stepRecord.status === 'waiting' &&
-            !agentResolveFinished
-
-          const showDetails = showDetailsAfterAgentResolve || showDetailsAfterAcceptWaiting
+          const showDetails = shouldShowStepDetail(stepRecord, steps)
 
           return (
             <StepItem

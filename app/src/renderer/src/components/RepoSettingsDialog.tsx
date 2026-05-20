@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { PostSyncCommand } from '@/types/engine'
+import type { PostSyncCommand } from '@shared/types/engine'
 import { engineApi } from '@/lib/api'
 import { Trash2, X } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
