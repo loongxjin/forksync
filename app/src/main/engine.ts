@@ -98,22 +98,22 @@ export class EngineClient {
     if (exclude && exclude.length > 0) {
       args.push('--exclude', exclude.join(','))
     }
-    return this.exec<StatusData>(args)
+    return this.execCommand<StatusData>(args)
   }
 
   /** `forksync sync --all --json` */
   async syncAll(): Promise<ApiResponse<SyncData>> {
-    return this.exec<SyncData>(['sync', '--all'], LONG_TIMEOUT_MS)
+    return this.execCommand<SyncData>(['sync', '--all'], LONG_TIMEOUT_MS)
   }
 
   /** `forksync sync <name> --json` */
   async syncRepo(name: string): Promise<ApiResponse<SyncData>> {
-    return this.exec<SyncData>(['sync', name], LONG_TIMEOUT_MS)
+    return this.execCommand<SyncData>(['sync', name], LONG_TIMEOUT_MS)
   }
 
   /** `forksync scan <dir> --json` */
   async scan(dir: string): Promise<ApiResponse<ScanData>> {
-    return this.exec<ScanData>(['scan', dir])
+    return this.execCommand<ScanData>(['scan', dir])
   }
 
   /** `forksync add <path> [--upstream <url>] [--branch-mapping <json>] --json` */
@@ -125,13 +125,14 @@ export class EngineClient {
     if (branchMapping && branchMapping.localBranch && branchMapping.remoteBranch) {
       args.push('--branch-mapping', JSON.stringify(branchMapping))
     }
-    return this.exec<AddData>(args)
+    return this.execCommand<AddData>(args)
   }
 
   /** `forksync remove <name> --json` */
   async remove(name: string): Promise<ApiResponse<RemoveData>> {
-    return this.exec<RemoveData>(['remove', name])
+    return this.execCommand<RemoveData>(['remove', name])
   }
+
   /** `forksync resolve <name> [--agent <name>] [--no-confirm] --json` */
   async resolve(
     name: string,
@@ -143,7 +144,7 @@ export class EngineClient {
     if (opts?.noConfirm) args.push('--no-confirm')
     if (opts?.retry) args.push('--retry')
     if (opts?.manual) args.push('--manual')
-    return this.exec<ResolveData>(args, LONG_TIMEOUT_MS)
+    return this.execCommand<ResolveData>(args, LONG_TIMEOUT_MS)
   }
 
   /** `forksync resolve <name> --prepare --json` (lightweight workflow state update) */
@@ -399,32 +400,32 @@ export class EngineClient {
 
   /** `forksync resolve <name> --accept --json` */
   async resolveAccept(name: string): Promise<ApiResponse<AcceptData>> {
-    return this.exec<AcceptData>(['resolve', name, '--accept'], LONG_TIMEOUT_MS)
+    return this.execCommand<AcceptData>(['resolve', name, '--accept'], LONG_TIMEOUT_MS)
   }
 
   /** `forksync resolve <name> --reject --json` */
   async resolveReject(name: string): Promise<ApiResponse<RejectData>> {
-    return this.exec<RejectData>(['resolve', name, '--reject'], LONG_TIMEOUT_MS)
+    return this.execCommand<RejectData>(['resolve', name, '--reject'], LONG_TIMEOUT_MS)
   }
 
   /** `forksync agent list --json` */
   async agentList(): Promise<ApiResponse<AgentListData>> {
-    return this.exec<AgentListData>(['agent', 'list'])
+    return this.execCommand<AgentListData>(['agent', 'list'])
   }
 
   /** `forksync agent sessions --json` */
   async agentSessions(): Promise<ApiResponse<AgentSessionsData>> {
-    return this.exec<AgentSessionsData>(['agent', 'sessions'])
+    return this.execCommand<AgentSessionsData>(['agent', 'sessions'])
   }
 
   /** `forksync agent cleanup --json` */
   async agentCleanup(): Promise<ApiResponse<AgentCleanupData>> {
-    return this.exec<AgentCleanupData>(['agent', 'cleanup'])
+    return this.execCommand<AgentCleanupData>(['agent', 'cleanup'])
   }
 
   /** `forksync agent reset <name> --json` */
   async agentReset(name: string): Promise<ApiResponse<AgentResetData>> {
-    return this.exec<AgentResetData>(['agent', 'reset', name])
+    return this.execCommand<AgentResetData>(['agent', 'reset', name])
   }
 
   /** `forksync history [--limit N] [repo-name] --json` */
@@ -436,7 +437,7 @@ export class EngineClient {
     if (limit) {
       args.push('--limit', String(limit))
     }
-    return this.exec<HistoryData>(args)
+    return this.execCommand<HistoryData>(args)
   }
 
   /** `forksync history --cleanup [--keep-days N] [repo-name] --json` */
@@ -448,60 +449,55 @@ export class EngineClient {
     if (opts?.repoName) {
       args.push(opts.repoName)
     }
-    return this.exec<{ message: string }>(args)
+    return this.execCommand<{ message: string }>(args)
   }
 
   /** `forksync config get --json` */
   async configGet(): Promise<ApiResponse<EngineConfig>> {
-    return this.exec<EngineConfig>(['config', 'get'])
+    return this.execCommand<EngineConfig>(['config', 'get'])
   }
 
   /** `forksync config set <key> <value> --json` */
   async configSet(key: string, value: string): Promise<ApiResponse<ConfigSetData>> {
-    return this.exec<ConfigSetData>(['config', 'set', key, value])
+    return this.execCommand<ConfigSetData>(['config', 'set', key, value])
   }
 
   /** `forksync post-sync list <name> --json` */
   async postSyncList(repoName: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> {
-    return this.exec<{ commands: PostSyncCommand[] }>(['post-sync', 'list', repoName])
+    return this.execCommand<{ commands: PostSyncCommand[] }>(['post-sync', 'list', repoName])
   }
 
   /** `forksync post-sync add <name> --name <name> --cmd <cmd> --json` */
   async postSyncAdd(repoName: string, cmdName: string, cmd: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> {
-    return this.exec<{ commands: PostSyncCommand[] }>(['post-sync', 'add', repoName, '--name', cmdName, '--cmd', cmd])
+    return this.execCommand<{ commands: PostSyncCommand[] }>(['post-sync', 'add', repoName, '--name', cmdName, '--cmd', cmd])
   }
 
   /** `forksync post-sync remove <name> --id <cmd-id> --json` */
   async postSyncRemove(repoName: string, cmdId: string): Promise<ApiResponse<{ commands: PostSyncCommand[] }>> {
-    return this.exec<{ commands: PostSyncCommand[] }>(['post-sync', 'remove', repoName, '--id', cmdId])
+    return this.execCommand<{ commands: PostSyncCommand[] }>(['post-sync', 'remove', repoName, '--id', cmdId])
   }
 
   /** `forksync summarize <repo-name> --json` */
   async summarize(repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> {
-    return this.exec<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName], LONG_TIMEOUT_MS)
+    return this.execCommand<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName], LONG_TIMEOUT_MS)
   }
 
   /** `forksync summarize <repo-name> --retry --json` */
   async summarizeRetry(repoName: string): Promise<ApiResponse<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>> {
-    return this.exec<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName, '--retry'], LONG_TIMEOUT_MS)
+    return this.execCommand<{ historyId: number; repoName: string; summary: string; summaryStatus: string }>(['summarize', repoName, '--retry'], LONG_TIMEOUT_MS)
   }
 
 
   // -----------------------------------------------------------------------
-  // Private — spawn + parse logic
+  // Private — unified command execution
   // -----------------------------------------------------------------------
 
   /**
    * Execute a CLI command and parse the JSON response.
+   * All command methods delegate to this single entry point, centralizing
+   * spawn logic, timeout handling, and error parsing.
    */
-  private async exec<T>(args: string[], timeout: number = DEFAULT_TIMEOUT_MS): Promise<ApiResponse<T>> {
-    return this.execRaw<T>(args, timeout)
-  }
-
-  /**
-   * Low-level exec: spawn the Go binary, collect stdout, parse JSON.
-   */
-  private execRaw<T>(args: string[], timeout: number): Promise<ApiResponse<T>> {
+  private execCommand<T>(args: string[], timeout: number = DEFAULT_TIMEOUT_MS): Promise<ApiResponse<T>> {
     return new Promise((resolve, reject) => {
       const fullArgs = this.buildArgs(args)
 
