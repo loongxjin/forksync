@@ -7,12 +7,17 @@
     "outDir": "./out",
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["src/shared/*"]
+    }
   },
   "include": [
     "electron.vite.config.ts",
     "src/main/**/*",
     "src/preload/**/*",
+    "src/shared/**/*",
     "src/renderer/src/types/**/*"
   ]
 }
