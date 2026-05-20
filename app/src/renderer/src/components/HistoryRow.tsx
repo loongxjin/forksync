@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { CheckCircle2, Zap, XCircle } from 'lucide-react'
-import type { SyncHistoryRecord } from '@/types/engine'
+import type { SyncHistoryRecord } from '@shared/types/engine'
 
 // ---------------------------------------------------------------------------
 // Helper functions

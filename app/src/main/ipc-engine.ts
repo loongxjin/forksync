@@ -6,7 +6,7 @@ import { ipcMain } from 'electron'
 import { resolve, normalize } from 'path'
 import { EngineClient } from './engine'
 import { notifySyncResults, updateNotificationConfig } from './notify'
-import type { AgentStreamEvent } from '../renderer/src/types/engine'
+import type { AgentStreamEvent } from '@shared/types/engine'
 import log from './logger'
 
 // --- Input validation helpers ---

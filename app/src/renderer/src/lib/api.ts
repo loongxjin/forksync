@@ -26,8 +26,8 @@ import type {
   PostSyncCommandsData,
   AgentStreamEvent,
   SyncWorkflow
-} from '@/types/engine'
-import type { IDEInfo, IDEConfig, IDEOpenResult } from '@/types/ide'
+} from '@shared/types/engine'
+import type { IDEInfo, IDEConfig, IDEOpenResult } from '@shared/types/ide'
 
 export interface EngineAPI {
   status(exclude?: string[]): Promise<ApiResponse<StatusData>>

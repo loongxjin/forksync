@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { ArrowRight } from 'lucide-react'
 import { Label } from './ui/label'
 import { Input } from './ui/input'
-import type { BranchMapping } from '@/types/engine'
+import type { BranchMapping } from '@shared/types/engine'
 
 // ---------------------------------------------------------------------------
 // Props

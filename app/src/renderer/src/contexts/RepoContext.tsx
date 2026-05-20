@@ -10,7 +10,7 @@ import {
   useRef,
   type ReactNode
 } from 'react'
-import type { Repo, ScannedRepo, SyncResult, BranchMapping } from '@/types/engine'
+import type { Repo, ScannedRepo, SyncResult, BranchMapping } from '@shared/types/engine'
 import { engineApi } from '@/lib/api'
 import { isConflictStatus } from '@/lib/utils'
 import i18n from '@/i18n'

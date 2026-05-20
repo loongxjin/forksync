@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
-import type { Repo, RepoStatus } from '@/types/engine'
+import type { Repo, RepoStatus } from '@shared/types/engine'
 import { useStatusConfig, StatusIcon, getStatusColor } from '@/components/StatusCard'
 import { IDEOpenButton } from '@/components/IDEOpenButton'
 import { isConflictStatus, cn } from '@/lib/utils'

@@ -8,7 +8,7 @@ import {
   SheetClose
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import type { AgentStreamEvent } from '@/types/engine'
+import type { AgentStreamEvent } from '@shared/types/engine'
 import { Terminal, X, Wrench, AlertTriangle, CheckCircle2, XCircle, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 

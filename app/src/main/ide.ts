@@ -12,7 +12,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import log from './logger'
 import { homedir } from 'os'
-import type { IDEInfo, CustomIDE, IDEConfig, IDEOpenResult } from '../renderer/src/types/ide'
+import type { IDEInfo, CustomIDE, IDEConfig, IDEOpenResult } from '@shared/types/ide'
 
 // ---------------------------------------------------------------------------
 // Built-in IDE definitions

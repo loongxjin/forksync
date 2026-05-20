@@ -21,7 +21,7 @@ import { engineApi } from '@/lib/api'
 import { useAutoSummarize } from '@/hooks/useAutoSummarize'
 import { useToastContext } from '@/contexts/ToastContext'
 import { HistoryRow } from '@/components/HistoryRow'
-import type { Repo, RepoStatus, ResolveData, SyncHistoryRecord } from '@/types/engine'
+import type { Repo, RepoStatus, ResolveData, SyncHistoryRecord } from '@shared/types/engine'
 import { RotateCw, RefreshCw, FolderOpen, ChevronDown, ChevronRight, Search, Plus } from 'lucide-react'
 
 export function HomePage(): JSX.Element {

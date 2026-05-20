@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import type { RepoStatus } from '@/types/engine'
+import type { RepoStatus } from '@shared/types/engine'
 import { CheckCircle2, Loader2, AlertTriangle, XCircle, ArrowDownToLine, PauseCircle } from 'lucide-react'
 
 export type FilterStatus = RepoStatus | null

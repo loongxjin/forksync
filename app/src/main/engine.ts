@@ -57,7 +57,7 @@ import type {
   ConfigSetData,
   AgentStreamEvent,
   PostSyncCommand
-} from '../renderer/src/types/engine'
+} from '@shared/types/engine'
 
 /** Default timeout for quick commands (status, config, history, etc.) */
 const DEFAULT_TIMEOUT_MS = 30 * 1000

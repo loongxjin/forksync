@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import type { ScannedRepo, BranchMapping } from '@/types/engine'
+import type { ScannedRepo, BranchMapping } from '@shared/types/engine'
 import { Modal } from '@/components/ui/modal'
 import { BranchMappingInput } from '@/components/BranchMappingInput'
 

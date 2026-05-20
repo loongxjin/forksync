@@ -10,7 +10,7 @@ import {
   useCallback,
   type ReactNode
 } from 'react'
-import type { SyncHistoryRecord } from '@/types/engine'
+import type { SyncHistoryRecord } from '@shared/types/engine'
 import { engineApi } from '@/lib/api'
 
 interface HistoryState {

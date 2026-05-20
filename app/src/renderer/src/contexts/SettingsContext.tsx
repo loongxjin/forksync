@@ -11,8 +11,8 @@ import {
   type ReactNode
 } from 'react'
 import { engineApi } from '@/lib/api'
-import type { IDEConfig, IDEInfo } from '@/types/ide'
-import type { EngineConfig } from '@/types/engine'
+import type { IDEConfig, IDEInfo } from '@shared/types/ide'
+import type { EngineConfig } from '@shared/types/engine'
 import i18n from '@/i18n'
 
 // ---------------------------------------------------------------------------

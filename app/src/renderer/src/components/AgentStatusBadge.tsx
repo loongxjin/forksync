@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Bot } from 'lucide-react'
-import type { AgentInfo } from '@/types/engine'
+import type { AgentInfo } from '@shared/types/engine'
 
 interface AgentStatusBadgeProps {
   agents: AgentInfo[]

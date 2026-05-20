@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DiffViewer } from '@/components/DiffViewer'
 import { StepItem } from '@/components/StepItem'
-import type { Repo, ResolveData, AgentStreamEvent } from '@/types/engine'
+import type { Repo, ResolveData, AgentStreamEvent } from '@shared/types/engine'
 import { cn } from '@/lib/utils'
 import { Bot, Monitor, GitPullRequestClosed, RotateCcw, Terminal, Eye, FileDiff, X, FileText, AlertTriangle } from 'lucide-react'
 

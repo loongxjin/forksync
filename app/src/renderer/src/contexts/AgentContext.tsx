@@ -11,7 +11,7 @@ import {
   useEffect,
   type ReactNode
 } from 'react'
-import type { AgentInfo, AgentSessionInfo, ResolveData, AgentResetData, AgentStreamEvent } from '@/types/engine'
+import type { AgentInfo, AgentSessionInfo, ResolveData, AgentResetData, AgentStreamEvent } from '@shared/types/engine'
 import { engineApi } from '@/lib/api'
 
 // ---------------------------------------------------------------------------
