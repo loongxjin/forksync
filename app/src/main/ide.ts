@@ -13,6 +13,7 @@ import { join } from 'path'
 import log from './logger'
 import { homedir } from 'os'
 import type { IDEInfo, CustomIDE, IDEConfig, IDEOpenResult } from '@shared/types/ide'
+import { assertString, assertOptionalString, assertSafePath } from './ipc-engine'
 
 // ---------------------------------------------------------------------------
 // Built-in IDE definitions
@@ -305,6 +306,8 @@ export function registerIDEHandlers(): void {
   })
 
   ipcMain.handle('ide:open', async (_event, repoPath: string, ideId: string) => {
+    assertSafePath(repoPath, 'repoPath')
+    assertString(ideId, 'ideId')
     return openInIDE(repoPath, ideId)
   })
 
@@ -330,6 +333,7 @@ export function registerIDEHandlers(): void {
   })
 
   ipcMain.handle('ide:setDefault', async (_event, ideId: string | null) => {
+    if (ideId !== null) assertString(ideId, 'ideId')
     const config = loadPersistedConfig()
     config.defaultIDE = ideId
     savePersistedConfig(config)
@@ -337,6 +341,8 @@ export function registerIDEHandlers(): void {
   })
 
   ipcMain.handle('ide:addCustom', async (_event, name: string, cliCommand: string) => {
+    assertString(name, 'name')
+    assertString(cliCommand, 'cliCommand')
     const config = loadPersistedConfig()
     const newCustom: CustomIDE = {
       id: `custom-${Date.now()}`,
@@ -354,6 +360,7 @@ export function registerIDEHandlers(): void {
   })
 
   ipcMain.handle('ide:removeCustom', async (_event, ideId: string) => {
+    assertString(ideId, 'ideId')
     const config = loadPersistedConfig()
     config.customIDEs = config.customIDEs.filter((c) => c.id !== ideId)
     if (config.defaultIDE === ideId) {
