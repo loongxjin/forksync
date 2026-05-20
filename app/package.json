@@ -1,6 +1,6 @@
 {
   "name": "forksync",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Auto-sync fork repos with AI agent conflict resolution",
   "homepage": "https://github.com/loongxjin/forksync",
   "author": "ForkSync Team <forksync@gmail.com>",
