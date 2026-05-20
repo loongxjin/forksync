@@ -26,7 +26,7 @@ interface AgentState {
   initialized: boolean
   error: string | null
   streamEvents: Record<string, AgentStreamEvent[]>
-  streamLive: Set<string>
+  streamLive: Record<string, boolean>
   streamResults: Record<string, ResolveData | null>
 }
 
@@ -51,7 +51,7 @@ const initialState: AgentState = {
   initialized: false,
   error: null,
   streamEvents: {},
-  streamLive: new Set(),
+  streamLive: {},
   streamResults: {}
 }
 
@@ -80,11 +80,9 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
     case 'SET_ERROR':
       return { ...state, error: action.error, loading: false }
     case 'STREAM_START': {
-      const nextLive = new Set(state.streamLive)
-      nextLive.add(action.repoName)
       return {
         ...state,
-        streamLive: nextLive,
+        streamLive: { ...state.streamLive, [action.repoName]: true },
         streamEvents: {
           ...state.streamEvents,
           [action.repoName]: []
@@ -102,22 +100,21 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
       }
     }
     case 'STREAM_DONE': {
-      const nextLive = new Set(state.streamLive)
-      nextLive.delete(action.repoName)
+      const { [action.repoName]: _, ...restLive } = state.streamLive
       return {
         ...state,
-        streamLive: nextLive,
+        streamLive: restLive,
         streamResults: action.result !== undefined
           ? { ...state.streamResults, [action.repoName]: action.result }
           : state.streamResults
       }
     }
     case 'STREAM_LOAD': {
-      const nextLive = new Set(state.streamLive)
+      const nextLive = { ...state.streamLive }
       if (action.isRunning) {
-        nextLive.add(action.repoName)
+        nextLive[action.repoName] = true
       } else {
-        nextLive.delete(action.repoName)
+        delete nextLive[action.repoName]
       }
       return {
         ...state,
@@ -131,9 +128,8 @@ function agentReducer(state: AgentState, action: AgentAction): AgentState {
     case 'STREAM_CLEAR': {
       const nextEvents = { ...state.streamEvents }
       delete nextEvents[action.repoName]
-      const nextLive = new Set(state.streamLive)
-      nextLive.delete(action.repoName)
-      return { ...state, streamEvents: nextEvents, streamLive: nextLive }
+      const { [action.repoName]: _, ...restLive } = state.streamLive
+      return { ...state, streamEvents: nextEvents, streamLive: restLive }
     }
     default:
       return state
@@ -382,7 +378,7 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
   // Clean up poll timers when streamLive changes (repo no longer running)
   useEffect(() => {
     pollTimersRef.current.forEach((timer, name) => {
-      if (!state.streamLive.has(name)) {
+      if (!state.streamLive[name]) {
         console.log('[AgentContext] poll cleanup for', name, '(no longer live)')
         clearInterval(timer)
         pollTimersRef.current.delete(name)

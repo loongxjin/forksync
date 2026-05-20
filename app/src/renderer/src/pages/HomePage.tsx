@@ -593,7 +593,7 @@ export function HomePage(): JSX.Element {
                       <WorkflowSteps
                         repo={repo}
                         streamEvents={streamEvents[repo.name] ?? []}
-                        isStreamLive={streamLive.has(repo.name)}
+                        isStreamLive={!!streamLive[repo.name]}
                         resolveResult={resolveResults[repo.name] ?? null}
                         onResolveWithAgent={() => handleResolve(repo)}
                         onOpenIDE={() => window.api.ideOpen(repo.path, 'default')}
@@ -714,7 +714,7 @@ export function HomePage(): JSX.Element {
         }}
         repoName={terminalDrawerRepo ?? ''}
         events={terminalDrawerRepo ? (streamEvents[terminalDrawerRepo] ?? []) : []}
-        isLive={terminalDrawerRepo ? streamLive.has(terminalDrawerRepo) : false}
+        isLive={terminalDrawerRepo ? !!streamLive[terminalDrawerRepo] : false}
       />
 
       {/* Diff Drawer */}
