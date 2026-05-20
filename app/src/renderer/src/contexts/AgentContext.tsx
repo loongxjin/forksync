@@ -1,5 +1,7 @@
 /**
- * AgentContext — manages AI agent state and resolve actions
+ * AgentContext — manages AI agent state (agents list, sessions, cleanup)
+ *
+ * Resolve/stream logic has been extracted to useResolveStream hook.
  */
 
 import {
@@ -7,13 +9,10 @@ import {
   useContext,
   useReducer,
   useCallback,
-  useRef,
-  useEffect,
   type ReactNode
 } from 'react'
-import type { AgentInfo, AgentSessionInfo, ResolveData, AgentResetData, AgentStreamEvent } from '@shared/types/engine'
+import type { AgentInfo, AgentSessionInfo, AgentResetData } from '@shared/types/engine'
 import { engineApi } from '@/lib/api'
-import { useLogger } from '@/hooks/useLogger'
 
 // ---------------------------------------------------------------------------
 // State & Actions
@@ -26,9 +25,6 @@ export interface AgentState {
   loading: boolean
   initialized: boolean
   error: string | null
-  streamEvents: Record<string, AgentStreamEvent[]>
-  streamLive: Record<string, boolean>
-  streamResults: Record<string, ResolveData | null>
 }
 
 export type AgentAction =
@@ -38,11 +34,6 @@ export type AgentAction =
   | { type: 'SET_SESSIONS'; sessions: AgentSessionInfo[] }
   | { type: 'SET_SESSIONS_SILENT'; sessions: AgentSessionInfo[] }
   | { type: 'SET_ERROR'; error: string | null }
-  | { type: 'STREAM_START'; repoName: string }
-  | { type: 'STREAM_EVENT'; repoName: string; event: AgentStreamEvent }
-  | { type: 'STREAM_DONE'; repoName: string; result?: ResolveData | null }
-  | { type: 'STREAM_LOAD'; repoName: string; events: AgentStreamEvent[]; isRunning: boolean }
-  | { type: 'STREAM_CLEAR'; repoName: string }
 
 export const initialState: AgentState = {
   agents: [],
@@ -50,10 +41,7 @@ export const initialState: AgentState = {
   sessions: [],
   loading: false,
   initialized: false,
-  error: null,
-  streamEvents: {},
-  streamLive: {},
-  streamResults: {}
+  error: null
 }
 
 export function agentReducer(state: AgentState, action: AgentAction): AgentState {
@@ -80,58 +68,6 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
       return { ...state, sessions: action.sessions }
     case 'SET_ERROR':
       return { ...state, error: action.error, loading: false }
-    case 'STREAM_START': {
-      return {
-        ...state,
-        streamLive: { ...state.streamLive, [action.repoName]: true },
-        streamEvents: {
-          ...state.streamEvents,
-          [action.repoName]: []
-        }
-      }
-    }
-    case 'STREAM_EVENT': {
-      const existing = state.streamEvents[action.repoName] ?? []
-      return {
-        ...state,
-        streamEvents: {
-          ...state.streamEvents,
-          [action.repoName]: [...existing, action.event]
-        }
-      }
-    }
-    case 'STREAM_DONE': {
-      const { [action.repoName]: _, ...restLive } = state.streamLive
-      return {
-        ...state,
-        streamLive: restLive,
-        streamResults: action.result !== undefined
-          ? { ...state.streamResults, [action.repoName]: action.result }
-          : state.streamResults
-      }
-    }
-    case 'STREAM_LOAD': {
-      const nextLive = { ...state.streamLive }
-      if (action.isRunning) {
-        nextLive[action.repoName] = true
-      } else {
-        delete nextLive[action.repoName]
-      }
-      return {
-        ...state,
-        streamEvents: {
-          ...state.streamEvents,
-          [action.repoName]: action.events
-        },
-        streamLive: nextLive
-      }
-    }
-    case 'STREAM_CLEAR': {
-      const nextEvents = { ...state.streamEvents }
-      delete nextEvents[action.repoName]
-      const { [action.repoName]: _, ...restLive } = state.streamLive
-      return { ...state, streamEvents: nextEvents, streamLive: restLive }
-    }
     default:
       return state
   }
@@ -144,16 +80,8 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
 interface AgentContextValue extends AgentState {
   refreshAgents: () => Promise<void>
   refreshSessions: () => Promise<void>
-  resolve: (
-    name: string,
-    opts?: { agent?: string; noConfirm?: boolean }
-  ) => Promise<ResolveData | null>
   cleanup: () => Promise<number>
   resetSession: (name: string) => Promise<AgentResetData | null>
-  resolveStream: (name: string, opts?: { agent?: string; noConfirm?: boolean }) => void
-  loadAgentLog: (name: string) => Promise<void>
-  clearStream: (name: string) => void
-  streamResults: Record<string, ResolveData | null>
 }
 
 const AgentContext = createContext<AgentContextValue | null>(null)
@@ -163,12 +91,7 @@ const AgentContext = createContext<AgentContextValue | null>(null)
 // ---------------------------------------------------------------------------
 
 export function AgentProvider({ children }: { children: ReactNode }): JSX.Element {
-  const logger = useLogger('AgentContext')
   const [state, dispatch] = useReducer(agentReducer, initialState)
-  const ipcSetupRef = useRef(false)
-  const pollTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map())
-  const ipcEventCountRef = useRef<Record<string, number>>({})
-  const pollWatermarkRef = useRef<Record<string, number>>({})
 
   const refreshAgents = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', loading: true })
@@ -202,29 +125,6 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
     }
   }, [])
 
-  const resolve = useCallback(
-    async (
-      name: string,
-      opts?: { agent?: string; noConfirm?: boolean }
-    ): Promise<ResolveData | null> => {
-      dispatch({ type: 'SET_LOADING', loading: true })
-      try {
-        const res = await engineApi.resolve(name, opts)
-        if (res.success) {
-          dispatch({ type: 'SET_LOADING', loading: false })
-          return res.data
-        } else {
-          dispatch({ type: 'SET_ERROR', error: res.error })
-          return null
-        }
-      } catch (err) {
-        dispatch({ type: 'SET_ERROR', error: (err as Error).message })
-        return null
-      }
-    },
-    []
-  )
-
   const cleanup = useCallback(async (): Promise<number> => {
     try {
       const res = await engineApi.agentCleanup()
@@ -254,164 +154,14 @@ export function AgentProvider({ children }: { children: ReactNode }): JSX.Elemen
     }
   }, [refreshSessions])
 
-  const resolveStream = useCallback((name: string, opts?: { agent?: string; noConfirm?: boolean }) => {
-    logger.log('resolveStream called', name, opts, 'ipcSetup:', ipcSetupRef.current)
-    ipcEventCountRef.current[name] = 0
-    dispatch({ type: 'STREAM_START', repoName: name })
-    try {
-      engineApi.resolveStreamStart(name, opts)
-      logger.log('resolveStreamStart sent')
-    } catch (err) {
-      logger.error('resolveStreamStart failed', name, err)
-      dispatch({ type: 'STREAM_EVENT', repoName: name, event: { t: 'error', d: `Failed to start resolve: ${(err as Error).message}`, ts: new Date().toISOString() } })
-      dispatch({ type: 'STREAM_DONE', repoName: name, result: null })
-    }
-  }, [])
-
-  const loadAgentLog = useCallback(async (name: string): Promise<void> => {
-    logger.log('loadAgentLog', name)
-    // Clear any existing poll timer for this repo
-    const existing = pollTimersRef.current.get(name)
-    if (existing) {
-      clearInterval(existing)
-      pollTimersRef.current.delete(name)
-    }
-    try {
-      const res = await engineApi.readAgentLog(name)
-      logger.log('loadAgentLog result', name, res.events.length, 'events, isRunning:', res.isRunning)
-      // Track event count in ref so poll closure stays current
-      pollWatermarkRef.current[name] = res.events.length
-      dispatch({ type: 'STREAM_LOAD', repoName: name, events: res.events, isRunning: res.isRunning })
-      // If agent is still running, start polling for new events every 2 seconds.
-      // If already finished, dispatch STREAM_DONE so the HomePage streamResults
-      // effect triggers refresh() to update the workflow status.
-      if (res.isRunning) {
-        logger.log('starting poll for', name, 'count:', res.events.length)
-        const timer = setInterval(async () => {
-          try {
-            const pollRes = await engineApi.readAgentLog(name)
-            const prevCount = pollWatermarkRef.current[name] ?? 0
-            logger.log('poll: read for', name, 'logEvents:', pollRes.events.length, 'prevDispatched:', prevCount, 'isRunning:', pollRes.isRunning)
-            if (!pollRes.isRunning) {
-              // Agent finished — dispatch any remaining new events, then dispatch done
-              if (pollRes.events.length > prevCount) {
-                const newEvents = pollRes.events.slice(prevCount)
-                logger.log('poll: final new events for', name, 'count:', newEvents.length)
-                for (const ev of newEvents) {
-                  dispatch({ type: 'STREAM_EVENT', repoName: name, event: ev })
-                }
-              }
-              dispatch({ type: 'STREAM_DONE', repoName: name, result: null })
-              const t = pollTimersRef.current.get(name)
-              if (t) { clearInterval(t); pollTimersRef.current.delete(name) }
-              delete pollWatermarkRef.current[name]
-              return
-            }
-            // Only dispatch genuinely new events
-            if (pollRes.events.length > prevCount) {
-              const newEvents = pollRes.events.slice(prevCount)
-              logger.log('poll: new events for', name, 'count:', newEvents.length, 'types:', newEvents.map(e => e.t).join(','))
-              for (const ev of newEvents) {
-                dispatch({ type: 'STREAM_EVENT', repoName: name, event: ev })
-              }
-              pollWatermarkRef.current[name] = pollRes.events.length
-            }
-          } catch (pollErr) {
-            logger.error('poll failed for', name, pollErr)
-          }
-        }, 2000)
-        pollTimersRef.current.set(name, timer)
-      } else if (res.events.length > 0) {
-        // Agent already finished — trigger refresh so workflow status updates.
-        dispatch({ type: 'STREAM_DONE', repoName: name, result: null })
-      }
-    } catch (err) {
-      logger.error('loadAgentLog failed', name, err)
-      dispatch({ type: 'STREAM_LOAD', repoName: name, events: [], isRunning: false })
-    }
-  }, [])
-
-  const clearStream = useCallback((name: string) => {
-    // Stop poll timer if any
-    const timer = pollTimersRef.current.get(name)
-    if (timer) { clearInterval(timer); pollTimersRef.current.delete(name) }
-    delete pollWatermarkRef.current[name]
-    dispatch({ type: 'STREAM_CLEAR', repoName: name })
-  }, [])
-
-  // Set up IPC listeners once
-  useEffect(() => {
-    if (ipcSetupRef.current) return
-    ipcSetupRef.current = true
-
-    const unsubEvent = engineApi.onResolveStreamEvent((repoName, event) => {
-      logger.log('stream event received', repoName, event.t, 'dataLen:', event.d?.length ?? 0)
-      ipcEventCountRef.current[repoName] = (ipcEventCountRef.current[repoName] ?? 0) + 1
-      dispatch({ type: 'STREAM_EVENT', repoName, event })
-    })
-
-    const unsubDone = engineApi.onResolveStreamDone((repoName, apiRes) => {
-      logger.log('stream done received', repoName, apiRes.success, 'data:', JSON.stringify(apiRes.data)?.substring(0, 200))
-      // Stop poll timer for this repo (IPC stream path)
-      const timer = pollTimersRef.current.get(repoName)
-      if (timer) { clearInterval(timer); pollTimersRef.current.delete(repoName); logger.log('poll stopped (done)', repoName) }
-      delete ipcEventCountRef.current[repoName]
-      dispatch({ type: 'STREAM_DONE', repoName, result: apiRes.success ? apiRes.data : null })
-    })
-
-    const unsubError = engineApi.onResolveStreamError((repoName, error) => {
-      logger.error('stream error received', repoName, error)
-      // Stop poll timer for this repo
-      const timer = pollTimersRef.current.get(repoName)
-      if (timer) { clearInterval(timer); pollTimersRef.current.delete(repoName); logger.log('poll stopped (error)', repoName) }
-      delete ipcEventCountRef.current[repoName]
-      dispatch({ type: 'STREAM_EVENT', repoName, event: { t: 'error', d: error, ts: new Date().toISOString() } })
-      dispatch({ type: 'STREAM_DONE', repoName, result: null })
-    })
-
-    return () => {
-      ipcSetupRef.current = false
-      unsubEvent()
-      unsubDone()
-      unsubError()
-    }
-  }, [])
-
-  // Clean up poll timers when streamLive changes (repo no longer running)
-  useEffect(() => {
-    pollTimersRef.current.forEach((timer, name) => {
-      if (!state.streamLive[name]) {
-        logger.log('poll cleanup for', name, '(no longer live)')
-        clearInterval(timer)
-        pollTimersRef.current.delete(name)
-      }
-    })
-  }, [state.streamLive])
-
-  // Cleanup all poll timers on unmount
-  useEffect(() => {
-    return () => {
-      pollTimersRef.current.forEach((timer, name) => {
-        logger.log('poll cleanup (unmount)', name)
-        clearInterval(timer)
-      })
-      pollTimersRef.current.clear()
-    }
-  }, [])
-
   return (
     <AgentContext.Provider
       value={{
         ...state,
         refreshAgents,
         refreshSessions,
-        resolve,
         cleanup,
-        resetSession,
-        resolveStream,
-        loadAgentLog,
-        clearStream,
-        streamResults: state.streamResults
+        resetSession
       }}
     >
       {children}

@@ -18,17 +18,17 @@ import { useRepos } from '@/contexts/RepoContext'
 import { useLogger } from '@/hooks/useLogger'
 
 // ---------------------------------------------------------------------------
-// Internal Stream State & Reducer
+// Stream State & Reducer (exported for testing)
 // ---------------------------------------------------------------------------
 
-interface StreamState {
+export interface StreamState {
   streamEvents: Record<string, AgentStreamEvent[]>
   streamLive: Record<string, boolean>
   streamResults: Record<string, ResolveData | null>
   resolveResults: Record<string, ResolveData>
 }
 
-type StreamAction =
+export type StreamAction =
   | { type: 'STREAM_START'; repoName: string }
   | { type: 'STREAM_EVENT'; repoName: string; event: AgentStreamEvent }
   | { type: 'STREAM_DONE'; repoName: string; result?: ResolveData | null }
@@ -36,14 +36,14 @@ type StreamAction =
   | { type: 'STREAM_CLEAR'; repoName: string }
   | { type: 'MERGE_SYNC_RESULTS'; resolved: { repoName: string; data: ResolveData }[] }
 
-const initialStreamState: StreamState = {
+export const initialStreamState: StreamState = {
   streamEvents: {},
   streamLive: {},
   streamResults: {},
   resolveResults: {}
 }
 
-function streamReducer(state: StreamState, action: StreamAction): StreamState {
+export function streamReducer(state: StreamState, action: StreamAction): StreamState {
   switch (action.type) {
     case 'STREAM_START':
       return {
