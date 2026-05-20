@@ -534,14 +534,16 @@ export function HomePage(): JSX.Element {
                         streamEvents={getStreamEvents(repo.name)}
                         isStreamLive={getIsStreamLive(repo.name)}
                         resolveResult={resolveResults[repo.name] ?? null}
-                        onResolveWithAgent={() => handleResolve(repo)}
-                        onOpenIDE={() => window.api.ideOpen(repo.path, 'default')}
-                        onAbort={() => handleReject(repo.name)}
-                        onAccept={() => handleAccept(repo.name)}
-                        onReject={() => handleReject(repo.name)}
-                        onRetryCommit={() => handleRetryCommit(repo.name)}
-                        onViewTerminal={() => handleViewTerminal(repo.name)}
-                        onViewDiff={() => setDiffDrawerRepo(repo.name)}
+                        actions={{
+                          onResolveWithAgent: () => handleResolve(repo),
+                          onOpenIDE: () => window.api.ideOpen(repo.path, 'default'),
+                          onAbort: () => handleReject(repo.name),
+                          onAccept: () => handleAccept(repo.name),
+                          onReject: () => handleReject(repo.name),
+                          onRetryCommit: () => handleRetryCommit(repo.name),
+                          onViewTerminal: () => handleViewTerminal(repo.name),
+                          onViewDiff: () => setDiffDrawerRepo(repo.name)
+                        }}
                         loading={agentLoading || !!localLoading[repo.name]}
                       />
                     ) : (
