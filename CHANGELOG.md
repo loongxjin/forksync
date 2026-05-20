@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.4.0]
+
+### Added
+- Multi-language support for agent conflict resolution prompts
+- Conflict resolved notification with i18n
+- Vitest test infrastructure for frontend unit testing
+- Unit tests for Context reducers, hooks (useLogger, useDebouncedConfig, useAutoSummarize), EngineClient, and IPC input validation
+
+### Changed
+- **Frontend architecture**: extracted StepContent, HistoryRow, BranchMappingInput as reusable components; extracted useResolveStream, useAutoSummarize, useLogger hooks; extracted ToastContext from RepoContext
+- **Shared types**: moved to `app/src/shared/types` for proper cross-process imports
+- **Engine architecture**: extracted workflow state machine into `internal/workflow` package; replaced Set* methods with functional Option pattern; extracted `OperationsProvider` interface for testability
+- **IPC refactor**: split `ipc.ts` into focused modules; unified EngineClient into single `execCommand` method; added input validation to IDE IPC handlers
+- **Resolve refactor**: replaced `workflowContinue` with `resolvePrepare`; injected session.Manager into Resolver; sink resolve/status orchestration into internal packages
+- **Sync cleanup**: merged workflow helpers into syncer, deleted `workflow.go`; eliminated `conflict` package and deduplicated workflow helpers; removed unused Machine abstraction
+- **Agent**: replaced `truncateOutput` with `extractSummary`
+- **Types cleanup**: removed unused EngineChannel, WorkflowStep, duplicate PostSyncCommand, deprecated wrappers and dead code
+
+### Fixed
+- Active streams not cleaned up on app quit
+- Merge conflict detection robustness
+- `useDebouncedConfigMap` useRef initialization and missing dependency array
+- Extra closing braces in ScanDialog and HomePage
+- Test assertion logic in TestMerge_NoUpstream
+
 ## [v0.3.0]
 
 ### Added
