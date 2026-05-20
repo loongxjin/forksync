@@ -2,7 +2,7 @@
  * IPC Engine Handlers — engine commands and streaming
  */
 
-import { ipcMain } from 'electron'
+import { ipcMain, app } from 'electron'
 import { resolve, normalize } from 'path'
 import { EngineClient } from './engine'
 import { notifySyncResults, updateNotificationConfig } from './notify'
@@ -221,4 +221,13 @@ export function registerEngineIpcHandlers(): void {
 
   // Initialize notification config from engine
   updateNotificationConfig(e)
+
+  // Cleanup active streams on app quit
+  app.on('before-quit', () => {
+    for (const [name, stream] of activeStreams) {
+      log.debug(`[IPC] cleaning up active stream for ${name} on quit`)
+      stream.kill()
+      activeStreams.delete(name)
+    }
+  })
 }
