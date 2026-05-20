@@ -574,32 +574,6 @@ export class EngineClient {
 }
 
 // ---------------------------------------------------------------------------
-// Workflow Types
-// ---------------------------------------------------------------------------
-
-export interface WorkflowStep {
-  name: string
-  status: string
-  startedAt?: string
-  finishedAt?: string
-  message?: string
-  [key: string]: unknown
-}
-
-export interface WorkflowContinueData {
-  repoId: string
-  repoName: string
-  status: string
-  workflow?: {
-    runId: string
-    steps: WorkflowStep[]
-    status: string
-    startedAt: string
-    finishedAt?: string
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Custom Error Types
 // ---------------------------------------------------------------------------
 
