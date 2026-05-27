@@ -14,12 +14,13 @@ import (
 type StreamEventType string
 
 const (
-	StreamEventStart  StreamEventType = "start"
-	StreamEventStdout StreamEventType = "stdout"
-	StreamEventStderr StreamEventType = "stderr"
-	StreamEventTool   StreamEventType = "tool"
-	StreamEventDone   StreamEventType = "done"
-	StreamEventError  StreamEventType = "error"
+	StreamEventStart          StreamEventType = "start"
+	StreamEventStdout         StreamEventType = "stdout"
+	StreamEventStderr         StreamEventType = "stderr"
+	StreamEventTool           StreamEventType = "tool"
+	StreamEventDone           StreamEventType = "done"
+	StreamEventError          StreamEventType = "error"
+	StreamEventStatePersisted StreamEventType = "state_persisted"
 )
 
 // StreamEvent is a single line of NDJSON output emitted during agent resolution.

@@ -191,7 +191,7 @@ export interface AgentResolveResult {
 
 /** Agent stream event emitted during conflict resolution */
 export interface AgentStreamEvent {
-  t: 'start' | 'stdout' | 'stderr' | 'tool' | 'done' | 'error'
+  t: 'start' | 'stdout' | 'stderr' | 'tool' | 'done' | 'error' | 'state_persisted'
   d?: string
   agent?: string
   files?: string[]
