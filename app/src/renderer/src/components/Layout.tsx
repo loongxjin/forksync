@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { Toast } from './ui/toast'
 import { useToastContext } from '@/contexts/ToastContext'
@@ -138,6 +139,14 @@ function LinuxWindowControls(): JSX.Element {
 export function Layout(): JSX.Element {
   const { toast, hideToast } = useToastContext()
   const { open, closeDrawer } = useSettingsDrawer()
+  const navigate = useNavigate()
+
+  // Subscribe to notification click-through navigation from main process
+  useEffect(() => {
+    if (!engineApi.onNavigate) return
+    const unsubscribe = engineApi.onNavigate((path) => navigate(path))
+    return unsubscribe
+  }, [navigate])
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
