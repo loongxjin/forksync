@@ -9,6 +9,8 @@ extraResources:
     filter:
       - forksync
       - forksync.exe
+  - from: src/renderer/src/i18n/locales
+    to: i18n
 mac:
   category: public.app-category.developer-tools
   target:
