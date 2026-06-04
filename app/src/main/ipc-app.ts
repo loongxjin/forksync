@@ -3,8 +3,8 @@
  */
 
 import { ipcMain, dialog, app } from 'electron'
-import { t } from './i18n'
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs'
+import { t, reloadTranslations } from './i18n'
+import { existsSync, mkdirSync, writeFileSync, unlinkSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import { assertSafePath } from './ipc-engine'
@@ -72,5 +72,16 @@ X-KDE-autostart-after=panel
   ipcMain.handle('fs:isGitRepo', async (_event, dirPath: string) => {
     const safePath = assertSafePath(dirPath, 'dirPath')
     return existsSync(join(safePath, '.git'))
+  })
+
+  ipcMain.handle('locale:change', async (_event, locale: string) => {
+    try {
+      const configPath = join(app.getPath('userData'), 'locale.txt')
+      writeFileSync(configPath, locale, 'utf-8')
+      reloadTranslations()
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
   })
 }

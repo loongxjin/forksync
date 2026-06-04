@@ -55,6 +55,8 @@ export interface EngineAPI {
   isGitRepo(dirPath: string): Promise<boolean>
   /** Listen for navigation events from main process (notification click-through). Returns unsubscribe fn. */
   onNavigate?: (callback: (path: string) => void) => () => void
+  /** Notify main process of locale change so notifications use correct language */
+  setLocale(locale: string): Promise<{ success: boolean }>
 
   // IDE management
   ideDetect(): Promise<IDEInfo[]>

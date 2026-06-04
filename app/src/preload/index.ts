@@ -107,6 +107,9 @@ const api = {
     ipcRenderer.on('navigate', handler)
     return () => ipcRenderer.removeListener('navigate', handler)
   },
+  // Notify main process of locale change
+  setLocale: (locale: string): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('locale:change', locale),
 
   // IDE management
   ideDetect: (): Promise<IDEInfo[]> => ipcRenderer.invoke('ide:detect'),

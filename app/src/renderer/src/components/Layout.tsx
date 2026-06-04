@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
 import { Toast } from './ui/toast'
 import { useToastContext } from '@/contexts/ToastContext'
 import { useSettings } from '@/contexts/SettingsContext'
@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import i18n from 'i18next'
 import { Settings, Moon, Sun, Monitor, Languages } from 'lucide-react'
 import { SettingsDrawer } from './SettingsDrawer'
+import { engineApi } from '@/lib/api'
 
 /** Platform detected from preload */
 const platform: string = window.platform || 'darwin'
@@ -28,6 +29,9 @@ function TitleBar(): JSX.Element {
     const next = currentLang === 'zh' ? 'en' : 'zh'
     i18n.changeLanguage(next)
     localStorage.setItem('forksync-locale', next)
+    engineApi.setLocale(next).catch(() => {
+      /* best effort — main process reloads translations */
+    })
   }
 
   // macOS: pl-20 to leave space for traffic lights
