@@ -85,7 +85,7 @@ export function notifySyncResults(results: SyncResult[]): void {
 
   // Success summary (only if no conflicts/errors/resolved, to avoid notification spam)
   if (conflicts.length === 0 && resolved.length === 0 && errors.length === 0 && synced.length > 0) {
-    const totalCommits = synced.reduce((sum, r) => sum + r.commitsPulled, 0)
+    const totalCommits = synced.reduce((sum, r) => sum + (r.commitsPulled ?? 0), 0)
     if (totalCommits > 0) {
       showNotification({
         title: t('notify.completeTitle'),
