@@ -154,6 +154,20 @@ func (sf *StatusRefresher) RefreshRepo(ctx context.Context, r types.Repo) types.
 		sf.updateRepo(r)
 	}
 
+	// Clean up stale workflows for repos in a settled state (up_to_date, sync_needed, unconfigured).
+	// This handles the case where the user manually resolved a conflict outside the app,
+	// the sync command updated status to up_to_date but left a stale workflow behind.
+	if r.Workflow != nil && r.Workflow.Status != "" {
+		switch r.Status {
+		case types.RepoStatusUpToDate, types.RepoStatusSyncNeeded, types.RepoStatusUnconfigured:
+			logger.Info("status: clearing stale workflow for settled repo",
+				"repo", r.Name, "repo_status", string(r.Status),
+				"workflow_status", string(r.Workflow.Status))
+			r.Workflow = nil
+			sf.updateRepo(r)
+		}
+	}
+
 	return r
 }
 
