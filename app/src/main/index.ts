@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, nativeImage, Notification, session } from 'electron'
+import { app, shell, BrowserWindow, nativeImage, session } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
@@ -93,12 +93,6 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   registerIDEHandlers()
 
-  // Request notification permission on first launch
-  if (Notification.isSupported()) {
-    Notification.requestPermission().catch(() => {
-      /* ignore — permission denied or unavailable */
-    })
-  }
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
