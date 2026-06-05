@@ -350,6 +350,29 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     [state.repos]
   )
 
+  // Auto-poll while any repo is in conflict/waiting/resolving state
+  // so that external resolutions (e.g. manual git commit) are detected.
+  const conflictPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    const hasConflict = state.repos.some((r) => isConflictStatus(r.status))
+    if (hasConflict && !conflictPollRef.current) {
+      conflictPollRef.current = setInterval(async () => {
+        try {
+          const res = await engineApi.status()
+          if (res.success) {
+            dispatch({ type: 'SET_REPOS_SILENT', repos: res.data.repos ?? [] })
+          }
+        } catch {
+          // silent — polling is best-effort
+        }
+      }, 5000)
+    } else if (!hasConflict && conflictPollRef.current) {
+      clearInterval(conflictPollRef.current)
+      conflictPollRef.current = null
+    }
+  }, [state.repos])
+
   const markStartupSyncDone = useCallback(() => {
     startupSyncDoneRef.current = true
   }, [])
