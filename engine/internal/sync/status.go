@@ -3,6 +3,8 @@ package sync
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	stdsync "sync"
 	"time"
 
@@ -172,6 +174,20 @@ func (sf *StatusRefresher) reconcileConflictStatus(ctx context.Context, r types.
 
 	isMerging, unmergedFiles, err := sf.gitOps.IsMergingState(ctx, r.Path)
 	if err != nil {
+		logger.Warn("status: reconcileConflictStatus IsMergingState failed, checking MERGE_HEAD directly",
+			"repo", r.Name, "error", err)
+		// Fallback: directly check if MERGE_HEAD exists on disk.
+		// If MERGE_HEAD is gone, the merge was completed externally.
+		mergeHead := filepath.Join(r.Path, ".git", "MERGE_HEAD")
+		if _, statErr := os.Stat(mergeHead); statErr != nil && os.IsNotExist(statErr) {
+			logger.Info("status: MERGE_HEAD gone after IsMergingState error, clearing conflict state", "repo", r.Name)
+			r.Status = types.RepoStatusUpToDate
+			r.ErrorMessage = ""
+			r.Workflow = nil
+			sf.updateRepo(r)
+			return r
+		}
+		// MERGE_HEAD still exists or can't tell — keep current state
 		return r
 	}
 
