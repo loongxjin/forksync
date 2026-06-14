@@ -302,12 +302,15 @@ func (o *Operations) statusGoGit(ctx context.Context, repo types.Repo) (*StatusR
 
 	remoteRef, err := r.Reference(plumbing.ReferenceName(remoteBranch), true)
 	if err != nil {
-		logger.Debug("git: statusGoGit remote ref not found, returning 0/0",
+		// Remote ref cannot be resolved — upstream not configured, never fetched,
+		// or branch name mismatch. Surface this as an error so callers don't
+		// mistake "cannot compare" for "up to date" (BehindBy == 0).
+		logger.Debug("git: statusGoGit remote ref not found",
 			"repo", repo.Name,
 			"remote_branch", remoteBranch,
 			"error", err,
 		)
-		return &StatusResult{AheadBy: 0, BehindBy: 0, Branch: branch}, nil
+		return nil, fmt.Errorf("resolve remote ref %s: %w", remoteBranch, err)
 	}
 
 	ahead, behind, err := o.countDivergence(ctx, repo.Path, localRef.Hash().String(), remoteRef.Hash().String())
@@ -380,13 +383,14 @@ func (o *Operations) statusCLI(ctx context.Context, repo types.Repo) (*StatusRes
 	// Get ahead count
 	ahead, err := o.revListCount(ctx, repo.Path, upstreamRef, branch)
 	if err != nil {
-		// Upstream ref may not exist yet
+		// Upstream ref may not exist yet — surface as error so callers don't
+		// mistake "cannot compare" for "up to date" (BehindBy == 0).
 		logger.Debug("git: statusCLI ahead count failed (upstream ref may not exist)",
 			"repo", repo.Name,
 			"upstream_ref", upstreamRef,
 			"error", err,
 		)
-		ahead = 0
+		return nil, fmt.Errorf("resolve upstream ref %s: %w", upstreamRef, err)
 	}
 
 	// Get behind count
@@ -397,7 +401,7 @@ func (o *Operations) statusCLI(ctx context.Context, repo types.Repo) (*StatusRes
 			"upstream_ref", upstreamRef,
 			"error", err,
 		)
-		behind = 0
+		return nil, fmt.Errorf("resolve upstream ref %s: %w", upstreamRef, err)
 	}
 
 	logger.Debug("git: statusCLI result",

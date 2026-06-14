@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -113,16 +114,41 @@ func TestGetRemotes_WithOrigin(t *testing.T) {
 	assert.NotEmpty(t, remotes[0].URL)
 }
 
+// TestStatus_FreshRepo verifies that a repo with no remote/upstream configured
+// returns an error rather than silently reporting {0,0}. The old behavior of
+// returning a silent 0/0 caused callers to mistake "cannot compare" for
+// "up to date", masking fetch failures and missing upstream config.
 func TestStatus_FreshRepo(t *testing.T) {
 	dir := setupTempGitRepo(t)
 	ops := NewOperations()
 
 	repo := types.Repo{Path: dir}
 	result, err := ops.Status(context.Background(), repo)
-	require.NoError(t, err, "Status should not error")
-	assert.NotNil(t, result)
-	assert.Equal(t, 0, result.AheadBy, "fresh repo should have 0 ahead")
-	assert.Equal(t, 0, result.BehindBy, "fresh repo should have 0 behind")
+	require.Error(t, err, "Status on repo without upstream ref should error")
+	assert.Nil(t, result, "no result should be returned on error")
+	// Error may originate from statusGoGit ("remote ref") or the statusCLI
+	// fallback ("upstream ref") — both are acceptable, the contract is that
+	// ref resolution failure surfaces as an error.
+	errMsg := err.Error()
+	assert.True(t,
+		strings.Contains(errMsg, "remote ref") || strings.Contains(errMsg, "upstream ref"),
+		"error should indicate ref resolution failure, got: %s", errMsg,
+	)
+}
+
+// TestStatus_WithUpstreamRef covers the normal path: a repo with a valid
+// origin remote and tracking ref. Should report 0/0 and no error when the
+// local branch is at parity with the remote.
+func TestStatus_WithUpstreamRef(t *testing.T) {
+	localDir, _ := setupTempGitRepoWithRemote(t)
+	ops := NewOperations()
+
+	repo := types.Repo{Path: localDir, Branch: "master"}
+	result, err := ops.Status(context.Background(), repo)
+	require.NoError(t, err, "Status on repo with upstream ref should not error")
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.AheadBy, "repo at parity should have 0 ahead")
+	assert.Equal(t, 0, result.BehindBy, "repo at parity should have 0 behind")
 	assert.NotEmpty(t, result.Branch, "branch name should not be empty")
 }
 
