@@ -123,6 +123,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	s.registerSyncRoutes(mux)
 	s.registerResolveRoutes(mux)
 	s.registerStreamRoutes(mux)
+	s.registerMiscRoutes(mux)
 }
 
 // handleHealth is the readiness probe used by the Electron parent at startup.
