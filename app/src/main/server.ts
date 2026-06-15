@@ -12,7 +12,7 @@
 
 import { app } from 'electron'
 import { join } from 'path'
-import { spawn, ChildProcess } from 'child_process'
+import { spawn, exec, ChildProcess } from 'child_process'
 import { createInterface } from 'readline'
 import log from './logger'
 
@@ -20,14 +20,25 @@ const ADDR_PREFIX = 'FORKSYNC_HTTP_ADDR='
 const STARTUP_TIMEOUT_MS = 30_000
 const HEALTH_POLL_INTERVAL_MS = 100
 
-function killProcessGroup(child: ChildProcess): void {
+/**
+ * Kill a child process AND its descendants. The Go server spawns agent
+ * subprocesses (claude/opencode/codex), so a bare child.kill() would orphan
+ * them. On Unix we kill the whole process group (the server is spawned with
+ * detached:true); on Windows we taskkill the tree.
+ */
+function killProcessTree(child: ChildProcess): void {
   try {
     if (process.platform === 'win32') {
-      child.kill() // Windows: no process groups; rely on tree-kill via taskkill if needed
+      if (child.pid) {
+        // /T = kill child processes, /F = force
+        exec(`taskkill /pid ${child.pid} /T /F`)
+      }
     } else if (child.pid) {
+      // Negative pid = signal the whole process group.
       process.kill(-child.pid, 'SIGTERM')
     }
   } catch {
+    // Fallback to a direct kill if group/tree kill fails.
     child.kill()
   }
 }
@@ -42,6 +53,11 @@ export class EngineServer {
     if (this.baseUrl) return this.baseUrl
     if (!this.startPromise) {
       this.startPromise = this.start()
+      // If startup fails, clear the cached rejected promise so the next call
+      // retries instead of re-awaiting a permanently-rejected promise.
+      this.startPromise.catch(() => {
+        this.startPromise = null
+      })
     }
     this.baseUrl = await this.startPromise
     return this.baseUrl
