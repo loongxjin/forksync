@@ -56,12 +56,28 @@ func NewServer(addr string, deps *Deps) (*Server, error) {
 		deps: deps,
 		ln:   ln,
 		server: &http.Server{
-			Handler:           mux,
+			// maxBodyBytes caps request bodies for all routes. The engine only
+			// accepts small JSON payloads (paths, config values, post-sync
+			// commands) — 1 MiB is far beyond any legitimate request and stops
+			// a malicious/buggy client from streaming an unbounded body.
+			Handler:           limitBody(mux, maxBodyBytes),
 			ReadHeaderTimeout: 10 * time.Second,
 		},
 	}
 	s.routes(mux)
 	return s, nil
+}
+
+// maxBodyBytes is the global cap on any single request body.
+const maxBodyBytes = 1 << 20 // 1 MiB
+
+// limitBody wraps h so every request's body is capped at maxBytes. Requests
+// that exceed the limit get a 413 and the handler is never invoked.
+func limitBody(h http.Handler, maxBytes int64) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+		h.ServeHTTP(w, r)
+	})
 }
 
 // Addr returns the actual address the server is listening on.
