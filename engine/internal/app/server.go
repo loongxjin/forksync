@@ -120,6 +120,9 @@ func (s *Server) routes(mux *http.ServeMux) {
 
 	// Domain handlers (each group registers its own routes).
 	s.registerRepoRoutes(mux)
+	s.registerSyncRoutes(mux)
+	s.registerResolveRoutes(mux)
+	s.registerStreamRoutes(mux)
 }
 
 // handleHealth is the readiness probe used by the Electron parent at startup.
