@@ -113,13 +113,23 @@ export function HomePage(): JSX.Element {
     }
   }, [initialized, repos.length, engineConfig, syncAll, startupSyncDone, markStartupSyncDone])
 
-  // Load history
+  // Load history.
+  //
+  // NOTE: lastLoadAt is intentionally read via a ref and NOT listed in the
+  // dependency array. lastLoadAt is updated BY loadHistory itself (HistoryContext
+  // sets it on every SET_RECORDS), so putting it in deps creates a tight feedback
+  // loop: loadHistory() → lastLoadAt changes → this effect re-runs → loadHistory()
+  // again. With the old CLI backend each call spawned a ~50ms process that hid the
+  // storm; the HTTP backend is ~5ms so the loop runs at ~80 req/s during sync
+  // (see system.log). The ref lets us apply the 30s cache without re-triggering.
+  const lastLoadAtRef = useRef(lastLoadAt)
+  lastLoadAtRef.current = lastLoadAt
   useEffect(() => {
     const now = Date.now()
     const shouldSkip =
-      historyInitialized && !hasSyncing && now - lastLoadAt < HISTORY_CACHE_MS
+      historyInitialized && !hasSyncing && now - lastLoadAtRef.current < HISTORY_CACHE_MS
     if (!shouldSkip) loadHistory()
-  }, [loadHistory, historyInitialized, lastLoadAt, hasSyncing])
+  }, [loadHistory, historyInitialized, hasSyncing])
 
   // Track which repos have been auto-loaded to prevent repeated loadAgentLog
   // calls when repos changes (e.g. status poll every 3s during sync).

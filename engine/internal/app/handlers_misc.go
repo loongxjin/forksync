@@ -133,14 +133,26 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	hStore, err := history.NewStore(s.deps.ConfigDir())
-	if err != nil {
-		writeErr[types.HistoryData](w, fmt.Errorf("open history store: %w", err))
-		return
+	// Reuse the long-lived history store from Deps instead of opening a fresh
+	// SQLite connection per request. The frontend polls /history heavily during
+	// sync (see HomePage.tsx loadHistory), so per-request NewStore would open and
+	// close the DB ~80x/second. Fall back to a one-shot store only if the shared
+	// one failed to initialize at boot.
+	hStore := s.deps.HistStore
+	if hStore == nil {
+		hs, err := history.NewStore(s.deps.ConfigDir())
+		if err != nil {
+			writeErr[types.HistoryData](w, fmt.Errorf("open history store: %w", err))
+			return
+		}
+		defer hs.Close()
+		hStore = hs
 	}
-	defer hStore.Close()
 
-	var dbRecords []history.Record
+	var (
+		dbRecords []history.Record
+		err       error
+	)
 	if repoName != "" {
 		r2, ok := s.deps.Store.GetByName(repoName)
 		if !ok {
@@ -193,15 +205,23 @@ func (s *Server) handleHistoryCleanup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hStore, err := history.NewStore(s.deps.ConfigDir())
-	if err != nil {
-		writeErr[historyCleanupResult](w, fmt.Errorf("open history store: %w", err))
-		return
+	// Reuse the shared history store; only open a one-shot store if boot init failed.
+	hStore := s.deps.HistStore
+	if hStore == nil {
+		hs, err := history.NewStore(s.deps.ConfigDir())
+		if err != nil {
+			writeErr[historyCleanupResult](w, fmt.Errorf("open history store: %w", err))
+			return
+		}
+		defer hs.Close()
+		hStore = hs
 	}
-	defer hStore.Close()
 
-	var n int64
-	var msg string
+	var (
+		n   int64
+		err error
+		msg string
+	)
 	if req.Repo != "" {
 		r2, ok := s.deps.Store.GetByName(req.Repo)
 		if !ok {
