@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -182,11 +183,22 @@ func (s *Server) runResolveWithAgent(ctx context.Context, r types.Repo, req reso
 
 	// Rollback guard: if the agent never finished (ctx cancel or error), roll
 	// the repo out of RepoStatusResolving so it isn't stuck.
+	//
+	// IMPORTANT: this defer runs AFTER ctx has been cancelled (by the timeout
+	// below or by a WS client disconnect). gitOps.AbortMerge honors the passed
+	// context, so we must run Reject on a fresh background context with its own
+	// generous deadline — otherwise the rollback itself is cancelled and the
+	// repo is left stuck in RepoStatusResolving forever. This mirrors the old
+	// cmd/resolve.go which used the parent cmd.Context() (process lifetime)
+	// for the rollback, NOT the resolve timeout ctx.
 	defer func() {
-		if !resolved.Load() {
-			if _, rerr := resolver.Reject(ctx, r); rerr != nil {
-				logger.Warn("resolve: rollback failed", "repo", r.Name, "error", rerr)
-			}
+		if resolved.Load() {
+			return
+		}
+		rollbackCtx, rollbackCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer rollbackCancel()
+		if _, rerr := resolver.Reject(rollbackCtx, r); rerr != nil {
+			logger.Warn("resolve: rollback failed", "repo", r.Name, "error", rerr)
 		}
 	}()
 
@@ -361,6 +373,9 @@ func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
 // is nil (non-streaming path) it still writes the disk log so readAgentLog can
 // replay later — mirroring cmd/resolve.go setupResolveStreamWriter's disk arm.
 // When streamSink is non-nil (WebSocket path) events are also pushed live.
+//
+// The returned cleanup is always safe to defer even if the disk log failed to
+// open (lw == nil).
 func buildResolveStreamWriter(configDir, repoName string, streamSink func(agent.StreamEvent)) (*agent.StreamWriter, func()) {
 	var writers []*agent.StreamWriter
 
@@ -368,22 +383,33 @@ func buildResolveStreamWriter(configDir, repoName string, streamSink func(agent.
 		writers = append(writers, agent.NewStreamWriter(&sinkWriter{fn: streamSink}))
 	}
 
+	// closeLog is nil-safe: only closes the disk writer if it was opened.
+	closeLog := func() {}
 	lw, lwErr := agent.NewLogWriter(configDir, repoName)
 	if lwErr != nil {
 		logger.Warn("resolve: failed to create log writer", "repo", repoName, "error", lwErr)
-		if len(writers) == 0 {
-			return nil, func() {}
-		}
 	} else {
 		writers = append(writers, lw.StreamWriter())
+		closeLog = func() { _ = lw.Close() }
 	}
 
+	if len(writers) == 0 {
+		// Neither sink nor disk — return a no-op writer so callers don't have
+		// to nil-check. (Extremely unlikely: streamSink==nil AND disk failed.)
+		return agent.NewStreamWriter(nopWriter{}), closeLog
+	}
 	if len(writers) == 1 {
-		return writers[0], func() { lw.Close() }
+		return writers[0], closeLog
 	}
 	msw := agent.NewMultiStreamWriter(writers...)
-	return msw.StreamWriter(), func() { lw.Close() }
+	return msw.StreamWriter(), closeLog
 }
+
+// nopWriter is an io.Writer that discards everything, used only when both the
+// live sink and the disk log are unavailable.
+type nopWriter struct{}
+
+func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 // sinkWriter is an io.Writer that forwards each full NDJSON line to a callback.
 // agent.StreamWriter writes one JSON object + newline per WriteEvent, then
@@ -396,8 +422,15 @@ func (s *sinkWriter) Write(p []byte) (int, error) {
 	// Each Write corresponds to one encoded StreamEvent line.
 	var ev agent.StreamEvent
 	if err := json.Unmarshal(p, &ev); err != nil {
-		// Not a complete line (partial) — ignore; the bufio.Writer flushes
-		// once per event so we always get a full line here.
+		// Couldn't decode as a StreamEvent — forward the raw bytes as a
+		// stdout event so the WS client isn't silently dropped a frame.
+		// (Matches the old engine.ts readline path which emitted
+		// {t:'stdout', d:line} for non-JSON lines.)
+		s.fn(agent.StreamEvent{
+			Type:      agent.StreamEventStdout,
+			Data:      strings.TrimRight(string(p), "\n"),
+			Timestamp: time.Now().UTC(),
+		})
 		return len(p), nil
 	}
 	s.fn(ev)
