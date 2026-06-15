@@ -117,6 +117,9 @@ func (s *Server) routes(mux *http.ServeMux) {
 	// Health & version (always available).
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /version", s.handleVersion)
+
+	// Domain handlers (each group registers its own routes).
+	s.registerRepoRoutes(mux)
 }
 
 // handleHealth is the readiness probe used by the Electron parent at startup.
