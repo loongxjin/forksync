@@ -13,7 +13,8 @@
     "optional": "optional",
     "selectDirectory": "Select Directory",
     "select": "Select...",
-    "confirm": "Confirm"
+    "confirm": "Confirm",
+    "back": "Back"
   },
   "nav": {
     "dashboard": "Dashboard",

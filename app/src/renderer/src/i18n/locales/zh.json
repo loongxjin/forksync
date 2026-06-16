@@ -13,7 +13,8 @@
     "optional": "可选",
     "selectDirectory": "选择目录",
     "select": "选择...",
-    "confirm": "确认"
+    "confirm": "确认",
+    "back": "返回"
   },
   "nav": {
     "dashboard": "仪表盘",
