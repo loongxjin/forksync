@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shouldShowResolveDetails, shouldShowStepDetail } from '@/lib/workflow-helpers'
+import { shouldShowResolveDetails, shouldShowStepDetail, filterDiffByFile } from '@/lib/workflow-helpers'
 
 describe('shouldShowResolveDetails', () => {
   it('returns false for null', () => {
@@ -101,5 +101,45 @@ describe('shouldShowStepDetail', () => {
     const step = { step: 'commit', status: 'waiting' }
     const steps = [step]
     expect(shouldShowStepDetail(step, steps)).toBe(false)
+  })
+})
+
+describe('filterDiffByFile', () => {
+  const fullDiff = [
+    'diff --git a/README.md b/README.md',
+    '--- a/README.md',
+    '+++ b/README.md',
+    '@@ -1,3 +1,3 @@',
+    '-# Old',
+    '+# New',
+    '',
+    'diff --git a/src/main.go b/src/main.go',
+    '--- a/src/main.go',
+    '+++ b/src/main.go',
+    '@@ -1 +1 @@',
+    '-old',
+    '+new',
+  ].join('\n')
+
+  it('returns only the matching file section', () => {
+    const result = filterDiffByFile(fullDiff, 'src/main.go')
+    expect(result).toContain('diff --git a/src/main.go')
+    expect(result).toContain('+new')
+    expect(result).not.toContain('README.md')
+  })
+
+  it('returns only the other file section', () => {
+    const result = filterDiffByFile(fullDiff, 'README.md')
+    expect(result).toContain('# New')
+    expect(result).not.toContain('src/main.go')
+  })
+
+  it('returns full diff when file not found', () => {
+    const result = filterDiffByFile(fullDiff, 'nonexistent.txt')
+    expect(result).toBe(fullDiff)
+  })
+
+  it('returns empty diff as-is', () => {
+    expect(filterDiffByFile('', 'any.txt')).toBe('')
   })
 })
