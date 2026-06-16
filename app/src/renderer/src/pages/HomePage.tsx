@@ -437,10 +437,11 @@ export function HomePage(): JSX.Element {
 
   const handleViewTerminal = useCallback((repoName: string) => {
     setTerminalDrawerRepo(repoName)
-    if (!(getStreamEvents(repoName)?.length)) {
-      loadAgentLog(repoName)
-    }
-  }, [getStreamEvents, loadAgentLog])
+    // Always re-read the disk log on (re)open — this picks up any events
+    // that arrived while the drawer was closed, restarts polling if the
+    // agent is still running, and restores resolveResults from the done frame.
+    loadAgentLog(repoName)
+  }, [loadAgentLog])
 
   // Repo actions
   const removingRef = useRef<string | null>(null)
