@@ -164,7 +164,7 @@ export function useResolveStream(): ResolveStreamHook {
   // ---------------------------------------------------------------------------
   // Core: read disk log → dispatch STREAM_LOAD
   // ---------------------------------------------------------------------------
-  const readDiskLog = useCallback(async (repoName: string): Promise<void> => {
+  const readDiskLog = useCallback(async (repoName: string): Promise<boolean> => {
     try {
       const res = await engineApi.readAgentLog(repoName)
       logger.log('readDiskLog', repoName, res.events.length, 'events, isRunning:', res.isRunning)
@@ -180,8 +180,10 @@ export function useResolveStream(): ResolveStreamHook {
         if (timer) { clearInterval(timer); pollTimersRef.current.delete(repoName) }
         pollingRef.current.delete(repoName)
       }
+      return res.isRunning
     } catch (err) {
       logger.error('readDiskLog failed', repoName, err)
+      return false
     }
   }, [logger])
 
@@ -277,12 +279,12 @@ export function useResolveStream(): ResolveStreamHook {
 
   const loadAgentLog = useCallback(async (repoName: string): Promise<void> => {
     logger.log('loadAgentLog', repoName)
-    await readDiskLog(repoName)
+    const isRunning = await readDiskLog(repoName)
     // If the agent is still running, start polling.
-    if (state.streamLive[repoName]) {
+    if (isRunning) {
       startPolling(repoName)
     }
-  }, [logger, readDiskLog, startPolling, state.streamLive])
+  }, [logger, readDiskLog, startPolling])
 
   const clearResult = useCallback((repoName: string) => {
     stopPolling(repoName)
