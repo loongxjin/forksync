@@ -243,8 +243,6 @@ export class EngineClient {
             return
           }
           if (parsed.t === 'done') {
-            // TRACE: log raw done frame fields before synthesizing ResolveData
-            log.info('[trace] WS done frame', 'resolvedFiles', parsed.resolvedFiles, 'diffLen', parsed.diff?.length, 'agentName', parsed.agentName, 'summaryLen', parsed.summary?.length)
             notifyDone({
               success: parsed.success ?? true,
               data: {

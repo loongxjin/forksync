@@ -190,10 +190,6 @@ export function useResolveStream(): ResolveStreamHook {
 
     const unsubDone = engineApi.onResolveStreamDone((repoName, apiRes) => {
       logger.log('stream done received', repoName, apiRes.success)
-      // TRACE: log what ResolveData the IPC carried
-      if (apiRes.data) {
-        logger.log('[trace] resolveResult data', repoName, 'conflictsCount', apiRes.data.conflicts?.length, 'resolvedFiles', apiRes.data.agentResult?.resolvedFiles, 'agentName', apiRes.data.agentResult?.agentName, 'summaryLen', apiRes.data.agentResult?.summary?.length)
-      }
       const timer = pollTimersRef.current.get(repoName)
       if (timer) { clearInterval(timer); pollTimersRef.current.delete(repoName) }
       delete ipcEventCountRef.current[repoName]
