@@ -247,7 +247,7 @@ export class EngineClient {
               success: parsed.success ?? true,
               data: {
                 repoId: '',
-                conflicts: [],
+                conflicts: (parsed.resolvedFiles ?? []).map((f: string) => ({ path: f })),
                 agentResult: {
                   success: parsed.success ?? true,
                   summary: parsed.summary ?? '',
