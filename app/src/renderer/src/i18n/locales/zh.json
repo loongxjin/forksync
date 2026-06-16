@@ -275,6 +275,7 @@
   "diffViewer": {
     "title": "解决后的 Diff",
     "noDiff": "暂无 Diff。",
+    "emptyHint": "当前没有相对 HEAD 的改动，可能改动已被提交。",
     "failed": "加载 Diff 失败。"
   },
   "toast": {

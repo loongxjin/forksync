@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Sheet,
@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { DiffViewer } from '@/components/DiffViewer'
 import { engineApi } from '@/lib/api'
-import { FileDiff, X } from 'lucide-react'
+import { FileDiff, X, AlertCircle, RotateCw } from 'lucide-react'
 
 interface DiffDrawerProps {
   open: boolean
@@ -23,6 +23,10 @@ export function DiffDrawer({ open, onOpenChange, repoName }: DiffDrawerProps): J
   const [diff, setDiff] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // Bumped by the Retry button to re-trigger the fetch effect.
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const reload = useCallback(() => setReloadKey((k) => k + 1), [])
 
   useEffect(() => {
     if (!open || !repoName) {
@@ -47,7 +51,7 @@ export function DiffDrawer({ open, onOpenChange, repoName }: DiffDrawerProps): J
         setLoading(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- t is stable from react-i18next; including it causes re-fetches
-  }, [open, repoName])
+  }, [open, repoName, reloadKey])
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -75,10 +79,22 @@ export function DiffDrawer({ open, onOpenChange, repoName }: DiffDrawerProps): J
               {t('common.loading')}
             </div>
           )}
-          {error && (
-            <div className="text-sm text-error text-center py-8">{error}</div>
+          {!loading && error && (
+            <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <AlertCircle size={28} className="text-error" />
+              <div className="text-sm text-error max-w-md break-all">{error}</div>
+              <Button onClick={reload} disabled={loading} size="sm" variant="outline" className="text-xs">
+                <RotateCw size={14} className="mr-1.5" />
+                {t('common.retry')}
+              </Button>
+            </div>
           )}
-          {!loading && !error && (
+          {!loading && !error && !diff && (
+            <div className="text-sm text-muted-foreground text-center py-10">
+              {t('diffViewer.emptyHint')}
+            </div>
+          )}
+          {!loading && !error && diff && (
             <DiffViewer diff={diff} />
           )}
         </div>

@@ -275,6 +275,7 @@
   "diffViewer": {
     "title": "Resolved Diff",
     "noDiff": "No diff available.",
+    "emptyHint": "No changes relative to HEAD — changes may already be committed.",
     "failed": "Failed to load diff."
   },
   "toast": {
