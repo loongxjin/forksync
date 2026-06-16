@@ -38,7 +38,7 @@
 | **工作流引导** | 步骤式工作流：fetch → merge → 检测冲突 → agent 解决 → 审核 → 提交 |
 | **实时终端** | agent 运行过程中实时查看 stdout、工具调用和错误输出 |
 | **桌面应用** | 精致的 Electron GUI — 仪表盘、工作流步骤、设置页 |
-| **命令行工具** | 功能完整的 CLI，适合终端工作流 |
+| **HTTP API** | REST + WebSocket 服务，适合程序化访问 |
 | **目录扫描** | 递归扫描任意目录，自动发现并批量添加 Fork 仓库 |
 | **同步历史** | 基于 SQLite 的历史记录，支持筛选、AI 摘要和清理 |
 | **系统通知** | 桌面原生通知，同步成功/冲突/错误即时提醒 |
@@ -97,48 +97,15 @@ github:
 
 > Token 为可选项，但强烈建议配置 — 它可以启用通过 GitHub API 自动检测上游仓库。
 
-### 2. 添加仓库
-
-```bash
-# 添加单个仓库
-forksync add ~/projects/my-fork
-
-# 扫描目录，批量发现 Fork 仓库
-forksync scan ~/projects
-```
-
-### 3. 同步
-
-```bash
-# 同步所有仓库
-forksync sync --all
-
-# 同步指定仓库
-forksync sync my-fork
-
-# 启动后台同步服务（默认每 30 分钟）
-forksync serve
-```
-
-### 4. AI 解决冲突
-
-```bash
-# 使用 AI 解决冲突（交互式）
-forksync resolve my-fork
-
-# 指定 Agent，自动提交
-forksync resolve my-fork --agent opencode --no-confirm
-
-# 接受 / 拒绝解决结果
-forksync resolve my-fork --accept
-forksync resolve my-fork --reject
-```
-
-### 5. 启动桌面应用
+### 2. 启动应用
 
 ```bash
 cd app && npm install && npm run dev
 ```
+
+Electron 应用启动时自动启动 Go 引擎 server（`127.0.0.1:<随机端口>`）。
+所有仓库操作（添加、扫描、同步、解决冲突）均通过 GUI 完成。
+如需 API 访问，见 `engine/README.md`。
 
 ---
 
@@ -192,15 +159,7 @@ agent:
 | `confirm_before_commit: true` | agent 解决后等待用户审核，手动选择接受或拒绝 |
 | `confirm_before_commit: false` | agent 解决后自动提交 |
 
-**同步后命令：**
-
-每次同步成功后自动执行自定义脚本：
-
-```bash
-forksync post-sync add my-repo --name "install" --cmd "pip install -e ."
-forksync post-sync list my-repo
-forksync post-sync remove my-repo --id <命令ID>
-```
+**同步后命令：** 在桌面应用的仓库设置对话框中按仓库配置（添加/编辑/删除每次成功同步后执行的 shell 命令）。
 
 ---
 
@@ -243,146 +202,25 @@ forksync post-sync remove my-repo --id <命令ID>
 
 ---
 
-## 命令行参考
+## 引擎 API
 
-所有命令支持 `--json` 参数输出结构化 JSON。
+所有引擎操作均可通过本地 HTTP server 的 REST 端点访问。
+详见 `engine/README.md` 获取完整 API 参考和 JSON 契约。
 
-```bash
-# 仓库管理
-forksync add <路径> [--upstream <url>]         # 添加仓库
-forksync remove <名称>                         # 从管理列表移除
-forksync scan <目录>                           # 批量发现 Fork 仓库
+| 操作 | HTTP 路由 |
+|---|---|
+| 状态 | `GET /status` |
+| 扫描 | `POST /scan` |
+| 添加仓库 | `POST /repos` |
+| 移除仓库 | `DELETE /repos/{name}` |
+| 同步全部 | `POST /sync/all` |
+| 同步单个 | `POST /sync/repos/{name}` |
+| 解决冲突 | `POST /repos/{name}/resolve` |
+| 流式解决 | `WS /stream/resolve/{name}` |
+| Agent | `GET /agents` |
+| 历史 | `GET /history?repo=&limit=` |
+| 配置 | `GET /config` / `PUT /config` |
+| 后置同步 | `GET/POST/DELETE /repos/{name}/post-sync` |
+| 摘要 | `POST /repos/{name}/summarize` |
 
-# 同步
-forksync sync [--all | <名称>]                # 同步仓库
-forksync serve [--interval 15m]               # 后台同步服务
-forksync status                               # 查看所有仓库状态
 
-# AI 冲突解决
-forksync resolve <名称> [--agent claude] [--no-confirm] [--accept] [--reject]
-forksync resolve <名称> --stream              # 以 NDJSON 格式流式输出 agent 执行过程（Electron 使用）
-
-# 工作流管理
-forksync workflow continue <名称> --action {accept|reject|abort|resolve_with_agent|retry_commit|continue_manual}
-
-# 同步后命令
-forksync post-sync list <名称>
-forksync post-sync add <名称> --name <名字> --cmd <命令>
-forksync post-sync remove <名称> --id <命令ID>
-
-# AI 总结
-forksync summarize <名称> [--retry]           # 为最近一次同步生成 AI 总结
-
-# Agent 管理
-forksync agent list                           # 检测已安装的 Agent
-forksync agent sessions                       # 列出活跃会话
-forksync agent cleanup                        # 清理过期会话
-forksync agent reset <名称>                   # 删除指定仓库的 Agent 会话
-
-# 配置
-forksync config get                           # 显示所有配置
-forksync config set <key> <value>             # 设置配置值
-forksync config keys                          # 列出可用配置键
-
-# 历史
-forksync history [--limit 20] [--cleanup [--keep-days 30]]
-```
-
----
-
-## 配置
-
-**配置文件路径：** `~/.forksync/config.yaml`
-
-```yaml
-sync:
-  default_interval: "30m"
-  sync_on_startup: true
-  auto_launch: false
-  auto_summary: true
-  summary_agent: "claude"
-  summary_language: "zh"               # zh / en
-  summary_timeout: "3m"
-
-agent:
-  preferred: "claude"
-  priority: [claude, opencode, codex]
-  timeout: "10m"
-  conflict_strategy: "agent_resolve"   # agent_resolve / manual
-  resolve_strategy: "preserve_ours"    # preserve_ours / preserve_theirs / balanced
-  confirm_before_commit: true
-  session_ttl: "24h"
-
-github:
-  token: ""
-
-notification:
-  enabled: true
-
-proxy:
-  enabled: false
-  url: ""
-```
-
-**数据文件：**
-
-| 路径 | 用途 |
-|------|------|
-| `~/.forksync/config.yaml` | 用户配置 |
-| `~/.forksync/repos.json` | 受管仓库列表 |
-| `~/.forksync/sessions/<id>.json` | Agent 会话记录 |
-| `~/.forksync/agent-logs/<repo>/` | Agent 流式日志文件（NDJSON） |
-| `~/.forksync/db/sync_history.db` | SQLite 同步历史数据库 |
-| `~/.forksync/logs/sync-*.log` | 按日轮转的日志文件 |
-
----
-
-## 项目结构
-
-```
-forksync/
-├── engine/                      # Go CLI 引擎
-│   ├── cmd/                     # Cobra 命令（sync, resolve, workflow, agent 等）
-│   ├── internal/
-│   │   ├── agent/               # AI Agent 适配器（Claude、OpenCode、Codex）
-│   │   │   └── session/         # 会话生命周期管理
-│   │   ├── config/              # 基于 Viper 的 YAML 配置
-│   │   ├── conflict/            # 合并冲突检测
-│   │   ├── git/                 # Git 操作（原生 + CLI）
-│   │   ├── history/             # SQLite 同步历史存储
-│   │   ├── logger/              # 文件日志，按日轮转
-│   │   ├── notify/              # 桌面系统通知
-│   │   ├── repo/                # 仓库 JSON 存储（线程安全）
-│   │   ├── scheduler/           # 后台同步调度器
-│   │   ├── summarizer/          # AI 同步提交总结器
-│   │   └── sync/                # 核心同步管线
-│   └── pkg/types/               # 共享类型
-│
-├── app/                         # Electron 桌面应用
-│   ├── src/main/                # Electron 主进程 + EngineClient
-│   ├── src/preload/             # 上下文桥接（window.api）
-│   └── src/renderer/            # React UI（页面、组件、Context）
-│
-├── build/                       # 构建脚本
-└── docs/                        # 文档
-```
-
----
-
-## 测试
-
-```bash
-cd engine && go test ./... -v
-```
-
-**146 个测试**，分布在 15 个测试文件中 — 覆盖同步管线、Agent 适配器、会话管理、Git 操作、冲突检测、配置、历史记录等模块。
-
----
-
-## 开发
-
-请阅读 [开发指南](./docs/DEVELOPMENT.md) 了解环境搭建和架构细节。
-
-## 许可证
-
-[MIT](./LICENSE)

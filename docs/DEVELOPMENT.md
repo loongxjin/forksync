@@ -12,7 +12,7 @@
 - [Go 引擎开发](#go-引擎开发)
 - [Electron UI 开发](#electron-ui-开发)
 - [Go 与 Electron 的通信](#go-与-electron-的通信)
-- [添加新的 CLI 命令](#添加新的-cli-命令)
+- [添加新的 API 端点](#添加新的-api-端点)
 - [添加新的 UI 页面](#添加新的-ui-页面)
 - [添加新的 AI Agent 适配器](#添加新的-ai-agent-适配器)
 - [构建与打包](#构建与打包)
@@ -54,7 +54,7 @@ cd app && npm install && cd ..
 cd app && npm run dev
 ```
 
-开发模式下，Electron 主进程会自动使用 `go run ./engine/...` 调用 Go 引擎，无需手动编译 Go 二进制。
+开发模式下，Electron 主进程会自动使用 `npm run dev`（dev 模式自动启动 Go engine） 调用 Go 引擎，无需手动编译 Go 二进制。
 
 ---
 
@@ -62,22 +62,24 @@ cd app && npm run dev
 
 ```
 forksync/
-├── engine/                          # Go CLI 引擎
-│   ├── main.go                      # 程序入口
-│   ├── build.sh                     # Go 引擎构建脚本
-│   ├── cmd/                         # Cobra CLI 命令
+├── engine/                          # Go HTTP 引擎
+│   ├── main.go                      # HTTP server 入口
 │   ├── pkg/types/                   # 共享类型（JSON 契约）
 │   └── internal/                    # 内部包
+│       ├── app/                     # HTTP handlers（替代旧 cmd/ Cobra 命令）
 │       ├── agent/                   # AI Agent 适配器
 │       │   └── session/             # 会话管理
 │       ├── config/                  # 配置管理 (viper)
-│       ├── conflict/                # 冲突检测
 │       ├── git/                     # Git 操作
 │       ├── github/                  # GitHub API
+│       ├── history/                 # SQLite 同步历史
 │       ├── notify/                  # 系统通知
 │       ├── repo/                    # 仓库存储
+│       ├── resolve/                 # 冲突解决器
 │       ├── scheduler/               # 定时调度
-│       └── sync/                    # 同步管线
+│       ├── summarizer/              # Agent 摘要生成
+│       ├── sync/                    # 同步管线
+│       └── workflow/                # 工作流状态机
 │
 ├── app/                             # Electron 桌面应用
 │   ├── electron.vite.config.ts      # electron-vite 配置
@@ -124,7 +126,7 @@ forksync/
 
 | 目录 | 职责 |
 |------|------|
-| `cmd/` | Cobra CLI 命令，每个文件对应一个子命令 |
+| `internal/app/` | HTTP handler，每个文件对应一组 REST 能力 |
 | `pkg/types/` | 共享类型定义，Go 和 TypeScript 的 JSON 契约 |
 | `internal/config/` | 基于 viper 的配置管理 |
 | `internal/repo/` | 仓库 JSON 持久化存储 |
@@ -180,7 +182,7 @@ func outputJSON[T any](data T, err error) {
 cd engine
 
 # 运行
-go run . status --json
+go run . -addr 127.0.0.1:0 # dev mode uses `npm run dev` which spawns the engine automatically
 
 # 测试
 go test ./... -v
@@ -282,173 +284,135 @@ npm run preview
 
 ## Go 与 Electron 的通信
 
-### 通信流程
+### 架构
+
+Electron 主进程启动时 spawn Go 二进制作为**长驻 HTTP server**（`127.0.0.1:<随机端口>`）。
+binary 启动后在 stdout 打印一行 `FORKSYNC_HTTP_ADDR=127.0.0.1:<port>`，主进程读取该行获取端口，
+接着轮询 `/healthz` 直到 server 就绪。
+
+此后，所有引擎操作通过 REST（`fetch`）或 WebSocket 完成。`engine.ts` 的所有 public 方法签名
+保持不变，因此 renderer 和 preload 无需修改。
 
 ```
 React 组件
-  → window.api.syncAll()           // 渲染进程
-    → ipcRenderer.invoke('engine:syncAll')  // preload 桥接
-      → ipcMain handler            // 主进程
-        → engineClient.syncAll()   // EngineClient
-          → spawn('forksync', ['sync', '--all', '--json'])  // 子进程
-            → Go CLI 输出 JSON     // Go 引擎
-          ← 解析 JSON 响应
-        ← ApiResponse<SyncData>
-      ← 返回给渲染进程
-    ← 更新 React 状态
-  ← UI 更新
+  → window.api.syncAll()           // 渲染进程（未改动）
+    → ipcRenderer.invoke('engine:syncAll')  // preload 桥接（未改动）
+      → ipcMain handler            // 主进程（未改动）
+        → engineClient.syncAll()   // EngineClient（内部改用 fetch）
+          → fetch('http://127.0.0.1:<port>/sync/all', {method:'POST'})
+            → Go HTTP server 返回 ApiResponse<SyncData>
+          ← JSON.parse
+        ← 返回给 IPC
+      ← 通过 contextBridge 桥接
+    ← Promise resolve
+  ← 更新 UI
 ```
 
-### IPC 通道列表
+### IPC 通道 → HTTP 路由
 
-| 通道 | EngineClient 方法 | Go 命令 |
-|------|-------------------|---------|
-| `engine:status` | `status()` | `forksync status --json` |
-| `engine:syncAll` | `syncAll()` | `forksync sync --all --json` |
-| `engine:syncRepo` | `syncRepo(name)` | `forksync sync <name> --json` |
-| `engine:scan` | `scan(dir)` | `forksync scan <dir> --json` |
-| `engine:add` | `add(path, upstream?)` | `forksync add <path> --json` |
-| `engine:remove` | `remove(name)` | `forksync remove <name> --json` |
-| `engine:resolve` | `resolve(name, opts?)` | `forksync resolve <name> --json` |
-| `engine:resolveAccept` | `resolveAccept(name)` | `forksync resolve <name> --accept --json` |
-| `engine:resolveReject` | `resolveReject(name)` | `forksync resolve <name> --reject --json` |
-| `engine:agentList` | `agentList()` | `forksync agent list --json` |
-| `engine:agentSessions` | `agentSessions()` | `forksync agent sessions --json` |
-| `engine:agentCleanup` | `agentCleanup()` | `forksync agent cleanup --json` |
+IPC 通道不变。每个通道对应的 HTTP 路由：
 
-### TypeScript 类型映射
+| IPC 通道 | HTTP 路由 | 方法 | 说明 |
+|---------|-----------|------|------|
+| `engine:status` | `/status` | GET | 获取仓库状态和 agent 列表 |
+| `engine:syncAll` | `/sync/all` | POST | 同步所有仓库（10 分钟超时） |
+| `engine:syncRepo` | `/sync/repos/{name}` | POST | 同步单个仓库 |
+| `engine:scan` | `/scan` | POST | 扫描目录 |
+| `engine:add` | `/repos` | POST | 添加仓库 |
+| `engine:remove` | `/repos/{name}` | DELETE | 移除仓库 |
+| `engine:resolve` | `/repos/{name}/resolve` | POST | 冲突解决（agent/prepare/accept/reject） |
+| `engine:resolveStream:start` | `/stream/resolve/{name}` | WS | 流式 agent 解决 |
+| `engine:agentList` | `/agents` | GET | 列出 agent |
+| `engine:agentSessions` | `/agents/sessions` | GET | Agent 会话 |
+| `engine:agentCleanup` | `/agents/cleanup` | POST | 清理 agent 会话 |
+| `engine:agentReset` | `/agents/{name}/reset` | POST | 重置 agent 会话 |
+| `engine:history` | `/history?repo=&limit=` | GET | 同步历史 |
+| `engine:historyCleanup` | `/history/cleanup` | POST | 清理同步历史 |
+| `engine:configGet` | `/config` | GET | 获取配置 |
+| `engine:configSet` | `/config` | PUT | 修改配置 |
+| `engine:postSyncList` | `/repos/{name}/post-sync` | GET | 后置同步命令 |
+| `engine:postSyncAdd` | `/repos/{name}/post-sync` | POST | 添加后置同步命令 |
+| `engine:postSyncRemove` | `/repos/{name}/post-sync` | DELETE | 移除后置同步命令 |
+| `engine:summarize` | `/repos/{name}/summarize` | POST | 生成摘要 |
+| `engine:readAgentLog` | `/repos/{name}/agent-log` | GET | 读取 agent 日志 |
+| `engine:repoDiff` | `/repos/{name}/diff` | GET | Git diff |
 
-`app/src/renderer/src/types/engine.ts` 定义了所有与 Go 引擎对应的 TypeScript 类型：
+### EngineClient 架构
 
-```typescript
-// Go: types.ApiResponse[T]  →  TypeScript: ApiResponse<T>
-interface ApiResponse<T> {
-  success: boolean
-  data: T
-  error: string
-}
+`EngineClient` 类在 `app/src/main/engine.ts` 中：
+- 通过 `getEngineServer().getBaseUrl()` 获取 server 地址
+- 调用 `fetch()` 做 REST，`ws` 库做 WebSocket
+- 所有公共方法签名与旧 CLI 模型完全兼容
 
-// Go: types.Repo  →  TypeScript: Repo
-interface Repo {
-  id: string
-  name: string
-  path: string
-  branch: string
-  upstream: string
-  status: RepoStatus
-  ahead: number
-  behind: number
-  // ...
-}
-```
+### 添加新的 API 端点
 
-修改 Go 类型时，必须同步更新 TypeScript 定义。
-
-### 开发模式 vs 生产模式
-
-`EngineClient` 自动检测运行环境：
-
-```typescript
-// 开发模式：使用 go run（无需预编译）
-const cmd = 'go'
-const args = ['run', './engine/...', '--json', ...commandArgs]
-
-// 生产模式：使用打包的二进制
-const cmd = join(process.resourcesPath, 'forksync')
-const args = ['--json', ...commandArgs]
-```
-
-判断逻辑：`app.isPackaged` — 开发时为 `false`，打包后为 `true`。
+详见 [添加新的 API 端点](#添加新的-api-端点)。
 
 ---
 
-## 添加新的 CLI 命令
+## 添加新的 API 端点
 
-完整示例：添加一个 `forksync log` 命令。
+完整示例：添加一个 `GET /repos/{name}/log` 端点。
 
-### 1. Go 引擎
+### 1. Go handler
 
 ```go
-// engine/cmd/log.go
-package cmd
+// engine/internal/app/handlers_misc.go
 
-import "github.com/spf13/cobra"
-
-var logCmd = &cobra.Command{
-    Use:   "log",
-    Short: "Show sync history",
+func (s *Server) registerMiscRoutes(mux *http.ServeMux) {
+    mux.HandleFunc("GET /repos/{name}/log", s.handleRepoLog)
 }
 
-func init() {
-    rootCmd.AddCommand(logCmd)
+func (s *Server) handleRepoLog(w http.ResponseWriter, r *http.Request) {
+    name := r.PathValue("name")
+    repo, ok := s.deps.Store.GetByName(name)
+    if !ok {
+        writeErr[...](w, fmt.Errorf("repo %q not found", name))
+        return
+    }
+    writeOK(w, readLogs(repo.Path))
 }
 ```
 
 ### 2. 定义类型
 
-```go
-// engine/pkg/types/log.go
-package types
+```typescript
+// app/src/shared/types/engine.ts
+export interface RepoLogData { name: string; logs: string[] }
+```
 
-type LogEntry struct {
-    RepoName  string `json:"repoName"`
-    Timestamp string `json:"timestamp"`
-    Action    string `json:"action"`
-    Result    string `json:"result"`
-}
+### 3. EngineClient 方法
 
-type LogData struct {
-    Entries []LogEntry `json:"entries"`
+```typescript
+// app/src/main/engine.ts — EngineClient class
+async repoLog(name: string): Promise<ApiResponse<RepoLogData>> {
+  return this.get<RepoLogData>(`/repos/${encodeURIComponent(name)}/log`)
 }
 ```
 
-### 3. TypeScript 类型
+### 4. IPC handler
 
 ```typescript
-// app/src/renderer/src/types/engine.ts — 追加
-export interface LogEntry {
-  repoName: string
-  timestamp: string
-  action: string
-  result: string
-}
-
-export interface LogData {
-  entries: LogEntry[]
-}
+// app/src/main/ipc-engine.ts
+ipcMain.handle('engine:repoLog', async (_, name: string) => {
+  assertString(name)
+  return engineClient.repoLog(name)
+})
 ```
 
-### 4. EngineClient 方法
+### 5. Preload 桥接
 
 ```typescript
-// app/src/main/engine.ts — 追加
-async getLog(): Promise<ApiResponse<LogData>> {
-  return this.exec<LogData>(['log'])
-}
+// app/src/preload/index.ts — api 对象
+repoLog: (name: string) => ipcRenderer.invoke('engine:repoLog', name),
 ```
 
-### 5. IPC 通道
+### 6. 渲染进程使用
 
-```typescript
-// app/src/main/ipc.ts — 追加
-ipcMain.handle('engine:log', (_e) => engineClient.getLog())
+```tsx
+const result = await window.api.repoLog('my-repo')
 ```
 
-### 6. Preload 桥接
-
-```typescript
-// app/src/preload/index.ts — 追加
-log: () => ipcRenderer.invoke('engine:log'),
-```
-
-### 7. 渲染进程 API
-
-```typescript
-// app/src/renderer/src/lib/api.ts — 追加
-export const getLog = () => window.api.log()
-```
-
----
 
 ## 添加新的 UI 页面
 
@@ -554,7 +518,7 @@ cd app && npm run dev
 ```
 
 - 自动热重载（renderer 进程）
-- Go 引擎通过 `go run ./engine/...` 实时调用
+- Go 引擎通过 `npm run dev`（dev 模式自动启动 Go engine） 实时调用
 - 无需手动编译 Go 二进制
 
 ### 生产构建
@@ -646,14 +610,14 @@ cd app && npm run dev
 
 ### Q: 开发模式下 Go 引擎调用失败？
 
-检查当前工作目录是否为项目根目录。`go run ./engine/...` 需要在项目根目录执行。`npm run dev` 会从 `app/` 目录启动，electron-vite 会正确设置工作目录。
+检查当前工作目录是否为项目根目录。`npm run dev`（dev 模式自动启动 Go engine） 需要在项目根目录执行。`npm run dev` 会从 `app/` 目录启动，electron-vite 会正确设置工作目录。
 
 ### Q: 如何调试 Go 引擎的 JSON 输出？
 
 直接在终端运行命令：
 
 ```bash
-cd engine && go run . status --json | jq .
+cd engine && go run . -addr 127.0.0.1:0 # dev mode uses `npm run dev` which spawns the engine automatically | jq .
 ```
 
 ### Q: 如何调试 Electron 主进程？
