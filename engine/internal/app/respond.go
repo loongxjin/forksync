@@ -13,6 +13,21 @@ func writeOK[T any](w http.ResponseWriter, data T) {
 	writeEnvelope(w, types.ApiResponse[T]{Success: true, Data: data})
 }
 
+// writeBare writes a raw JSON object (NOT wrapped in ApiResponse). Use only for
+// endpoints whose historical contract is a bare object — currently readAgentLog
+// ({events,isRunning}) and repoDiff ({success,diff?,error?}). The frontend's
+// getRaw-based clients parse these directly without unwrapping.
+func writeBare[T any](w http.ResponseWriter, data T) {
+	w.Header().Set("Content-Type", "application/json")
+	raw, err := json.Marshal(data)
+	if err != nil {
+		logger.Error("app: failed to encode bare response", "error", err)
+		http.Error(w, `{"success":false,"error":"internal encode error"}`, http.StatusInternalServerError)
+		return
+	}
+	_, _ = w.Write(raw)
+}
+
 // writeErr writes a failed ApiResponse[T] envelope to w with the given error.
 // The HTTP status stays 200 so the frontend's existing ApiResponse parsing
 // (which reads success/error fields, not HTTP status) keeps working unchanged.

@@ -330,16 +330,16 @@ func (s *Server) handleRepoDiff(w http.ResponseWriter, r *http.Request) {
 
 	r2, ok := s.deps.Store.GetByName(name)
 	if !ok {
-		writeOK(w, repoDiffResult{Success: false, Error: fmt.Sprintf("repo %q not found", name)})
+		writeBare(w, repoDiffResult{Success: false, Error: fmt.Sprintf("repo %q not found", name)})
 		return
 	}
 
 	out, err := s.deps.GitOps.Diff(r.Context(), r2.Path)
 	if err != nil {
-		writeOK(w, repoDiffResult{Success: false, Error: err.Error()})
+		writeBare(w, repoDiffResult{Success: false, Error: err.Error()})
 		return
 	}
-	writeOK(w, repoDiffResult{Success: true, Diff: string(out)})
+	writeBare(w, repoDiffResult{Success: true, Diff: string(out)})
 }
 
 // splitCSV parses a comma-separated query value into a slice, trimming spaces

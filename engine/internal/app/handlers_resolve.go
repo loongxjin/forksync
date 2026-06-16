@@ -463,12 +463,12 @@ func (s *Server) handleReadAgentLog(w http.ResponseWriter, r *http.Request) {
 
 	latest, err := agent.LatestLogFile(s.deps.ConfigDir(), name)
 	if err != nil || latest == "" {
-		writeOK(w, agentLogResult{Events: []agent.StreamEvent{}, IsRunning: false})
+		writeBare(w, agentLogResult{Events: []agent.StreamEvent{}, IsRunning: false})
 		return
 	}
 	events, err := agent.ReadLogFile(latest)
 	if err != nil {
-		writeOK(w, agentLogResult{Events: []agent.StreamEvent{}, IsRunning: false})
+		writeBare(w, agentLogResult{Events: []agent.StreamEvent{}, IsRunning: false})
 		return
 	}
 	if events == nil {
@@ -479,5 +479,5 @@ func (s *Server) handleReadAgentLog(w http.ResponseWriter, r *http.Request) {
 		last := events[len(events)-1]
 		isRunning = last.Type != agent.StreamEventDone && last.Type != agent.StreamEventError
 	}
-	writeOK(w, agentLogResult{Events: events, IsRunning: isRunning})
+	writeBare(w, agentLogResult{Events: events, IsRunning: isRunning})
 }
