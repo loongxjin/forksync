@@ -136,3 +136,24 @@ func (msw *MultiStreamWriter) WriteEvent(ev StreamEvent) error {
 func (msw *MultiStreamWriter) StreamWriter() *StreamWriter {
 	return &StreamWriter{multi: msw}
 }
+
+// DoneEventFromResult builds the authoritative terminal "done" StreamEvent
+// from an AgentResult, copying all enriched fields (ResolvedFiles, Diff,
+// AgentName, Summary, SessionID). Both the manual resolve handler and the
+// sync auto-resolve path call this so their disk logs end with a proper
+// terminal frame — ensuring readAgentLog reports isRunning=false.
+func DoneEventFromResult(r *AgentResult) StreamEvent {
+	ev := StreamEvent{
+		Type:      StreamEventDone,
+		Success:   true,
+		Timestamp: time.Now().UTC(),
+	}
+	if r != nil {
+		ev.Summary = r.Summary
+		ev.SessionID = r.SessionID
+		ev.ResolvedFiles = r.ResolvedFiles
+		ev.Diff = r.Diff
+		ev.AgentName = r.AgentName
+	}
+	return ev
+}

@@ -297,22 +297,9 @@ func (s *Server) runResolveWithAgent(ctx context.Context, r types.Repo, req reso
 	}, nil
 }
 
-// doneEventFromResult builds a terminal 'done' StreamEvent carrying the agent
-// result summary/session id, mirroring what the Electron side synthesizes.
+// doneEventFromResult delegates to the shared agent.DoneEventFromResult.
 func doneEventFromResult(r *agent.AgentResult) agent.StreamEvent {
-	ev := agent.StreamEvent{
-		Type:      agent.StreamEventDone,
-		Success:   true,
-		Timestamp: time.Now().UTC(),
-	}
-	if r != nil {
-		ev.Summary = r.Summary
-		ev.SessionID = r.SessionID
-		ev.ResolvedFiles = r.ResolvedFiles
-		ev.Diff = r.Diff
-		ev.AgentName = r.AgentName
-	}
-	return ev
+	return agent.DoneEventFromResult(r)
 }
 
 // resolveAgentProvider mirrors cmd/resolve.go resolveAgentProvider.

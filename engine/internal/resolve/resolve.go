@@ -226,19 +226,9 @@ func (r *Resolver) ResolveWithAgent(
 		logger.Error("resolve: failed to update repo after agent resolution", "repo", repo.Name, "error", storeErr)
 	}
 
-	// Emit state_persisted event AFTER store.Update so the frontend knows
-	// the workflow state is safely on disk. Only emit on success — if the
-	// store failed, the frontend's verification poll will detect the stale
-	// state and retry.
-	if streamWriter != nil && storeErr == nil {
-		_ = streamWriter.WriteEvent(agent.StreamEvent{
-			Type:      agent.StreamEventStatePersisted,
-			Timestamp: time.Now().UTC(),
-			Success:   true,
-			Summary:   result.Summary,
-			SessionID: result.SessionID,
-		})
-	}
+	// NOTE: the adapter already emits a state_persisted event when it finishes.
+	// We no longer emit a second one here — it was redundant and caused the
+	// terminal drawer to render an extra empty line.
 
 	return &AgentResult{
 		Success:       true,

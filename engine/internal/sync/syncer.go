@@ -610,6 +610,17 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	// which files had conflicts. Tell verifyAndStageResolvedFiles to check
 	// and stage those so the subsequent commit succeeds.
 	result.ResolvedFiles = conflictPaths
+	// Populate Diff so the disk-log done frame carries it for replay.
+	if diffBytes, dErr := s.gitOps.Diff(ctx, r.Path); dErr == nil {
+		result.Diff = string(diffBytes)
+	}
+
+	// Write a terminal 'done' frame to the disk log so readAgentLog reports
+	// isRunning=false. This carries ResolvedFiles/Diff/AgentName/Summary so the
+	// frontend can restore resolve details when replaying the log.
+	if streamWriter != nil {
+		_ = streamWriter.WriteEvent(agent.DoneEventFromResult(result))
+	}
 
 	// Verify no conflict markers remain and stage resolved files
 	if !s.verifyAndStageResolvedFiles(ctx, r, result) {
