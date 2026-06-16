@@ -39,18 +39,22 @@ export function shouldShowStepDetail(
   step: StepRecord,
   allSteps: StepRecord[]
 ): boolean {
+  // Always show details at accept_changes when it's waiting for user
+  // confirmation — this is the canonical review step.
+  if (step.step === 'accept_changes' && step.status === 'waiting') {
+    return true
+  }
+
+  // Show at agent_resolve only while accept_changes hasn't reached waiting
+  // yet — avoids showing the same details twice.
   const isAgentResolveFinished = step.step === 'agent_resolve' &&
     (step.status === 'success' || step.status === 'failed')
+  if (!isAgentResolveFinished) return false
 
-  const anyAgentResolveFinished = allSteps.some(
-    s => s.step === 'agent_resolve' && (s.status === 'success' || s.status === 'failed')
+  const anyAcceptWaiting = allSteps.some(
+    s => s.step === 'accept_changes' && s.status === 'waiting'
   )
-
-  const isAcceptWaitingWithoutAgent = step.step === 'accept_changes' &&
-    step.status === 'waiting' &&
-    !anyAgentResolveFinished
-
-  return isAgentResolveFinished || isAcceptWaitingWithoutAgent
+  return !anyAcceptWaiting
 }
 
 /**
