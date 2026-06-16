@@ -98,7 +98,7 @@ export class EngineServer {
       this.child = child
 
       const timeout = setTimeout(() => {
-        killProcessGroup(child)
+        killProcessTree(child)
         reject(new Error(`engine server did not announce address within ${STARTUP_TIMEOUT_MS}ms`))
       }, STARTUP_TIMEOUT_MS)
 
@@ -169,7 +169,7 @@ export class EngineServer {
   kill(): void {
     if (this.child) {
       log.info('[engine-server] killing server process')
-      killProcessGroup(this.child)
+      killProcessTree(this.child)
       this.child = null
       this.baseUrl = ''
       this.startPromise = null
