@@ -293,7 +293,11 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 // processAssistantEvent extracts text from an "assistant" stream-json event
 // and emits it as stdout StreamEvents.
 func (a *ClaudeAdapter) processAssistantEvent(sw *StreamWriter, ev map[string]any, builder *strings.Builder) {
-	// "assistant" events have a "message" field with "content" array
+	// "assistant" events carry the FULL message snapshot. The real-time display
+	// is already driven by "stream_event" deltas (text) and standalone "tool_use"
+	// events, so here we only accumulate text into the builder (for the final
+	// summary) WITHOUT emitting any stdout/tool events — otherwise everything
+	// shows up twice.
 	message, _ := ev["message"].(map[string]any)
 	if message == nil {
 		return
@@ -305,28 +309,10 @@ func (a *ClaudeAdapter) processAssistantEvent(sw *StreamWriter, ev map[string]an
 			continue
 		}
 		blockType, _ := cb["type"].(string)
-		switch blockType {
-		case "text":
+		if blockType == "text" {
 			if text, ok := cb["text"].(string); ok && text != "" {
 				builder.WriteString(text)
-				// Split multi-line text into separate events
-				for _, line := range strings.Split(text, "\n") {
-					_ = sw.WriteEvent(StreamEvent{
-						Type:      StreamEventStdout,
-						Data:      line,
-						Timestamp: time.Now().UTC(),
-					})
-				}
 			}
-		case "tool_use":
-			name, _ := cb["name"].(string)
-			input, _ := cb["input"].(map[string]any)
-			_ = sw.WriteEvent(StreamEvent{
-				Type:      StreamEventTool,
-				Timestamp: time.Now().UTC(),
-				ToolName:  name,
-				ToolPath:  extractToolPath(input),
-			})
 		}
 	}
 }
