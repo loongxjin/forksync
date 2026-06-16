@@ -268,13 +268,18 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 	resultText := resultTextBuilder.String()
 	summary := extractSummary(resultText, maxSummaryLength)
 
-	_ = sw.WriteEvent(StreamEvent{
-		Type:      StreamEventDone,
-		Timestamp: time.Now().UTC(),
-		Success:   true,
-		Summary:   summary,
-		SessionID: sessionID,
-	})
+		// NOTE: do NOT send a terminal 'done' event here — the resolve flow
+		// enriches the result with ResolvedFiles/Diff/AgentName and emits the
+		// authoritative done frame via doneEventFromResult. Sending done twice
+		// causes the Electron side to consume the first (agent-only) frame and
+		// silently drop the enriched one.
+		_ = sw.WriteEvent(StreamEvent{
+			Type:      StreamEventStatePersisted,
+			Timestamp: time.Now().UTC(),
+			Success:   true,
+			Summary:   summary,
+			SessionID: sessionID,
+		})
 
 	logger.Debug("[TRACE] claude: streamed resolve completed", "sessionID", sessionID, "resultLen", len(resultText))
 
