@@ -8,7 +8,6 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { CheckCircle2, Zap, XCircle } from 'lucide-react'
-import { Markdown } from '@/components/ui/markdown'
 import type { SyncHistoryRecord } from '@shared/types/engine'
 
 // ---------------------------------------------------------------------------
@@ -108,7 +107,7 @@ export function HistoryRow({ record, onRetry }: HistoryRowProps): JSX.Element {
             <div className="text-xs text-muted-foreground leading-relaxed">
               {expanded || shouldShowFull(record.summary) ? (
                 <>
-                  <Markdown>{record.summary}</Markdown>
+                  {record.summary}
                   {!shouldShowFull(record.summary) && (
                     <button
                       onClick={() => setExpanded(false)}
