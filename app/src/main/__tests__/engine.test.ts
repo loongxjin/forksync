@@ -136,3 +136,139 @@ describe('EngineClient HTTP routes', () => {
     await expect(c.status()).rejects.toBeInstanceOf(EngineRequestError)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Route coverage for the remaining EngineClient methods (appended)
+// ---------------------------------------------------------------------------
+function stubOk(data: unknown): void {
+  mockFetch.mockResolvedValueOnce(jsonResponse({ success: true, data }))
+}
+function firstCall(): [string, RequestInit] {
+  return mockFetch.mock.calls[0] as [string, RequestInit]
+}
+
+describe('EngineClient remaining routes', () => {
+  beforeEach(() => mockFetch.mockReset())
+
+  it('scan → POST /scan {dir}', async () => {
+    stubOk({ repos: [] })
+    await new EngineClient().scan('/some/dir')
+    const [url, init] = firstCall()
+    expect(url).toBe('http://127.0.0.1:9999/scan')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body as string)).toEqual({ dir: '/some/dir' })
+  })
+
+  it('syncRepo → POST /sync/repos/{name}', async () => {
+    stubOk({ results: [] })
+    await new EngineClient().syncRepo('my repo')
+    const [url, init] = firstCall()
+    expect(url).toBe('http://127.0.0.1:9999/sync/repos/my%20repo')
+    expect(init.method).toBe('POST')
+  })
+
+  it('resolvePrepare → mode=prepare', async () => {
+    stubOk({ repoId: 'r', conflicts: [] })
+    await new EngineClient().resolvePrepare('r')
+    expect(JSON.parse(firstCall()[1].body as string).mode).toBe('prepare')
+  })
+
+  it('resolveAccept → mode=accept', async () => {
+    stubOk({ repoId: 'r', resolved: true })
+    await new EngineClient().resolveAccept('r')
+    expect(JSON.parse(firstCall()[1].body as string).mode).toBe('accept')
+  })
+
+  it('resolveReject → mode=reject', async () => {
+    stubOk({ repoId: 'r', rolledBack: true })
+    await new EngineClient().resolveReject('r')
+    expect(JSON.parse(firstCall()[1].body as string).mode).toBe('reject')
+  })
+
+  it('agentList → GET /agents', async () => {
+    stubOk({ agents: [], preferred: '' })
+    await new EngineClient().agentList()
+    expect(firstCall()[0]).toBe('http://127.0.0.1:9999/agents')
+    expect(firstCall()[1].method).toBe('GET')
+  })
+
+  it('agentSessions → GET /agents/sessions', async () => {
+    stubOk({ sessions: [] })
+    await new EngineClient().agentSessions()
+    expect(firstCall()[0]).toBe('http://127.0.0.1:9999/agents/sessions')
+  })
+
+  it('agentCleanup → POST /agents/cleanup', async () => {
+    stubOk({ removed: 0 })
+    await new EngineClient().agentCleanup()
+    expect(firstCall()[0]).toBe('http://127.0.0.1:9999/agents/cleanup')
+    expect(firstCall()[1].method).toBe('POST')
+  })
+
+  it('agentReset → POST /agents/{name}/reset', async () => {
+    stubOk({ repoId: 'r', cleared: true })
+    await new EngineClient().agentReset('r')
+    expect(firstCall()[0]).toBe('http://127.0.0.1:9999/agents/r/reset')
+  })
+
+  it('historyCleanup → POST /history/cleanup', async () => {
+    stubOk({ message: 'ok' })
+    await new EngineClient().historyCleanup({ keepDays: 7 })
+    expect(JSON.parse(firstCall()[1].body as string)).toEqual({ repo: undefined, keepDays: 7 })
+  })
+
+  it('configGet → GET /config', async () => {
+    stubOk({})
+    await new EngineClient().configGet()
+    expect(firstCall()[0]).toBe('http://127.0.0.1:9999/config')
+    expect(firstCall()[1].method).toBe('GET')
+  })
+
+  it('postSyncList → GET /repos/{name}/post-sync', async () => {
+    stubOk({ commands: [] })
+    await new EngineClient().postSyncList('r')
+    expect(firstCall()[0]).toBe('http://127.0.0.1:9999/repos/r/post-sync')
+  })
+
+  it('postSyncAdd → POST with name+cmd body', async () => {
+    stubOk({ commands: [] })
+    await new EngineClient().postSyncAdd('r', 'build', 'npm run build')
+    expect(JSON.parse(firstCall()[1].body as string)).toEqual({ name: 'build', cmd: 'npm run build' })
+  })
+
+  it('postSyncRemove → DELETE with id body', async () => {
+    stubOk({ commands: [] })
+    await new EngineClient().postSyncRemove('r', 'cmd-1')
+    const [url, init] = firstCall()
+    expect(init.method).toBe('DELETE')
+    expect(url).toBe('http://127.0.0.1:9999/repos/r/post-sync')
+    expect(JSON.parse(init.body as string)).toEqual({ id: 'cmd-1' })
+  })
+
+  it('summarize → POST /repos/{name}/summarize {retry:false}', async () => {
+    stubOk({ historyId: 1, repoName: 'r', summary: '', summaryStatus: 'done' })
+    await new EngineClient().summarize('r')
+    expect(firstCall()[0]).toBe('http://127.0.0.1:9999/repos/r/summarize')
+    expect(JSON.parse(firstCall()[1].body as string).retry).toBe(false)
+  })
+
+  it('summarizeRetry → retry:true', async () => {
+    stubOk({ historyId: 1, repoName: 'r', summary: '', summaryStatus: 'done' })
+    await new EngineClient().summarizeRetry('r')
+    expect(JSON.parse(firstCall()[1].body as string).retry).toBe(true)
+  })
+
+  it('readAgentLog → GET agent-log (bare object)', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ events: [], isRunning: false }) } as Response)
+    const res = await new EngineClient().readAgentLog('r')
+    expect(firstCall()[0]).toBe('http://127.0.0.1:9999/repos/r/agent-log')
+    expect(res).toEqual({ events: [], isRunning: false })
+  })
+
+  it('repoDiff → GET diff (bare object)', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ success: true, diff: 'changes' }) } as Response)
+    const res = await new EngineClient().repoDiff('r')
+    expect(firstCall()[0]).toBe('http://127.0.0.1:9999/repos/r/diff')
+    expect(res.success).toBe(true)
+  })
+})
