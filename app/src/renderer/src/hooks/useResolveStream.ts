@@ -81,10 +81,16 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
       if (resolveData) {
         nextResolve[action.repoName] = resolveData
       }
+      const nextLive = { ...state.streamLive }
+      if (action.isRunning) {
+        nextLive[action.repoName] = true
+      } else {
+        delete nextLive[action.repoName]
+      }
       return {
         ...state,
         streamEvents: { ...state.streamEvents, [action.repoName]: action.events },
-        streamLive: { ...state.streamLive, [action.repoName]: action.isRunning },
+        streamLive: nextLive,
         resolveResults: nextResolve
       }
     }
