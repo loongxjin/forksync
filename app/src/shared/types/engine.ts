@@ -199,6 +199,9 @@ export interface AgentStreamEvent {
   success?: boolean
   summary?: string
   session_id?: string
+  resolvedFiles?: string[]
+  diff?: string
+  agentName?: string
   name?: string
   path?: string
 }

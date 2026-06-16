@@ -235,7 +235,7 @@ export class EngineClient {
         ws.on('message', (data: { toString: () => string }) => {
           const text = data.toString()
           if (!text) return
-          let parsed: AgentStreamEvent & { success?: boolean; summary?: string; session_id?: string }
+          let parsed: AgentStreamEvent & { success?: boolean; summary?: string; session_id?: string; resolvedFiles?: string[]; diff?: string; agentName?: string }
           try {
             parsed = JSON.parse(text)
           } catch {
@@ -252,9 +252,9 @@ export class EngineClient {
                   success: parsed.success ?? true,
                   summary: parsed.summary ?? '',
                   sessionId: parsed.session_id ?? '',
-                  agentName: '',
-                  resolvedFiles: [],
-                  diff: ''
+                  agentName: parsed.agentName ?? '',
+                  resolvedFiles: parsed.resolvedFiles ?? [],
+                  diff: parsed.diff ?? ''
                 }
               },
               error: ''
