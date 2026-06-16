@@ -312,6 +312,8 @@ func doneEventFromResult(r *agent.AgentResult) agent.StreamEvent {
 		ev.Diff = r.Diff
 		ev.AgentName = r.AgentName
 	}
+	// TRACE: log what the done frame carries so we can tell if data reaches Electron.
+	logger.Info("[trace] doneEventFromResult", "summaryLen", len(ev.Summary), "resolvedFiles", ev.ResolvedFiles, "diffLen", len(ev.Diff), "agentName", ev.AgentName)
 	return ev
 }
 

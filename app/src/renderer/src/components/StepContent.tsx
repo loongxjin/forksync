@@ -72,6 +72,10 @@ export function StepContent({
   const conflicts = resolveResult?.conflicts ?? []
   const diff = agentResult?.diff
   const showResolveDetails = shouldShowResolveDetails(resolveResult)
+  // TRACE
+  if (showDetails) {
+    console.log('[trace] StepContent', stepRecord.step, stepRecord.status, 'showResolveDetails', showResolveDetails, 'resolveResult', resolveResult ? { conflictsCount: conflicts.length, agentName: agentResult?.agentName, summaryLen: agentResult?.summary?.length, resolvedFiles: agentResult?.resolvedFiles } : null)
+  }
   const eventsCount = streamEvents.length
 
   return (
