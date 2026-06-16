@@ -9,6 +9,8 @@
 
 import { getEngineServer } from './server'
 import log from './logger'
+// Electron main bundles Node 20 (no global WebSocket); import ws explicitly.
+import { WebSocket } from "ws"
 import type {
   ApiResponse,
   StatusData,
@@ -230,14 +232,14 @@ export class EngineClient {
       .then((url) => {
         if (killed) return
         ws = new WebSocket(url)
-        ws.onmessage = (msgEv) => {
-          const data = msgEv.data as string
-          if (!data) return
+        ws.on('message', (data: { toString: () => string }) => {
+          const text = data.toString()
+          if (!text) return
           let parsed: AgentStreamEvent & { success?: boolean; summary?: string; session_id?: string }
           try {
-            parsed = JSON.parse(data)
+            parsed = JSON.parse(text)
           } catch {
-            notifyEvent({ t: 'stdout', d: data, ts: new Date().toISOString() })
+            notifyEvent({ t: 'stdout', d: text, ts: new Date().toISOString() })
             return
           }
           if (parsed.t === 'done') {
@@ -262,16 +264,16 @@ export class EngineClient {
           } else {
             notifyEvent(parsed as AgentStreamEvent)
           }
-        }
-        ws.onerror = (): void => {
+        })
+        ws.on('error', (): void => {
           notifyError('resolve stream WebSocket error')
-        }
-        ws.onclose = (): void => {
+        })
+        ws.on('close', (): void => {
           // Safety net: socket closed without a terminal frame.
           if (!notified) {
             notifyDone({ success: true, data: null as unknown as ResolveData, error: '' })
           }
-        }
+        })
       })
       .catch((err: unknown) => {
         notifyError(`Failed to open resolve stream: ${(err as Error).message}`)
