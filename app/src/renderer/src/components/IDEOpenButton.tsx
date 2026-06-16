@@ -3,9 +3,9 @@
  */
 
 import { useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useSettings } from '@/contexts/SettingsContext'
-import { useSettingsDrawer } from '@/contexts/SettingsDrawerContext'
 import { useToastContext } from '@/contexts/ToastContext'
 import { Code, Loader2 } from 'lucide-react'
 
@@ -16,7 +16,7 @@ interface IDEOpenButtonProps {
 export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
   const { t } = useTranslation()
   const { getDefaultIDE, openInIDE, ideLoading } = useSettings()
-  const { openDrawer } = useSettingsDrawer()
+  const navigate = useNavigate()
   const { showToast } = useToastContext()
   const [opening, setOpening] = useState(false)
 
@@ -24,7 +24,7 @@ export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
 
   const handleOpen = useCallback(async () => {
     if (!defaultIDE) {
-      openDrawer()
+      navigate('/settings')
       return
     }
     setOpening(true)
@@ -33,7 +33,7 @@ export function IDEOpenButton({ repoPath }: IDEOpenButtonProps): JSX.Element {
     if (!result.success) {
       showToast(result.error ?? t('ide.openFailed'), 'error')
     }
-  }, [repoPath, defaultIDE, openInIDE, openDrawer, showToast, t])
+  }, [repoPath, defaultIDE, openInIDE, navigate, showToast, t])
 
   if (ideLoading) return null
 
