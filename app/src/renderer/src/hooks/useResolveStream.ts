@@ -170,9 +170,10 @@ export function useResolveStream(): ResolveStreamHook {
       logger.log('readDiskLog', repoName, res.events.length, 'events, isRunning:', res.isRunning)
       dispatch({ type: 'STREAM_LOAD', repoName, events: res.events, isRunning: res.isRunning })
 
-      // If the log says the agent is done, fire STREAM_DONE so HomePage
-      // side effects (refresh, auto-confirm) run.
-      if (!res.isRunning) {
+      // Only fire STREAM_DONE when the log has events AND the agent is no
+      // longer running. An empty log with isRunning=false means the log file
+      // hasn't been created yet (race at stream start) — don't terminate.
+      if (!res.isRunning && res.events.length > 0) {
         const resolveData = extractResolveDataFromEvents(res.events)
         dispatch({ type: 'STREAM_DONE', repoName, result: resolveData })
         // Stop polling — agent finished.
