@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/loongxjin/forksync/engine/pkg/types"
 )
@@ -262,7 +261,9 @@ func extractSessionID(output string) string {
 }
 
 // maxSummaryLength is the maximum character length for agent summary output.
-const maxSummaryLength = 500
+// Set high enough that real summaries are never truncated — the UI renders
+// markdown with scroll, so there's no terminal-width constraint anymore.
+const maxSummaryLength = 10000
 
 // extractSummary finds the agent's final summary by looking for a marker heading
 // and returning everything after it. Falls back to the last maxLen runes.
@@ -271,18 +272,10 @@ func extractSummary(output string, maxLen int) string {
 	for _, marker := range markers {
 		if idx := strings.Index(output, marker); idx >= 0 {
 			summary := strings.TrimSpace(output[idx+len(marker):])
-			if utf8.RuneCountInString(summary) <= maxLen {
-				return summary
-			}
-			runes := []rune(summary)
-			return string(runes[:maxLen]) + "..."
+			return summary
 		}
 	}
-	if utf8.RuneCountInString(output) <= maxLen {
-		return output
-	}
-	runes := []rune(output)
-	return string(runes[:maxLen]) + "..."
+	return output
 }
 
 // truncateForLog truncates a string for safe use in log output.

@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -275,6 +276,12 @@ func (s *Syncer) failSync(r types.Repo, result *Result, wf *types.SyncWorkflow, 
 // executeSync performs the actual sync: fetch → status check → merge → post-sync commands.
 func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) *Result {
 	wf := result.Workflow
+	// Pick up config changes made via the settings UI since the server started.
+	// The Syncer's cfg and sessionMgr are snapshotted at boot; without this a
+	// user flipping conflict_strategy to agent_resolve would have to restart the
+	// app before auto-resolve took effect.
+	s.reloadConfigAndSessionMgr()
+
 	// Set timeout — use agent timeout if auto-resolve is configured,
 	// otherwise the default 5 minutes may SIGKILL long-running agents.
 	timeout := defaultTimeout
@@ -285,6 +292,14 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 		"repo", r.Name,
 		"timeout", timeout,
 		"agent_resolve", s.shouldUseAgentResolve(),
+		"conflict_strategy", func() string {
+			if s.cfg != nil {
+				return s.cfg.Agent.ConflictStrategy
+			}
+			return "<nil cfg>"
+		}(),
+		"sessionMgr_nil", s.sessionMgr == nil,
+		"cfg_nil", s.cfg == nil,
 	)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -475,6 +490,21 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	}
 
 	// Manual resolve path: pause at resolve_strategy
+	logger.Info("sync: entering MANUAL resolve path (repo left in waiting state)",
+		"repo", r.Name,
+		"reason", func() string {
+			if s.cfg == nil {
+				return "cfg is nil"
+			}
+			if s.cfg.Agent.ConflictStrategy != types.StrategyAgentResolve {
+				return "conflict_strategy != agent_resolve (is " + s.cfg.Agent.ConflictStrategy + ")"
+			}
+			if s.sessionMgr == nil {
+				return "sessionMgr is nil (no agent available at server boot)"
+			}
+			return "unknown"
+		}(),
+	)
 	wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
 	wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
 	wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
@@ -494,24 +524,40 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 //   - resolved=false, pending=nil: agent failed to resolve
 func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string) (bool, *pendingInfo) {
 	if s.sessionMgr == nil {
+		logger.Warn("sync: tryAgentResolve skipped — sessionMgr is nil",
+			"repo", r.Name,
+			"hint", "agent_resolve strategy requires a session manager; server may have started before an agent was installed",
+		)
 		return false, nil
 	}
 
-	// Reload config to pick up agent preference changes made via settings UI
-	// without requiring a serve process restart.
-	mgr := config.NewManagerWithDir(s.configDir)
-	if cfg, err := mgr.Load(); err == nil {
-		s.cfg = cfg
-		reg := agent.NewRegistry(cfg.Agent.Preferred)
-		if p, err := reg.GetPreferred(); err == nil {
-			s.sessionMgr.SetProvider(p)
-		}
-	}
+	logger.Info("sync: tryAgentResolve starting",
+		"repo", r.Name,
+		"conflicts", len(conflictPaths),
+		"provider", s.sessionMgr.ProviderName(),
+		"conflict_strategy", func() string {
+			if s.cfg != nil {
+				return s.cfg.Agent.ConflictStrategy
+			}
+			return "<nil>"
+		}(),
+		"confirm_before_commit", func() bool {
+			if s.cfg != nil {
+				return s.cfg.Agent.ConfirmBeforeCommit
+			}
+			return false
+		}(),
+	)
 
 	// Create or reuse a session for this repo
-	if _, err := s.sessionMgr.GetOrCreate(ctx, r.ID, r.Path); err != nil {
+	sess, err := s.sessionMgr.GetOrCreate(ctx, r.ID, r.Path)
+	if err != nil {
+		logger.Error("sync: tryAgentResolve GetOrCreate session failed",
+			"repo", r.Name, "error", err)
 		return false, nil
 	}
+	logger.Info("sync: tryAgentResolve session ready",
+		"repo", r.Name, "session_id", sess.ID, "is_new", sess.IsNew)
 
 	// Determine resolve sub-strategy for the agent prompt
 	resolveStrategy := s.resolveStrategyOrDefault()
@@ -535,6 +581,13 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	}
 
 	// Resolve conflicts via agent
+	logger.Info("sync: tryAgentResolve invoking agent",
+		"repo", r.Name,
+		"agent", s.sessionMgr.ProviderName(),
+		"resolve_strategy", resolveStrategy,
+		"language", language,
+		"conflicts", len(conflictPaths),
+	)
 	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy, language, streamWriter)
 	if err != nil {
 			logger.Error("sync: agent resolve failed",
@@ -557,6 +610,17 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	// which files had conflicts. Tell verifyAndStageResolvedFiles to check
 	// and stage those so the subsequent commit succeeds.
 	result.ResolvedFiles = conflictPaths
+	// Populate Diff so the disk-log done frame carries it for replay.
+	if diffBytes, dErr := s.gitOps.Diff(ctx, r.Path); dErr == nil {
+		result.Diff = string(diffBytes)
+	}
+
+	// Write a terminal 'done' frame to the disk log so readAgentLog reports
+	// isRunning=false. This carries ResolvedFiles/Diff/AgentName/Summary so the
+	// frontend can restore resolve details when replaying the log.
+	if streamWriter != nil {
+		_ = streamWriter.WriteEvent(agent.DoneEventFromResult(result))
+	}
 
 	// Verify no conflict markers remain and stage resolved files
 	if !s.verifyAndStageResolvedFiles(ctx, r, result) {
@@ -582,6 +646,8 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	)
 
 	if !autoConfirm {
+		logger.Info("sync: tryAgentResolve awaiting user confirmation",
+			"repo", r.Name, "reason", "confirm_before_commit=true")
 		return s.buildPendingInfo(ctx, r, result)
 	}
 
@@ -615,6 +681,65 @@ func (s *Syncer) shouldUseAgentResolve() bool {
 		return s.cfg.Agent.ConflictStrategy == types.StrategyAgentResolve
 	}
 	return false
+}
+
+// reloadConfigAndSessionMgr picks up config changes made via the settings UI
+// since the server started. The Syncer's cfg/sessionMgr are snapshotted at
+// boot (in app.BuildDeps), so without this a user flipping conflict_strategy
+// to agent_resolve (or installing an agent after launch) would need to restart
+// the whole app before auto-resolve took effect.
+//
+// It reloads s.cfg from disk, and if agent_resolve is now enabled but the
+// session manager was never built (because no agent was available at boot, or
+// the strategy was off), it lazily constructs one. Safe to call on every sync.
+func (s *Syncer) reloadConfigAndSessionMgr() {
+	if s.configDir == "" {
+		return
+	}
+	mgr := config.NewManagerWithDir(s.configDir)
+	cfg, err := mgr.Load()
+	if err != nil {
+		return // keep using the in-memory snapshot
+	}
+	prevStrategy := ""
+	if s.cfg != nil {
+		prevStrategy = s.cfg.Agent.ConflictStrategy
+	}
+	s.cfg = cfg
+
+	// Nothing to (re)build if agent_resolve isn't enabled.
+	if cfg.Agent.ConflictStrategy != types.StrategyAgentResolve {
+		return
+	}
+	// Already have a session manager — just refresh its provider so a newly
+	// installed/preferred agent is picked up without a restart.
+	if s.sessionMgr != nil {
+		reg := agent.NewRegistry(cfg.Agent.Preferred)
+		if p, perr := reg.GetPreferred(); perr == nil {
+			s.sessionMgr.SetProvider(p)
+		}
+		return
+	}
+	// agent_resolve is on but no session manager yet — lazily build one now
+	// that an agent may have become available.
+	reg := agent.NewRegistry(cfg.Agent.Preferred)
+	provider, perr := reg.GetPreferred()
+	if perr != nil {
+		logger.Info("sync: agent_resolve enabled but no agent available yet",
+			"preferred_cfg", cfg.Agent.Preferred, "error", perr)
+		return
+	}
+	sessionStore := session.NewSessionStore(filepath.Join(s.configDir, "sessions"))
+	if initErr := sessionStore.Init(); initErr != nil {
+		logger.Error("sync: failed to init session store for lazy sessionMgr", "error", initErr)
+		return
+	}
+	s.sessionMgr = session.NewManager(sessionStore, provider)
+	logger.Info("sync: lazily created session manager after config change",
+		"prev_strategy", prevStrategy,
+		"new_strategy", cfg.Agent.ConflictStrategy,
+		"provider", provider.Name(),
+	)
 }
 
 // saveWorkflow updates the repo's workflow in the store.

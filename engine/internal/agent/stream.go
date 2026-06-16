@@ -49,6 +49,16 @@ type StreamEvent struct {
 	// SessionID is the session identifier (present in done events).
 	SessionID string `json:"session_id,omitempty"`
 
+	// ResolvedFiles lists file paths the agent modified (present in done events).
+	ResolvedFiles []string `json:"resolvedFiles,omitempty"`
+
+	// Diff is the staged diff produced by the agent (present in done events).
+	Diff string `json:"diff,omitempty"`
+
+	// AgentName is the provider name (present in done events, complements the
+	// per-event Agent field which only appears in start events).
+	AgentName string `json:"agentName,omitempty"`
+
 	// ToolName is the name of the tool call (present in tool events).
 	ToolName string `json:"name,omitempty"`
 
@@ -125,4 +135,25 @@ func (msw *MultiStreamWriter) WriteEvent(ev StreamEvent) error {
 // a *StreamWriter is expected (e.g. as a parameter to ResolveConflicts).
 func (msw *MultiStreamWriter) StreamWriter() *StreamWriter {
 	return &StreamWriter{multi: msw}
+}
+
+// DoneEventFromResult builds the authoritative terminal "done" StreamEvent
+// from an AgentResult, copying all enriched fields (ResolvedFiles, Diff,
+// AgentName, Summary, SessionID). Both the manual resolve handler and the
+// sync auto-resolve path call this so their disk logs end with a proper
+// terminal frame — ensuring readAgentLog reports isRunning=false.
+func DoneEventFromResult(r *AgentResult) StreamEvent {
+	ev := StreamEvent{
+		Type:      StreamEventDone,
+		Success:   true,
+		Timestamp: time.Now().UTC(),
+	}
+	if r != nil {
+		ev.Summary = r.Summary
+		ev.SessionID = r.SessionID
+		ev.ResolvedFiles = r.ResolvedFiles
+		ev.Diff = r.Diff
+		ev.AgentName = r.AgentName
+	}
+	return ev
 }

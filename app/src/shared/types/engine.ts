@@ -2,14 +2,14 @@
  * ForkSync Engine — TypeScript Type Definitions
  *
  * 1:1 mapping of Go engine JSON contract (engine/pkg/types/types.go).
- * All types correspond to Go structs used in CLI command JSON output.
+ * All types mirror Go structs (pkg/types) served by the embedded HTTP server.
  */
 
 // ---------------------------------------------------------------------------
 // Generic Response Wrapper
 // ---------------------------------------------------------------------------
 
-/** Go ApiResponse[T] — all CLI commands (except `serve`) wrap output in this */
+/** ApiResponse[T] — most endpoints wrap their payload in this envelope */
 export interface ApiResponse<T> {
   success: boolean
   data: T
@@ -199,45 +199,40 @@ export interface AgentStreamEvent {
   success?: boolean
   summary?: string
   session_id?: string
+  resolvedFiles?: string[]
+  diff?: string
+  agentName?: string
   name?: string
   path?: string
 }
 
-/** Go AgentResolveRequest — resolve command options */
-export interface AgentResolveRequest {
-  repoId: string
-  files: string[]
-  strategy: string
-  autoConfirm: boolean
-}
-
 // ---------------------------------------------------------------------------
-// Command Response Data Types
+// Response Data Types (mirrors Go pkg/types, served by the HTTP server)
 // ---------------------------------------------------------------------------
 
-/** `forksync status` → ApiResponse<StatusData> */
+/** `GET /status` → ApiResponse<StatusData> */
 export interface StatusData {
   repos: Repo[]
   agents: AgentInfo[]
   preferredAgent: string
 }
 
-/** `forksync scan <dir>` → ApiResponse<ScanData> */
+/** `POST /scan` → ApiResponse<ScanData> */
 export interface ScanData {
   repos: ScannedRepo[]
 }
 
-/** `forksync sync` → ApiResponse<SyncData> */
+/** `POST /sync/all` / `POST /sync/repos/{name}` → ApiResponse<SyncData> */
 export interface SyncData {
   results: SyncResult[]
 }
 
-/** `forksync add <path>` → ApiResponse<AddData> */
+/** `POST /repos` → ApiResponse<AddData> */
 export interface AddData {
   repo: Repo
 }
 
-/** `forksync resolve <name>` → ApiResponse<ResolveData> */
+/** `POST /repos/{name}/resolve` (agent mode) → ApiResponse<ResolveData> */
 export interface ResolveData {
   repoId: string
   conflicts: ConflictFile[]
@@ -245,37 +240,37 @@ export interface ResolveData {
   commitError?: string
 }
 
-/** `forksync resolve <name> --accept/--no-confirm` → ApiResponse<AcceptData> */
+/** `POST /repos/{name}/resolve` (accept mode) → ApiResponse<AcceptData> */
 export interface AcceptData {
   repoId: string
   resolved: boolean
   remainingConflicts?: string[]
 }
 
-/** `forksync resolve <name> --reject` → ApiResponse<RejectData> */
+/** `POST /repos/{name}/resolve` (reject mode) → ApiResponse<RejectData> */
 export interface RejectData {
   repoId: string
   rolledBack: boolean
 }
 
-/** `forksync agent list` → ApiResponse<AgentListData> */
+/** `GET /agents` → ApiResponse<AgentListData> */
 export interface AgentListData {
   agents: AgentInfo[]
   preferred: string
 }
 
-/** `forksync agent sessions` → ApiResponse<AgentSessionsData> */
+/** `GET /agents/sessions` → ApiResponse<AgentSessionsData> */
 export interface AgentSessionsData {
   sessions: AgentSessionInfo[]
 }
 
-/** `forksync agent reset <name>` → ApiResponse<AgentResetData> */
+/** `POST /agents/{name}/reset` → ApiResponse<AgentResetData> */
 export interface AgentResetData {
   repoId: string
   cleared: boolean
 }
 
-/** `forksync history` → ApiResponse<HistoryData> */
+/** `GET /history` → ApiResponse<HistoryData> */
 export interface HistoryData {
   records: SyncHistoryRecord[]
 }
@@ -307,7 +302,7 @@ export interface SyncHistoryRecord {
 // ---------------------------------------------------------------------------
 
 /**
- * `forksync agent cleanup` — Go uses map[string]interface{} instead of typed struct.
+ * `POST /agents/cleanup` — returns {removed: number}.
  * Output shape: ApiResponse<{ removed: number }>
  */
 export interface AgentCleanupData {
@@ -315,26 +310,17 @@ export interface AgentCleanupData {
 }
 
 /**
- * `forksync remove <name>` — returns the removed repo name.
- */export interface RemoveData {
-  removed: string
-}
-
-/**
- * `forksync serve` — bypasses ApiResponse wrapper entirely.
- * Outputs bare JSON (no success/data/error wrapper).
+ * `DELETE /repos/{name}` — returns the removed repo name.
  */
-export interface ServeStatus {
-  running: boolean
-  interval: string
-  message: string
+export interface RemoveData {
+  removed: string
 }
 
 // ---------------------------------------------------------------------------
 // App-level Types (not from Go engine)
 // ---------------------------------------------------------------------------
 
-/** Go engine Config — from `forksync config get --json` */
+/** `GET /config` → ApiResponse<EngineConfig> */
 export interface EngineConfig {
   Sync: {
     DefaultInterval: string
@@ -364,24 +350,8 @@ export interface EngineConfig {
   }
 }
 
-/** `forksync config set` response */
+/** `PUT /config` → ApiResponse<ConfigSetData> */
 export interface ConfigSetData {
   key: string
   value: unknown
-}
-
-/** EngineClient method parameter types */
-export interface ResolveOptions {
-  agent?: string
-  noConfirm?: boolean
-}
-
-export interface ScanOptions {
-  dir: string
-}
-
-export interface AddOptions {
-  path: string
-  upstream?: string
-  branchMapping?: BranchMapping
 }

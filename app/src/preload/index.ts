@@ -76,10 +76,10 @@ const api = {
   // Agent resolve streaming
   resolveStreamStart: (name: string, opts?: { agent?: string; noConfirm?: boolean }): void =>
     ipcRenderer.send('engine:resolveStream:start', name, opts),
-  onResolveStreamEvent: (callback: (repoName: string, event: AgentStreamEvent) => void): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, repoName: string, ev: AgentStreamEvent): void => callback(repoName, ev)
-    ipcRenderer.on('engine:resolveStream:event', handler)
-    return () => ipcRenderer.removeListener('engine:resolveStream:event', handler)
+  onResolveStreamTick: (callback: (repoName: string) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, repoName: string): void => callback(repoName)
+    ipcRenderer.on('engine:resolveStream:tick', handler)
+    return () => ipcRenderer.removeListener('engine:resolveStream:tick', handler)
   },
   onResolveStreamDone: (callback: (repoName: string, result: ApiResponse<ResolveData>) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, repoName: string, result: ApiResponse<ResolveData>): void => callback(repoName, result)

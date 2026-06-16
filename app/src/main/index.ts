@@ -4,6 +4,8 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc'
 import { registerIDEHandlers } from './ide'
 import { injectShellPath } from './shell-path'
+import { getEngineServer } from './server'
+import log from './logger'
 
 function createWindow(): void {
   const platform = process.platform
@@ -62,9 +64,12 @@ function createWindow(): void {
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          is.dev
-            ? "default-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ws://localhost:* http://localhost:*"
-            : "default-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'"
+          // The renderer talks to the embedded Go HTTP server (and its
+          // WebSocket) on 127.0.0.1:<random-port>; both dev and packaged
+          // builds must allow localhost connects.
+          "default-src 'self' 'unsafe-inline'" + (is.dev ? " 'unsafe-eval'" : "") +
+            "; script-src 'self' 'unsafe-inline'" + (is.dev ? " 'unsafe-eval'" : "") +
+            "; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*"
         ]
       }
     })
@@ -77,7 +82,7 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Inject user's shell PATH so the packaged app can find CLI tools
   // (e.g. claude, opencode) that live outside /usr/bin:/bin:/usr/sbin:/sbin.
   injectShellPath()
@@ -87,6 +92,16 @@ app.whenReady().then(() => {
   // Set macOS dock icon for dev mode
   if (process.platform === 'darwin') {
     app.dock.setIcon(nativeImage.createFromPath(join(__dirname, '../../resources/icon.png')))
+  }
+
+  // Start the embedded Go HTTP server before registering handlers so the
+  // first engine call (e.g. updateNotificationConfig) doesn't stall on the
+  // process spawn. Failures here are non-fatal: EngineClient will retry the
+  // spawn lazily on demand.
+  try {
+    await getEngineServer().getBaseUrl()
+  } catch (err) {
+    log.error('[main] engine server failed to start at boot:', (err as Error).message)
   }
 
   // Register IPC handlers for engine communication
@@ -103,6 +118,12 @@ app.whenReady().then(() => {
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+// Stop the embedded Go HTTP server on quit (the existing before-quit hook in
+// ipc-engine.ts only kills resolve streams; this terminates the server itself).
+app.on('will-quit', () => {
+  getEngineServer().kill()
 })
 
 app.on('window-all-closed', () => {

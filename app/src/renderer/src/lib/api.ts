@@ -89,7 +89,7 @@ export interface EngineAPI {
 
   // Agent resolve streaming
   resolveStreamStart(name: string, opts?: { agent?: string; noConfirm?: boolean }): void
-  onResolveStreamEvent(callback: (repoName: string, event: AgentStreamEvent) => void): () => void
+  onResolveStreamTick(callback: (repoName: string) => void): () => void
   onResolveStreamDone(callback: (repoName: string, result: ApiResponse<ResolveData>) => void): () => void
   onResolveStreamError(callback: (repoName: string, error: string) => void): () => void
   readAgentLog(repoName: string): Promise<{ events: AgentStreamEvent[]; isRunning: boolean }>

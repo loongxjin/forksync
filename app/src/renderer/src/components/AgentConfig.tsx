@@ -110,6 +110,15 @@ export function AgentConfig(): JSX.Element {
   const isAgentResolveMode = currentConflictMode === 'agent_resolve'
   const autoConfirmEnabled = !(engineConfig?.Agent?.ConfirmBeforeCommit ?? true)
 
+  // Auto-summary controls (moved from GeneralSettings to AgentConfig)
+  const handleAutoSummary = async (val: boolean): Promise<void> => {
+    await updateConfig('sync.auto_summary', String(val))
+  }
+  const handleSummaryAgent = async (val: string): Promise<void> => {
+    await updateConfig('sync.summary_agent', val)
+  }
+  const installedAgents = agents.filter((a) => a.installed)
+
   return (
     <div className="space-y-4">
       {/* Detected Agents */}
@@ -310,6 +319,41 @@ export function AgentConfig(): JSX.Element {
           </div>
         )}
       </div>
+
+      <Separator />
+
+      {/* Auto Summary */}
+      <div className="space-y-2">
+        <Toggle
+          label={t('settings.general.autoSummary')}
+          checked={engineConfig?.Sync?.AutoSummary ?? false}
+          onChange={handleAutoSummary}
+          disabled={isLoading}
+        />
+        <p className="text-xs text-muted-foreground">
+          {t('settings.general.autoSummaryDesc')}
+        </p>
+      </div>
+
+      {/* Summary Agent (shown when auto summary is enabled) */}
+      {engineConfig?.Sync?.AutoSummary && (
+        <div className="space-y-2">
+          <Label>{t('settings.general.summaryAgent')}</Label>
+          <select
+            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm max-w-[200px]"
+            value={engineConfig?.Sync?.SummaryAgent ?? ''}
+            onChange={(e) => handleSummaryAgent(e.target.value)}
+            disabled={isLoading}
+          >
+            <option value="">{t('settings.general.summaryAgentAuto')}</option>
+            {installedAgents.map((agent) => (
+              <option key={agent.name} value={agent.name}>
+                {agent.name}{agent.version ? ` (${agent.version})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   )
 }

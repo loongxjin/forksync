@@ -80,8 +80,11 @@ export function SheetContent({
   }, [open, onOpenChange])
 
   const sideClasses = {
-    left: 'inset-y-0 left-0 h-full w-80',
-    right: 'inset-y-0 right-0 h-full w-80',
+    // left/right panels sit BELOW the title bar (logo + window controls),
+    // so they no longer cover it when slid open. Height derives from
+    // top/bottom instead of h-full.
+    left: 'left-0 w-80',
+    right: 'right-0 w-80',
     top: 'inset-x-0 top-0 w-full h-auto',
     bottom: 'inset-x-0 bottom-0 w-full h-auto'
   }
@@ -93,28 +96,36 @@ export function SheetContent({
     bottom: 'translate-y-full'
   }
 
-  // When closed, render invisible to allow exit transition; after transition, hidden via pointer-events
+  // The overlay container starts below the title bar so the panel content
+  // doesn't cover the logo + window controls. But the BACKDROP itself covers
+  // the full viewport (including the title bar) for a consistent blur effect.
   return (
-    <div
-      className={cn(
-        'fixed inset-0 z-50 transition-[visibility] duration-300',
-        !open && 'invisible'
+    <>
+      {/* Backdrop — full viewport including title bar, but below the title bar */}
+      {open && (
+        <div
+          className={cn(
+            'fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity duration-300',
+            open ? 'opacity-100' : 'opacity-0'
+          )}
+          onClick={() => onOpenChange(false)}
+        />
       )}
-    >
-      {/* Backdrop */}
+      {/* Content container — below title bar */}
       <div
         className={cn(
-          'absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300',
-          open ? 'opacity-100' : 'opacity-0'
+          'fixed top-[var(--titlebar-height)] inset-x-0 bottom-0 z-50 transition-[visibility] duration-300',
+          'pointer-events-none',
+          !open && 'invisible'
         )}
-        onClick={() => onOpenChange(false)}
-      />
+      >
       {/* Content */}
       <div
         ref={contentRef}
         data-state={open ? 'open' : 'closed'}
         className={cn(
-          'fixed z-50 bg-card shadow-2xl border-border/50',
+          'fixed top-[var(--titlebar-height)] bottom-0 z-50 bg-card shadow-2xl border-border/50',
+          'pointer-events-auto',
           'transition-transform duration-300 ease-in-out',
           sideClasses[side],
           open ? 'translate-x-0 translate-y-0' : closedTranslate[side],
@@ -123,7 +134,8 @@ export function SheetContent({
       >
         {children}
       </div>
-    </div>
+      </div>
+    </>
   )
 }
 

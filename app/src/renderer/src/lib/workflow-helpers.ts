@@ -52,3 +52,20 @@ export function shouldShowStepDetail(
 
   return isAgentResolveFinished || isAcceptWaitingWithoutAgent
 }
+
+/**
+ * Filter a full `git diff HEAD` output to only the section belonging to the
+ * given file path. Splits on `diff --git` boundaries and matches against the
+ * a/filePath and b/filePath headers.
+ */
+export function filterDiffByFile(diff: string, filePath: string): string {
+  if (!diff || !filePath) return diff
+  // Split on lines that start with "diff --git" (anchored ^)
+  const sections = diff.split(/^(?=diff --git )/m)
+  const section = sections.find((s) => {
+    const nl = s.indexOf('\n')
+    const header = nl === -1 ? s : s.slice(0, nl)
+    return header.includes(`a/${filePath}`) || header.includes(`b/${filePath}`)
+  })
+  return section || diff
+}

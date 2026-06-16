@@ -4,6 +4,10 @@
 
 @layer base {
   :root {
+    /* App title bar height — shared so Sheet panels can sit below it
+       instead of covering the logo + window controls. Theme-independent. */
+    --titlebar-height: 38px;
+
     --background: 0 0% 98%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;

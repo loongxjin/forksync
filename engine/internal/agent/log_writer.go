@@ -146,38 +146,6 @@ func DeleteAllLogs(baseDir, repoID string) error {
 	return nil
 }
 
-// CleanupOldLogs removes log files older than maxAge for the given repoID.
-func CleanupOldLogs(baseDir, repoID string, maxAge time.Duration) error {
-	if maxAge <= 0 {
-		maxAge = defaultLogRetention
-	}
-
-	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("read log dir: %w", err)
-	}
-
-	cutoff := time.Now().Add(-maxAge)
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil {
-			continue
-		}
-		if info.ModTime().Before(cutoff) {
-			_ = os.Remove(filepath.Join(dir, e.Name()))
-		}
-	}
-
-	return nil
-}
-
 // sanitizeRepoID makes a repoID safe for use as a directory name.
 func sanitizeRepoID(repoID string) string {
 	// Replace path separators and other risky characters.

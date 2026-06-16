@@ -204,29 +204,6 @@ func (s *Store) UpdateSummary(id int64, summary, status string) error {
 	return err
 }
 
-// UpdateStatus updates the sync status for a history record.
-func (s *Store) UpdateStatus(id int64, status string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	_, err := s.db.Exec(
-		`UPDATE sync_history SET status = ? WHERE id = ?`,
-		status, id,
-	)
-	return err
-}
-
-// GetByID returns a single history record by ID.
-func (s *Store) GetByID(id int64) (*Record, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	row := s.db.QueryRow(`
-		SELECT `+syncHistoryColumns+`
-		FROM sync_history WHERE id = ?`, id)
-	return scanRecord(row)
-}
-
 // LatestByRepo returns the most recent history record for a specific repo.
 func (s *Store) LatestByRepo(repoID string) (*Record, error) {
 	s.mu.RLock()
@@ -248,28 +225,6 @@ func (s *Store) LatestByRepo(repoID string) (*Record, error) {
 		return nil, fmt.Errorf("no history for repo: %s", repoID)
 	}
 	return &records[0], nil
-}
-
-// Summary returns aggregated stats: total syncs, conflicts, errors, and last sync time.
-func (s *Store) Summary() (totalSyncs int, conflicts int, errors int, lastSync time.Time, err error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	var lastSyncStr string
-	err = s.db.QueryRow(`
-		SELECT
-			COUNT(*),
-			COALESCE(SUM(CASE WHEN status = 'conflict' THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END), 0),
-			COALESCE(MAX(created_at), '')
-		FROM sync_history`).Scan(&totalSyncs, &conflicts, &errors, &lastSyncStr)
-	if err != nil {
-		return
-	}
-	if lastSyncStr != "" {
-		lastSync, _ = time.Parse(sqliteTimeFormat, lastSyncStr)
-	}
-	return
 }
 
 // ClearAll removes all sync history records and returns the number of deleted rows.

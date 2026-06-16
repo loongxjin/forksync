@@ -6,7 +6,6 @@ import { ipcMain, app } from 'electron'
 import { resolve, normalize } from 'path'
 import { EngineClient } from './engine'
 import { notifySyncResults, updateNotificationConfig } from './notify'
-import type { AgentStreamEvent } from '@shared/types/engine'
 import log from './logger'
 
 // --- Input validation helpers ---
@@ -186,9 +185,9 @@ export function registerEngineIpcHandlers(): void {
     const stream = e.resolveStream(name, opts)
     activeStreams.set(name, stream)
 
-    stream.onEvent((ev: AgentStreamEvent) => {
-      ipcLog(`resolveStream:event name=${name} type=${ev.t} dataLen=${(ev.d?.length ?? 0)}`)
-      event.sender.send('engine:resolveStream:event', name, ev)
+    stream.onTick(() => {
+      ipcLog(`resolveStream:tick name=${name}`)
+      event.sender.send('engine:resolveStream:tick', name)
     })
 
     stream.onDone((result) => {

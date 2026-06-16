@@ -1,44 +1,84 @@
 import { describe, it, expect } from 'vitest'
-import type { AgentStreamEvent, ResolveData } from '@shared/types/engine'
-import { streamReducer, initialStreamState } from '@/hooks/useResolveStream'
+import type { AgentStreamEvent } from '@shared/types/engine'
+import { streamReducer, initialStreamState, extractResolveDataFromEvents } from '@/hooks/useResolveStream'
 
 describe('streamReducer', () => {
-  describe('STREAM_START', () => {
-    it('marks repo as live and resets events', () => {
+  describe('STREAM_LOAD', () => {
+    it('replaces events and marks live when running', () => {
+      const events: AgentStreamEvent[] = [{ t: 'stdout', d: 'data', ts: '' }]
       const prev = {
         ...initialStreamState,
-        streamEvents: { repo1: [{ t: 'stdout' as const, d: 'old', ts: '' }] },
+        streamEvents: { repo1: [{ t: 'stdout' as const, d: 'old', ts: '' }] }
+      }
+      const next = streamReducer(prev, {
+        type: 'STREAM_LOAD',
+        repoName: 'repo1',
+        events,
+        isRunning: true
+      })
+      expect(next.streamEvents['repo1']).toBe(events)
+      expect(next.streamLive['repo1']).toBe(true)
+    })
+
+    it('removes from live when not running', () => {
+      const prev = {
+        ...initialStreamState,
         streamLive: { repo1: true }
       }
-      const next = streamReducer(prev, { type: 'STREAM_START', repoName: 'repo2' })
-      expect(next.streamLive).toEqual({ repo1: true, repo2: true })
-      expect(next.streamEvents['repo2']).toEqual([])
-      expect(next.streamEvents['repo1']).toHaveLength(1)
-    })
-  })
-
-  describe('STREAM_EVENT', () => {
-    it('appends event to existing events', () => {
-      const event: AgentStreamEvent = { t: 'stdout', d: 'hello', ts: '2026-01-01' }
-      const prev = {
-        ...initialStreamState,
-        streamEvents: { repo1: [{ t: 'stdout' as const, d: 'first', ts: '2026-01-01' }] }
-      }
-      const next = streamReducer(prev, { type: 'STREAM_EVENT', repoName: 'repo1', event })
-      expect(next.streamEvents['repo1']).toHaveLength(2)
-      expect(next.streamEvents['repo1'][1]).toBe(event)
+      const next = streamReducer(prev, {
+        type: 'STREAM_LOAD',
+        repoName: 'repo1',
+        events: [],
+        isRunning: false
+      })
+      expect(next.streamLive).toEqual({})
     })
 
-    it('creates events array if none exist', () => {
-      const event: AgentStreamEvent = { t: 'stdout', d: 'hello', ts: '2026-01-01' }
-      const next = streamReducer(initialStreamState, { type: 'STREAM_EVENT', repoName: 'newrepo', event })
-      expect(next.streamEvents['newrepo']).toHaveLength(1)
+    it('restores resolveResults from done frame in events', () => {
+      const events: AgentStreamEvent[] = [
+        { t: 'start', agent: 'claude', files: ['README.md'], ts: '' },
+        { t: 'stdout', d: 'working', ts: '' },
+        {
+          t: 'done',
+          success: true,
+          summary: 'resolved',
+          session_id: 'sess-1',
+          resolvedFiles: ['README.md', 'config.yaml'],
+          diff: 'diff content',
+          agentName: 'claude',
+          ts: ''
+        } as AgentStreamEvent
+      ]
+      const next = streamReducer(initialStreamState, {
+        type: 'STREAM_LOAD',
+        repoName: 'repo1',
+        events,
+        isRunning: false
+      })
+      expect(next.resolveResults['repo1']).toBeDefined()
+      expect(next.resolveResults['repo1'].conflicts).toEqual([
+        { path: 'README.md' },
+        { path: 'config.yaml' }
+      ])
+      expect(next.resolveResults['repo1'].agentResult?.summary).toBe('resolved')
+      expect(next.resolveResults['repo1'].agentResult?.diff).toBe('diff content')
+    })
+
+    it('does not set resolveResults when no done frame', () => {
+      const events: AgentStreamEvent[] = [{ t: 'stdout', d: 'still running', ts: '' }]
+      const next = streamReducer(initialStreamState, {
+        type: 'STREAM_LOAD',
+        repoName: 'repo1',
+        events,
+        isRunning: true
+      })
+      expect(next.resolveResults['repo1']).toBeUndefined()
     })
   })
 
   describe('STREAM_DONE', () => {
     it('removes from live and sets result + resolveResults when result provided', () => {
-      const result: ResolveData = { repoId: '1', conflicts: [] }
+      const result = { repoId: '1', conflicts: [], agentResult: { success: true, summary: '', sessionId: '', agentName: '', resolvedFiles: [], diff: '' } }
       const prev = {
         ...initialStreamState,
         streamLive: { repo1: true }
@@ -72,34 +112,6 @@ describe('streamReducer', () => {
     })
   })
 
-  describe('STREAM_LOAD', () => {
-    it('sets events and marks live when running', () => {
-      const events: AgentStreamEvent[] = [{ t: 'stdout', d: 'data', ts: '' }]
-      const next = streamReducer(initialStreamState, {
-        type: 'STREAM_LOAD',
-        repoName: 'repo1',
-        events,
-        isRunning: true
-      })
-      expect(next.streamEvents['repo1']).toBe(events)
-      expect(next.streamLive['repo1']).toBe(true)
-    })
-
-    it('sets events and removes from live when not running', () => {
-      const prev = {
-        ...initialStreamState,
-        streamLive: { repo1: true }
-      }
-      const next = streamReducer(prev, {
-        type: 'STREAM_LOAD',
-        repoName: 'repo1',
-        events: [],
-        isRunning: false
-      })
-      expect(next.streamLive).toEqual({})
-    })
-  })
-
   describe('STREAM_CLEAR', () => {
     it('removes events, live status, and resolveResult for the repo', () => {
       const prev = {
@@ -115,23 +127,27 @@ describe('streamReducer', () => {
       expect(next.resolveResults['repo1']).toBeUndefined()
     })
   })
+})
 
-  describe('MERGE_SYNC_RESULTS', () => {
-    it('merges resolved sync results into resolveResults', () => {
-      const data: ResolveData = { repoId: '1', conflicts: [] }
-      const next = streamReducer(initialStreamState, {
-        type: 'MERGE_SYNC_RESULTS',
-        resolved: [{ repoName: 'repo1', data }]
-      })
-      expect(next.resolveResults['repo1']).toBe(data)
-    })
+describe('extractResolveDataFromEvents', () => {
+  it('returns null for empty events', () => {
+    expect(extractResolveDataFromEvents([])).toBeNull()
+  })
 
-    it('returns same state when resolved is empty', () => {
-      const next = streamReducer(initialStreamState, {
-        type: 'MERGE_SYNC_RESULTS',
-        resolved: []
-      })
-      expect(next).toBe(initialStreamState)
-    })
+  it('returns null when no done frame', () => {
+    const events: AgentStreamEvent[] = [{ t: 'stdout', d: 'working', ts: '' }]
+    expect(extractResolveDataFromEvents(events)).toBeNull()
+  })
+
+  it('extracts from the LAST done frame (not earlier ones)', () => {
+    const events: AgentStreamEvent[] = [
+      { t: 'done', success: true, summary: 'first', resolvedFiles: ['a.txt'], ts: '' } as AgentStreamEvent,
+      { t: 'stdout', d: 'more work', ts: '' },
+      { t: 'done', success: true, summary: 'second', resolvedFiles: ['b.txt'], ts: '' } as AgentStreamEvent
+    ]
+    const data = extractResolveDataFromEvents(events)
+    expect(data).not.toBeNull()
+    expect(data!.agentResult?.summary).toBe('second')
+    expect(data!.conflicts).toEqual([{ path: 'b.txt' }])
   })
 })

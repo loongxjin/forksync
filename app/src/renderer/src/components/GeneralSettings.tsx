@@ -1,5 +1,4 @@
 import { useSettings } from '@/contexts/SettingsContext'
-import { useAgents } from '@/contexts/AgentContext'
 import { Label } from '@/components/ui/label'
 import { Toggle } from '@/components/ui/toggle'
 import { Input } from '@/components/ui/input'
@@ -13,7 +12,6 @@ import { useDebouncedConfig } from '@/hooks/useDebouncedConfig'
 
 export function GeneralSettings(): JSX.Element {
   const { theme, setTheme, engineConfig, configLoading, updateConfig } = useSettings()
-  const { agents } = useAgents()
   const { t } = useTranslation()
 
   // Debounced config input for sync interval
@@ -31,18 +29,7 @@ export function GeneralSettings(): JSX.Element {
     await window.api.setAutoLaunch(val)
   }
 
-  const handleAutoSummary = async (val: boolean): Promise<void> => {
-    await updateConfig('sync.auto_summary', String(val))
-  }
-
-  const handleSummaryAgent = async (val: string): Promise<void> => {
-    await updateConfig('sync.summary_agent', val)
-  }
-
   const isLoading = configLoading || !engineConfig
-
-  // Installed agents for summary agent dropdown
-  const installedAgents = agents.filter((a) => a.installed)
 
   return (
     <div className="space-y-6">
@@ -123,42 +110,6 @@ export function GeneralSettings(): JSX.Element {
           {t('settings.general.openAtLoginDesc')}
         </p>
       </div>
-
-      {/* Divider */}
-      <div className="border-t border-border" />
-
-      {/* Auto Summary */}
-      <div className="space-y-2">
-        <Toggle
-          label={t('settings.general.autoSummary')}
-          checked={engineConfig?.Sync?.AutoSummary ?? false}
-          onChange={handleAutoSummary}
-          disabled={isLoading}
-        />
-        <p className="text-xs text-muted-foreground">
-          {t('settings.general.autoSummaryDesc')}
-        </p>
-      </div>
-
-      {/* Summary Agent (shown when auto summary is enabled) */}
-      {engineConfig?.Sync?.AutoSummary && (
-        <div className="space-y-2">
-          <Label>{t('settings.general.summaryAgent')}</Label>
-          <select
-            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm max-w-[200px]"
-            value={engineConfig?.Sync?.SummaryAgent ?? ''}
-            onChange={(e) => handleSummaryAgent(e.target.value)}
-            disabled={isLoading}
-          >
-            <option value="">{t('settings.general.summaryAgentAuto')}</option>
-            {installedAgents.map((agent) => (
-              <option key={agent.name} value={agent.name}>
-                {agent.name}{agent.version ? ` (${agent.version})` : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
 
       {/* Divider */}
       <div className="border-t border-border" />

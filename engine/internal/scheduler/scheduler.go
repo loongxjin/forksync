@@ -88,13 +88,6 @@ func (s *Scheduler) Stop() {
 	}
 }
 
-// IsRunning returns whether the scheduler is currently running.
-func (s *Scheduler) IsRunning() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.running
-}
-
 func (s *Scheduler) runSync(ctx context.Context) {
 	results := s.syncer.SyncAll(ctx)
 	for _, r := range results {

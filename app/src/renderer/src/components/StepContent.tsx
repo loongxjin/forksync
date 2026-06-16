@@ -12,8 +12,9 @@ import { Badge } from '@/components/ui/badge'
 import { DiffViewer } from '@/components/DiffViewer'
 import type { WorkflowStepRecord, ResolveData, AgentStreamEvent } from '@shared/types/engine'
 import { cn } from '@/lib/utils'
-import { shouldShowStepDetail, shouldShowResolveDetails } from '@/lib/workflow-helpers'
+import { shouldShowStepDetail, shouldShowResolveDetails, filterDiffByFile } from '@/lib/workflow-helpers'
 import { Bot, Monitor, GitPullRequestClosed, RotateCcw, Terminal, Eye, FileDiff, X, FileText, AlertTriangle } from 'lucide-react'
+import { Markdown } from '@/components/ui/markdown'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -169,7 +170,7 @@ export function StepContent({
                 <FileText size={12} className="inline mr-1" />
                 {t('home.aiSuggestion')}
               </p>
-              <p className="text-sm leading-relaxed">{agentResult.summary}</p>
+              <Markdown>{agentResult.summary}</Markdown>
             </div>
           )}
 
@@ -202,9 +203,8 @@ export function StepContent({
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-1">
                 {t('conflicts.diffPreview')} — {selectedFile}
-                <span className="text-error ml-1">({t('conflicts.fullStagedDiff')})</span>
               </p>
-              <DiffViewer diff={diff} className="max-h-64" />
+              <DiffViewer diff={filterDiffByFile(diff, selectedFile)} className="max-h-64" />
             </div>
           )}
 

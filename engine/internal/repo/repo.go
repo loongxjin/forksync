@@ -92,14 +92,6 @@ func (s *JSONStore) Load() error {
 	return nil
 }
 
-// Save persists the current state to disk. Uses write lock for safe concurrent file writes.
-func (s *JSONStore) Save() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.saveLocked()
-}
-
 func (s *JSONStore) List() ([]types.Repo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
