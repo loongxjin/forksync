@@ -308,6 +308,9 @@ func doneEventFromResult(r *agent.AgentResult) agent.StreamEvent {
 	if r != nil {
 		ev.Summary = r.Summary
 		ev.SessionID = r.SessionID
+		ev.ResolvedFiles = r.ResolvedFiles
+		ev.Diff = r.Diff
+		ev.AgentName = r.AgentName
 	}
 	return ev
 }

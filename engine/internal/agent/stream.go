@@ -49,6 +49,16 @@ type StreamEvent struct {
 	// SessionID is the session identifier (present in done events).
 	SessionID string `json:"session_id,omitempty"`
 
+	// ResolvedFiles lists file paths the agent modified (present in done events).
+	ResolvedFiles []string `json:"resolvedFiles,omitempty"`
+
+	// Diff is the staged diff produced by the agent (present in done events).
+	Diff string `json:"diff,omitempty"`
+
+	// AgentName is the provider name (present in done events, complements the
+	// per-event Agent field which only appears in start events).
+	AgentName string `json:"agentName,omitempty"`
+
 	// ToolName is the name of the tool call (present in tool events).
 	ToolName string `json:"name,omitempty"`
 
