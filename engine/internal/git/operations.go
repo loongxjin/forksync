@@ -881,9 +881,12 @@ func (o *Operations) CheckoutFile(ctx context.Context, repoPath, file string) er
 	return err
 }
 
-// Diff returns the unstaged diff output for the repository.
+// Diff returns all changes relative to HEAD (staged + unstaged combined).
+// The "resolved diff" view is shown after an agent resolves conflicts and
+// typically `git add`s the result; a plain `git diff` (unstaged only) would
+// then show nothing. `git diff HEAD` captures both working-tree and index.
 func (o *Operations) Diff(ctx context.Context, repoPath string) ([]byte, error) {
-	return o.runGit(ctx, repoPath, "diff")
+	return o.runGit(ctx, repoPath, "diff", "HEAD")
 }
 
 // DiffStaged returns the staged diff output for the repository.
