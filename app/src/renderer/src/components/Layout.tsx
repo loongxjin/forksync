@@ -3,11 +3,9 @@ import { Outlet, useNavigate } from 'react-router-dom'
 import { Toast } from './ui/toast'
 import { useToastContext } from '@/contexts/ToastContext'
 import { useSettings } from '@/contexts/SettingsContext'
-import { useSettingsDrawer } from '@/contexts/SettingsDrawerContext'
 import { useTranslation } from 'react-i18next'
 import i18n from 'i18next'
 import { Settings, Moon, Sun, Monitor, Languages } from 'lucide-react'
-import { SettingsDrawer } from './SettingsDrawer'
 import { engineApi } from '@/lib/api'
 
 /** Platform detected from preload */
@@ -16,7 +14,7 @@ const platform: string = window.platform || 'darwin'
 function TitleBar(): JSX.Element {
   const { theme, setTheme } = useSettings()
   const { t } = useTranslation()
-  const { openDrawer } = useSettingsDrawer()
+  const navigate = useNavigate()
 
   const cycleTheme = (): void => {
     const next = theme === 'dark' ? 'light' : theme === 'light' ? 'system' : 'dark'
@@ -73,7 +71,7 @@ function TitleBar(): JSX.Element {
 
       <div className="flex items-center gap-0.5">
         <button
-          onClick={openDrawer}
+          onClick={() => navigate('/settings')}
           className="press-scale rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           title={t('nav.settings')}
           aria-label={t('nav.settings')}
@@ -138,7 +136,6 @@ function LinuxWindowControls(): JSX.Element {
 
 export function Layout(): JSX.Element {
   const { toast, hideToast } = useToastContext()
-  const { open, closeDrawer } = useSettingsDrawer()
   const navigate = useNavigate()
 
   // Subscribe to notification click-through navigation from main process
@@ -163,7 +160,6 @@ export function Layout(): JSX.Element {
         onClose={hideToast}
         duration={2000}
       />
-      <SettingsDrawer open={open} onOpenChange={closeDrawer} />
     </div>
   )
 }
