@@ -193,12 +193,12 @@ export class EngineClient {
     name: string,
     opts?: { agent?: string; noConfirm?: boolean }
   ): {
-    onEvent: (cb: (ev: AgentStreamEvent) => void) => void
+    onTick: (cb: () => void) => void
     onDone: (cb: (result: ApiResponse<ResolveData>) => void) => void
     onError: (cb: (err: string) => void) => void
     kill: () => void
   } {
-    const eventCbs: Array<(ev: AgentStreamEvent) => void> = []
+    const tickCbs: Array<() => void> = []
     const doneCbs: Array<(result: ApiResponse<ResolveData>) => void> = []
     const errorCbs: Array<(err: string) => void> = []
 
@@ -206,8 +206,8 @@ export class EngineClient {
     let notified = false
     let ws: WebSocket | null = null
 
-    const notifyEvent = (ev: AgentStreamEvent): void => {
-      for (const cb of eventCbs) cb(ev)
+    const notifyTick = (): void => {
+      for (const cb of tickCbs) cb()
     }
     const notifyDone = (result: ApiResponse<ResolveData>): void => {
       if (notified) return
@@ -235,14 +235,18 @@ export class EngineClient {
         ws.on('message', (data: { toString: () => string }) => {
           const text = data.toString()
           if (!text) return
-          let parsed: AgentStreamEvent & { success?: boolean; summary?: string; session_id?: string; resolvedFiles?: string[]; diff?: string; agentName?: string }
+          let parsed: { t?: string; success?: boolean; summary?: string; session_id?: string; resolvedFiles?: string[]; diff?: string; agentName?: string; d?: string }
           try {
             parsed = JSON.parse(text)
           } catch {
-            notifyEvent({ t: 'stdout', d: text, ts: new Date().toISOString() })
+            // Unparseable — still tick so the frontend re-reads the disk log
+            notifyTick()
             return
           }
           if (parsed.t === 'done') {
+            // Send a final tick so the frontend picks up the last events,
+            // then deliver the done payload (enriched ResolveData).
+            notifyTick()
             notifyDone({
               success: parsed.success ?? true,
               data: {
@@ -260,9 +264,12 @@ export class EngineClient {
               error: ''
             } as ApiResponse<ResolveData>)
           } else if (parsed.t === 'error') {
+            notifyTick()
             notifyError(parsed.d ?? 'Agent resolve error')
           } else {
-            notifyEvent(parsed as AgentStreamEvent)
+            // Any other event (stdout, tool, state_persisted, ...) — just tick.
+            // The frontend reads the actual event data from the disk log.
+            notifyTick()
           }
         })
         ws.on('error', (): void => {
@@ -271,6 +278,7 @@ export class EngineClient {
         ws.on('close', (): void => {
           // Safety net: socket closed without a terminal frame.
           if (!notified) {
+            notifyTick()
             notifyDone({ success: true, data: null as unknown as ResolveData, error: '' })
           }
         })
@@ -280,7 +288,7 @@ export class EngineClient {
       })
 
     return {
-      onEvent: (cb) => { eventCbs.push(cb) },
+      onTick: (cb) => { tickCbs.push(cb) },
       onDone: (cb) => { doneCbs.push(cb) },
       onError: (cb) => { errorCbs.push(cb) },
       kill: () => {
