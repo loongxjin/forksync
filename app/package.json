@@ -23,7 +23,9 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^17.0.2",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.30.3",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
     "ws": "^8.21.0"
@@ -31,6 +33,7 @@
   "devDependencies": {
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^3.0.0",
+    "@tailwindcss/typography": "^0.5.20",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.3",
