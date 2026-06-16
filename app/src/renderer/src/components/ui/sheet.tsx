@@ -96,28 +96,36 @@ export function SheetContent({
     bottom: 'translate-y-full'
   }
 
-  // When closed, render invisible to allow exit transition; after transition, hidden via pointer-events
+  // The overlay container starts below the title bar so the panel content
+  // doesn't cover the logo + window controls. But the BACKDROP itself covers
+  // the full viewport (including the title bar) for a consistent blur effect.
   return (
-    <div
-      className={cn(
-        'fixed top-[var(--titlebar-height)] inset-x-0 bottom-0 z-50 transition-[visibility] duration-300',
-        !open && 'invisible'
+    <>
+      {/* Backdrop — full viewport including title bar */}
+      {open && (
+        <div
+          className={cn(
+            'fixed inset-0 z-50 bg-black/40 backdrop-blur-sm transition-opacity duration-300',
+            open ? 'opacity-100' : 'opacity-0'
+          )}
+          onClick={() => onOpenChange(false)}
+        />
       )}
-    >
-      {/* Backdrop — also sits below the title bar */}
+      {/* Content container — below title bar */}
       <div
         className={cn(
-          'absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300',
-          open ? 'opacity-100' : 'opacity-0'
+          'fixed top-[var(--titlebar-height)] inset-x-0 bottom-0 z-50 transition-[visibility] duration-300',
+          'pointer-events-none',
+          !open && 'invisible'
         )}
-        onClick={() => onOpenChange(false)}
-      />
+      >
       {/* Content */}
       <div
         ref={contentRef}
         data-state={open ? 'open' : 'closed'}
         className={cn(
           'fixed top-[var(--titlebar-height)] bottom-0 z-50 bg-card shadow-2xl border-border/50',
+          'pointer-events-auto',
           'transition-transform duration-300 ease-in-out',
           sideClasses[side],
           open ? 'translate-x-0 translate-y-0' : closedTranslate[side],
@@ -126,7 +134,8 @@ export function SheetContent({
       >
         {children}
       </div>
-    </div>
+      </div>
+    </>
   )
 }
 
