@@ -101,11 +101,11 @@ export function SheetContent({
   // the full viewport (including the title bar) for a consistent blur effect.
   return (
     <>
-      {/* Backdrop — full viewport including title bar */}
+      {/* Backdrop — full viewport including title bar, but below the title bar */}
       {open && (
         <div
           className={cn(
-            'fixed inset-0 z-50 bg-black/40 backdrop-blur-sm transition-opacity duration-300',
+            'fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity duration-300',
             open ? 'opacity-100' : 'opacity-0'
           )}
           onClick={() => onOpenChange(false)}
