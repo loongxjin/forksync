@@ -151,6 +151,9 @@ export function useResolveStream(): ResolveStreamHook {
   const ipcEventCountRef = useRef<Record<string, number>>({})
   const pollWatermarkRef = useRef<Record<string, number>>({})
   const syncResultsMountedRef = useRef(false)
+  // Tracks repos with an active live WebSocket stream, so loadAgentLog can skip
+  // disk-log polling (which would duplicate events already arriving in real time).
+  const streamLiveRef = useRef<Set<string>>(new Set())
 
   // Path A: syncResults → resolveResults
   useEffect(() => {
@@ -190,6 +193,7 @@ export function useResolveStream(): ResolveStreamHook {
 
     const unsubDone = engineApi.onResolveStreamDone((repoName, apiRes) => {
       logger.log('stream done received', repoName, apiRes.success)
+      streamLiveRef.current.delete(repoName)
       const timer = pollTimersRef.current.get(repoName)
       if (timer) { clearInterval(timer); pollTimersRef.current.delete(repoName) }
       delete ipcEventCountRef.current[repoName]
@@ -198,6 +202,7 @@ export function useResolveStream(): ResolveStreamHook {
 
     const unsubError = engineApi.onResolveStreamError((repoName, error) => {
       logger.error('stream error received', repoName, error)
+      streamLiveRef.current.delete(repoName)
       const timer = pollTimersRef.current.get(repoName)
       if (timer) { clearInterval(timer); pollTimersRef.current.delete(repoName) }
       delete ipcEventCountRef.current[repoName]
@@ -238,6 +243,7 @@ export function useResolveStream(): ResolveStreamHook {
   ): Promise<void> => {
     logger.log('startResolve', repoName, opts)
     ipcEventCountRef.current[repoName] = 0
+    streamLiveRef.current.add(repoName)
     dispatch({ type: 'STREAM_START', repoName })
     try {
       engineApi.resolveStreamStart(repoName, opts)
@@ -250,6 +256,13 @@ export function useResolveStream(): ResolveStreamHook {
   }, [])
 
   const loadAgentLog = useCallback(async (repoName: string): Promise<void> => {
+    // If a live WebSocket stream is active, skip disk-log loading entirely —
+    // events are already arriving in real time via STREAM_EVENT, and reading
+    // the disk log would duplicate them.
+    if (streamLiveRef.current.has(repoName)) {
+      logger.log('loadAgentLog skipped — live stream active for', repoName)
+      return
+    }
     logger.log('loadAgentLog', repoName)
     const existing = pollTimersRef.current.get(repoName)
     if (existing) {
@@ -305,6 +318,7 @@ export function useResolveStream(): ResolveStreamHook {
   }, [])
 
   const clearResult = useCallback((repoName: string) => {
+    streamLiveRef.current.delete(repoName)
     const timer = pollTimersRef.current.get(repoName)
     if (timer) { clearInterval(timer); pollTimersRef.current.delete(repoName) }
     delete pollWatermarkRef.current[repoName]
