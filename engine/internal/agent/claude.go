@@ -132,6 +132,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 		stdoutLineCount   int
 		stderrLineCount   int
 		wg                sync.WaitGroup
+		sawDelta          bool // true once any stream_event delta is observed
 	)
 
 	// Scan stdout — each line is a JSON event from stream-json output
@@ -174,7 +175,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 
 			case "assistant":
 				// Full assistant message — extract text content
-				a.processAssistantEvent(sw, ev, &resultTextBuilder)
+				a.processAssistantEvent(sw, ev, &resultTextBuilder, sawDelta)
 
 			case "tool_use":
 				// Tool call — emit as tool event
@@ -187,6 +188,7 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 			case "stream_event":
 				// Partial token streaming (if --include-partial-messages was used)
 				// We emit these as stdout for real-time display
+				sawDelta = true
 				a.processStreamEvent(sw, ev, &resultTextBuilder)
 
 			case "result":
@@ -292,12 +294,12 @@ func (a *ClaudeAdapter) ResolveConflictsWithStream(ctx context.Context, session 
 
 // processAssistantEvent extracts text from an "assistant" stream-json event
 // and emits it as stdout StreamEvents.
-func (a *ClaudeAdapter) processAssistantEvent(sw *StreamWriter, ev map[string]any, builder *strings.Builder) {
-	// "assistant" events carry the FULL message snapshot. The real-time display
-	// is already driven by "stream_event" deltas (text) and standalone "tool_use"
-	// events, so here we only accumulate text into the builder (for the final
-	// summary) WITHOUT emitting any stdout/tool events — otherwise everything
-	// shows up twice.
+func (a *ClaudeAdapter) processAssistantEvent(sw *StreamWriter, ev map[string]any, builder *strings.Builder, suppressEmit bool) {
+	// "assistant" events carry the FULL message snapshot. When the Claude CLI
+	// also emits incremental "stream_event" deltas (suppressEmit=true), we skip
+	// emitting stdout/tool events here to avoid duplication — the deltas already
+	// drive the real-time display. When there are NO deltas (older/newer CLI
+	// builds), suppressEmit=false and we emit normally so the terminal isn't blank.
 	message, _ := ev["message"].(map[string]any)
 	if message == nil {
 		return
@@ -309,9 +311,30 @@ func (a *ClaudeAdapter) processAssistantEvent(sw *StreamWriter, ev map[string]an
 			continue
 		}
 		blockType, _ := cb["type"].(string)
-		if blockType == "text" {
+		switch blockType {
+		case "text":
 			if text, ok := cb["text"].(string); ok && text != "" {
 				builder.WriteString(text)
+				if !suppressEmit {
+					for _, line := range strings.Split(text, "\n") {
+						_ = sw.WriteEvent(StreamEvent{
+							Type:      StreamEventStdout,
+							Data:      line,
+							Timestamp: time.Now().UTC(),
+						})
+					}
+				}
+			}
+		case "tool_use":
+			name, _ := cb["name"].(string)
+			input, _ := cb["input"].(map[string]any)
+			if !suppressEmit {
+				_ = sw.WriteEvent(StreamEvent{
+					Type:      StreamEventTool,
+					Timestamp: time.Now().UTC(),
+					ToolName:  name,
+					ToolPath:  extractToolPath(input),
+				})
 			}
 		}
 	}
