@@ -42,7 +42,7 @@ function TitleBar(): JSX.Element {
   const isLinux = platform === 'linux'
 
   return (
-    <div className={`titlebar flex h-[38px] shrink-0 items-center justify-between border-b border-border bg-card ${isMac ? 'pl-20' : 'pl-4'} ${isLinux ? 'pr-24' : 'pr-4'}`}>
+    <div className={`titlebar flex shrink-0 items-center justify-between border-b border-border bg-card ${isMac ? 'pl-20' : 'pl-4'} ${isLinux ? 'pr-24' : 'pr-4'}`} style={{ height: 'var(--titlebar-height)' }}>
       <div className="flex items-center">
         <svg width="18" height="18" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
           <defs>
