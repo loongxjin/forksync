@@ -100,18 +100,15 @@ func BuildDeps() (*Deps, error) {
 		}
 	}
 
-	// Syncer with the same option wiring as cmd/serve.go setupSyncer.
+	// Syncer with the same option wiring as the old cmd/serve.go setupSyncer.
+	// Note: desktop notifications are surfaced by the Electron layer, so we do
+	// NOT wire a Go-side notifier here (the scheduler receives nil).
 	var syncOpts []syncpkg.Option
 	if deps.HistStore != nil {
 		syncOpts = append(syncOpts, syncpkg.WithHistoryStore(deps.HistStore))
 	}
 	if deps.SessionMgr != nil {
 		syncOpts = append(syncOpts, syncpkg.WithSessionManager(deps.SessionMgr))
-	}
-	if cfg != nil && cfg.Notification.Enabled {
-		// notifications are surfaced by the Electron layer; background syncs
-		// still emit desktop notifications when enabled in config.
-		// (A nil notifier is passed for the scheduler path below.)
 	}
 	deps.Syncer = syncpkg.NewSyncerFromConfig(cfg, store, cfgMgr.ConfigDir(), syncOpts...)
 

@@ -182,12 +182,6 @@ func CleanupStaleWorkflows(repos []types.Repo, store repo.Store) {
 	}
 }
 
-// IsAbortedWorkflow reports whether a failed workflow was produced by an explicit
-// user abort/reject.
-func IsAbortedWorkflow(wf *types.SyncWorkflow) bool {
-	return isAbortedWorkflow(wf)
-}
-
 func isAbortedWorkflow(wf *types.SyncWorkflow) bool {
 	if wf == nil || wf.Status != types.WorkflowFailed {
 		return false

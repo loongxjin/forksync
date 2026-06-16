@@ -361,30 +361,6 @@ func TestSaveAndReload(t *testing.T) {
 	assert.NotEqual(t, a.ID, b.ID)
 }
 
-func TestSaveMethod(t *testing.T) {
-	dir := t.TempDir()
-	s := NewJSONStore(dir)
-
-	// Use Add to populate, then Save should round-trip correctly
-	repo := types.Repo{
-		Name:   "manual-repo",
-		Origin: "https://github.com/user/manual.git",
-	}
-	require.NoError(t, s.Add(repo))
-
-	// Save should write to file (already called by Add, but explicit Save should work too)
-	err := s.Save()
-	require.NoError(t, err)
-
-	// Load into a new store and verify
-	s2 := NewJSONStore(dir)
-	require.NoError(t, s2.Load())
-
-	got, ok := s2.GetByName("manual-repo")
-	require.True(t, ok)
-	assert.Equal(t, "https://github.com/user/manual.git", got.Origin)
-}
-
 func TestEmptyName(t *testing.T) {
 	s := newTestStore(t)
 	repo := types.Repo{

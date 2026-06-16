@@ -271,14 +271,6 @@ type AgentResolveResult struct {
 	AgentName     string   `json:"agentName"`
 }
 
-// AgentResolveRequest Agent 解决请求
-type AgentResolveRequest struct {
-	RepoID      string   `json:"repoId"`
-	Files       []string `json:"files"`
-	Strategy    string   `json:"strategy"`
-	AutoConfirm bool     `json:"autoConfirm"`
-}
-
 // --- 命令响应类型 ---
 
 // StatusData status 响应

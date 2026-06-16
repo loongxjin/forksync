@@ -107,27 +107,6 @@ func TestByRepo(t *testing.T) {
 	assert.Len(t, records, 1)
 }
 
-func TestSummary(t *testing.T) {
-	store := newTestStore(t)
-
-	records := []Record{
-		{RepoID: "r1", RepoName: "r1", Status: "synced", CreatedAt: time.Now()},
-		{RepoID: "r2", RepoName: "r2", Status: "conflict", ConflictFiles: []string{"f1"}, CreatedAt: time.Now()},
-		{RepoID: "r3", RepoName: "r3", Status: "error", ErrorMessage: "fetch failed", CreatedAt: time.Now()},
-		{RepoID: "r4", RepoName: "r4", Status: "synced", CreatedAt: time.Now()},
-	}
-	for _, r := range records {
-		_, err := store.Insert(r)
-		require.NoError(t, err)
-	}
-
-	totalSyncs, conflicts, errors, _, err := store.Summary()
-	require.NoError(t, err)
-	assert.Equal(t, 4, totalSyncs)
-	assert.Equal(t, 1, conflicts)
-	assert.Equal(t, 1, errors)
-}
-
 func TestRecord_EmptyConflictFiles(t *testing.T) {
 	store := newTestStore(t)
 
@@ -188,8 +167,8 @@ func TestUpdateSummary(t *testing.T) {
 	err = store.UpdateSummary(id, "This is a test summary", "done")
 	require.NoError(t, err)
 
-	// Verify via GetByID
-	record, err := store.GetByID(id)
+	// Verify via LatestByRepo (the production read path)
+	record, err := store.LatestByRepo("repo-1")
 	require.NoError(t, err)
 	assert.Equal(t, "This is a test summary", record.Summary)
 	assert.Equal(t, "done", record.SummaryStatus)
@@ -234,8 +213,9 @@ func TestMigration_AddsSummaryColumns(t *testing.T) {
 	id, err := store.Insert(r)
 	require.NoError(t, err)
 
-	record, err := store.GetByID(id)
+	record, err := store.LatestByRepo("repo-1")
 	require.NoError(t, err)
+	assert.Equal(t, int64(id), record.ID)
 	assert.Equal(t, "test summary", record.Summary)
 	assert.Equal(t, "done", record.SummaryStatus)
 }

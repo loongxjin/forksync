@@ -28,11 +28,6 @@ func NewExecutor() *Executor {
 	return &Executor{timeout: DefaultTimeout}
 }
 
-// NewExecutorWithTimeout creates a new Executor with a custom timeout.
-func NewExecutorWithTimeout(timeout time.Duration) *Executor {
-	return &Executor{timeout: timeout}
-}
-
 // Summarize calls the specified agent CLI to generate a summary of the given commits.
 // agentName is the binary name (e.g. "claude", "opencode", "codex"). If empty, returns an error.
 func (e *Executor) Summarize(ctx context.Context, commits []CommitInfo, lang string, agentName string) (string, error) {
