@@ -285,8 +285,24 @@ func (s *Server) runResolveWithAgent(ctx context.Context, r types.Repo, req reso
 		}, nil
 	}
 
-	// Wait-for-confirmation path: emit done with the agent result so the
-	// frontend can show the diff and offer Accept/Reject.
+	// Wait-for-confirmation path: transition repo to resolved/waiting state
+	// so the frontend can show the diff and offer Accept/Reject.
+	// (Previously this lived inside Resolver.ResolveWithAgent; moved here so
+	// the Resolver stays a pure resolve core that owns no state transitions.)
+	if r.Workflow == nil {
+		r.Workflow = workflow.NewWorkflowFromRepo(r)
+	}
+	workflow.AdvanceStep(r.Workflow, types.StepResolveStrategy, types.StepStatusSuccess, "")
+	workflow.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusSuccess,
+		fmt.Sprintf("resolved by %s", res.AgentResult.AgentName))
+	workflow.AdvanceStep(r.Workflow, types.StepAcceptChanges, types.StepStatusWaiting, "")
+	r.Workflow.Status = types.WorkflowWaiting
+	r.Status = types.RepoStatusResolved
+	r.ErrorMessage = ""
+	if storeErr := store.Update(r); storeErr != nil {
+		logger.Error("resolve: failed to update repo after agent resolution", "repo", r.Name, "error", storeErr)
+	}
+
 	if streamWriter != nil {
 		_ = streamWriter.WriteEvent(doneEventFromResult(res.AgentResult))
 	}
@@ -296,7 +312,7 @@ func (s *Server) runResolveWithAgent(ctx context.Context, r types.Repo, req reso
 			RepoID:      res.Repo.ID,
 			AgentResult: agentResultToTypes(res.AgentResult),
 		},
-		repo: res.Repo,
+		repo: r,
 	}, nil
 }
 

@@ -262,8 +262,8 @@ const conflictMarkers = "<<<<<<< HEAD\na\n=======\nb\n>>>>>>> upstream\n"
 // ---------------------------------------------------------------------------
 
 // Happy path: agent resolves all conflicts, markers gone → files staged,
-// status Resolved, NO commit performed.
-func TestResolveWithAgent_SuccessStagesAndSetsResolvedNoCommit(t *testing.T) {
+// NO commit, NO state transitions (caller owns the state machine).
+func TestResolveWithAgent_SuccessStagesNoCommitNoStateTransition(t *testing.T) {
 	repo := types.Repo{ID: "r1", Name: "demo", Path: "/repo", Status: types.RepoStatusConflict}
 	gitOps := newFakeGitOps()
 	gitOps.conflicts = []string{"a.go", "b.go"}
@@ -291,22 +291,17 @@ func TestResolveWithAgent_SuccessStagesAndSetsResolvedNoCommit(t *testing.T) {
 	if gitOps.commitCalled {
 		t.Error("Resolver committed; it must NOT commit (CONTEXT: Resolve is separate from Resolve Commit)")
 	}
-	if got := out.Repo.Status; got != types.RepoStatusResolved {
-		t.Errorf("repo status = %q, want %q", got, types.RepoStatusResolved)
+	// Resolver must NOT transition state — caller owns the state machine.
+	if got := out.Repo.Status; got != types.RepoStatusConflict {
+		t.Errorf("repo status = %q, want %q (unchanged — caller transitions state)", got, types.RepoStatusConflict)
 	}
-	// Workflow should be waiting for the caller's confirmation.
-	if wf := out.Repo.Workflow; wf == nil {
-		t.Error("workflow not set on repo")
-	} else if wf.Status != types.WorkflowWaiting {
-		t.Errorf("workflow status = %q, want %q", wf.Status, types.WorkflowWaiting)
-	}
-	// Persisted to store.
+	// Resolver must NOT persist — caller owns persistence.
 	stored, ok := store.Get("r1")
 	if !ok {
-		t.Fatal("repo not persisted")
+		t.Fatal("repo not found in store")
 	}
-	if stored.Status != types.RepoStatusResolved {
-		t.Errorf("stored status = %q, want %q", stored.Status, types.RepoStatusResolved)
+	if stored.Status != types.RepoStatusConflict {
+		t.Errorf("stored status = %q, want %q (unchanged — caller persists)", stored.Status, types.RepoStatusConflict)
 	}
 }
 

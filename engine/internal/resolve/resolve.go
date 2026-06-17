@@ -160,54 +160,19 @@ type AgentResult struct {
 	Unresolved    []string
 }
 
-// ResolveWithAgent runs the full agent resolution flow and transitions the repo
-// to the interactive-resolve "resolved, awaiting confirmation" state.
+// ResolveWithAgent runs the agent resolution flow and returns the outcome.
 // r.sessionMgr must be set (via NewResolver) before calling this method.
 //
-// This is the interactive-resolve entry point. It owns the workflow transition
-// to WorkflowWaiting / RepoStatusResolved. The auto-sync path should call
-// RunAgentResolve instead and drive its own (different) state machine.
+// This is a thin wrapper over RunAgentResolve for the interactive-resolve path.
+// It does NOT transition workflow/repo state — callers own the state machine.
+// The auto-sync path should call RunAgentResolve directly.
 func (r *Resolver) ResolveWithAgent(
 	ctx context.Context,
 	repo types.Repo,
 	strategy string,
 	streamWriter *agent.StreamWriter,
 ) (*AgentResult, error) {
-	out, err := r.RunAgentResolve(ctx, repo, strategy, streamWriter, nil /* detect conflicts */)
-	if err != nil {
-		return nil, err
-	}
-	// No conflicts (short-circuit) or verify failed — leave state untouched.
-	// The caller decides; there is nothing to transition to.
-	if out.AgentResult == nil || !out.Success || len(out.Unresolved) > 0 {
-		return out, nil
-	}
-
-	// Transition to the interactive "resolved, awaiting confirmation" state.
-	// Operate on out.Repo (the same value the caller will receive) so the
-	// transitions are visible to the caller.
-	repo = out.Repo
-	if repo.Workflow == nil {
-		repo.Workflow = workflow.NewWorkflowFromRepo(repo)
-	}
-	workflow.AdvanceStep(repo.Workflow, types.StepResolveStrategy, types.StepStatusSuccess, "")
-	workflow.AdvanceStep(repo.Workflow, types.StepAgentResolve, types.StepStatusSuccess,
-		fmt.Sprintf("resolved by %s", out.AgentResult.AgentName))
-	workflow.AdvanceStep(repo.Workflow, types.StepAcceptChanges, types.StepStatusWaiting, "")
-	repo.Workflow.Status = types.WorkflowWaiting
-	repo.Status = types.RepoStatusResolved
-	repo.ErrorMessage = ""
-	out.Repo = repo
-	storeErr := r.store.Update(repo)
-	if storeErr != nil {
-		logger.Error("resolve: failed to update repo after agent resolution", "repo", repo.Name, "error", storeErr)
-	}
-
-	// NOTE: the adapter already emits a state_persisted event when it finishes.
-	// We no longer emit a second one here — it was redundant and caused the
-	// terminal drawer to render an extra empty line.
-
-	return out, nil
+	return r.RunAgentResolve(ctx, repo, strategy, streamWriter, nil /* detect conflicts */)
 }
 
 // RunAgentResolve drives the agent over the conflicts, verifies conflict
