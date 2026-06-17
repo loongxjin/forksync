@@ -32,9 +32,8 @@ const (
 type SessionStatus string
 
 const (
-	SessionStatusActive  SessionStatus = "active"
-	SessionStatusExpired SessionStatus = "expired"
-	SessionStatusFailed  SessionStatus = "failed"
+	SessionStatusActive SessionStatus = "active"
+	SessionStatusFailed SessionStatus = "failed"
 )
 
 // SummaryStatus 同步摘要生成状态枚举

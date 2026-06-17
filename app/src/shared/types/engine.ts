@@ -33,7 +33,7 @@ export type RepoStatus =
   | 'unconfigured'
 
 /** Agent session status */
-export type AgentSessionStatus = 'active' | 'expired' | 'failed'
+export type AgentSessionStatus = 'active' | 'failed'
 
 // ---------------------------------------------------------------------------
 // Core Domain Models
@@ -338,7 +338,6 @@ export interface EngineConfig {
     Timeout: string
     ConflictStrategy: string
     ConfirmBeforeCommit: boolean
-    SessionTTL: string
   }
   GitHub: {
     Token: string

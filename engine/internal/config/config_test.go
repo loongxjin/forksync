@@ -46,7 +46,6 @@ func TestManager_Load_WithDefaults(t *testing.T) {
 	assert.Equal(t, "agent_resolve", cfg.Agent.ConflictStrategy)
 	assert.Equal(t, "preserve_ours", cfg.Agent.ResolveStrategy)
 	assert.True(t, cfg.Agent.ConfirmBeforeCommit)
-	assert.Equal(t, "24h", cfg.Agent.SessionTTL)
 }
 
 func TestManager_SaveAndReload(t *testing.T) {
@@ -70,7 +69,6 @@ func TestManager_SaveAndReload(t *testing.T) {
 			ConflictStrategy:    "agent_resolve",
 			ResolveStrategy:     "preserve_ours",
 			ConfirmBeforeCommit: true,
-			SessionTTL:          "24h",
 		},
 		Notification: NotificationConfig{
 			Enabled: false,
@@ -106,7 +104,6 @@ func TestManager_SaveAndReload(t *testing.T) {
 	assert.Equal(t, "agent_resolve", loadedCfg.Agent.ConflictStrategy)
 	assert.Equal(t, "preserve_ours", loadedCfg.Agent.ResolveStrategy)
 	assert.True(t, loadedCfg.Agent.ConfirmBeforeCommit)
-	assert.Equal(t, "24h", loadedCfg.Agent.SessionTTL)
 
 	assert.False(t, loadedCfg.Notification.Enabled)
 
