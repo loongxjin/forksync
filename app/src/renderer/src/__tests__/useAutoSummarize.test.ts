@@ -13,12 +13,18 @@ vi.mock('@/contexts/SettingsContext', () => ({
   useSettings: vi.fn()
 }))
 
+vi.mock('@/contexts/HistoryContext', () => ({
+  useHistory: vi.fn()
+}))
+
 import { engineApi } from '@/lib/api'
 import { useSettings } from '@/contexts/SettingsContext'
+import { useHistory } from '@/contexts/HistoryContext'
 
 describe('useAutoSummarize', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(useHistory).mockReturnValue({ loadHistory: vi.fn() } as any)
   })
 
   it('calls engineApi.summarize when AutoSummary is enabled', () => {
@@ -52,6 +58,22 @@ describe('useAutoSummarize', () => {
     result.current.triggerSummarize('my-repo')
 
     expect(engineApi.summarize).not.toHaveBeenCalled()
+  })
+
+  it('refreshes history after summarize resolves', async () => {
+    vi.mocked(useSettings).mockReturnValue({
+      engineConfig: { Sync: { AutoSummary: true } }
+    } as any)
+    const loadHistorySpy = vi.fn()
+    vi.mocked(useHistory).mockReturnValue({ loadHistory: loadHistorySpy } as any)
+
+    const { result } = renderHook(() => useAutoSummarize())
+    result.current.triggerSummarize('my-repo')
+
+    await vi.waitFor(() => {
+      expect(engineApi.summarize).toHaveBeenCalledWith('my-repo')
+      expect(loadHistorySpy).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('swallows summarize errors silently', async () => {
