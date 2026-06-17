@@ -116,7 +116,6 @@ func TestManager_Set_AllStringKeys(t *testing.T) {
 		"agent.timeout",
 		"agent.conflict_strategy",
 		"agent.resolve_strategy",
-		"agent.session_ttl",
 		"github.token",
 		"proxy.url",
 	}

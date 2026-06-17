@@ -39,7 +39,6 @@ type AgentConfig struct {
 	ConflictStrategy    string   `mapstructure:"conflict_strategy" yaml:"conflict_strategy"`
 	ResolveStrategy     string   `mapstructure:"resolve_strategy" yaml:"resolve_strategy"`
 	ConfirmBeforeCommit bool     `mapstructure:"confirm_before_commit" yaml:"confirm_before_commit"`
-	SessionTTL          string   `mapstructure:"session_ttl" yaml:"session_ttl"`
 }
 
 type GitHubConfig struct {
@@ -123,7 +122,6 @@ func (m *Manager) Load() (*Config, error) {
 	m.viper.SetDefault("agent.conflict_strategy", "agent_resolve")
 	m.viper.SetDefault("agent.resolve_strategy", "preserve_ours")
 	m.viper.SetDefault("agent.confirm_before_commit", true)
-	m.viper.SetDefault("agent.session_ttl", "24h")
 	m.viper.SetDefault("notification.enabled", true)
 	m.viper.SetDefault("proxy.enabled", false)
 
@@ -186,7 +184,6 @@ var validConfigKeys = map[string]string{
 	"agent.conflict_strategy":     "string",
 	"agent.resolve_strategy":      "string",
 	"agent.confirm_before_commit": "bool",
-	"agent.session_ttl":           "string",
 	// github
 	"github.token": "string",
 	// notification
@@ -229,7 +226,6 @@ var configFieldPaths = map[string][]int{
 	"agent.conflict_strategy":     {1, 3},
 	"agent.resolve_strategy":      {1, 4},
 	"agent.confirm_before_commit": {1, 5},
-	"agent.session_ttl":           {1, 6},
 	// github
 	"github.token": {2, 0},
 	// notification
