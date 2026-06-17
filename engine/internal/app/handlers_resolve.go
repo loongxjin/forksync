@@ -420,20 +420,13 @@ type agentLogResult struct {
 	IsRunning bool                `json:"isRunning"`
 }
 
-// handleReadAgentLog replays the on-disk agent log for a repo. When a
-// sessionId query param is provided the exact session's log is read (new
-// precise path); otherwise it falls back to LatestLogFile for backward
-// compatibility with clients that haven't been updated yet.
+// handleReadAgentLog replays the on-disk agent log for a repo.
+// The sessionId query param identifies the exact resolve run's log.
 func (s *Server) handleReadAgentLog(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
-	var logPath string
-	var logErr error
-	if sid := r.URL.Query().Get("session"); sid != "" {
-		logPath, logErr = agent.LogFile(s.deps.ConfigDir(), name, sid)
-	} else {
-		logPath, logErr = agent.LatestLogFile(s.deps.ConfigDir(), name)
-	}
+	sid := r.URL.Query().Get("session")
+	logPath, logErr := agent.LogFile(s.deps.ConfigDir(), name, sid)
 
 	if logErr != nil || logPath == "" {
 		writeBare(w, agentLogResult{Events: []agent.StreamEvent{}, IsRunning: false})

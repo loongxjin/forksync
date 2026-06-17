@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -111,49 +110,6 @@ func LogFile(baseDir, repoID, sessionID string) (string, error) {
 		return "", fmt.Errorf("stat log file: %w", err)
 	}
 	return path, nil
-}
-
-// LatestLogFile returns the path of the most recent log file for the given repoID.
-// Sorted by file modification time (descending), so the result is truly the most
-// recently written log regardless of naming convention (timestamp, UUID, etc.).
-func LatestLogFile(baseDir, repoID string) (string, error) {
-	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("no logs found for repo %s", repoID)
-		}
-		return "", fmt.Errorf("read log dir: %w", err)
-	}
-
-	type entry struct {
-		name string
-		mtime time.Time
-	}
-	var files []entry
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if strings.HasSuffix(name, ".ndjson") {
-			info, infoErr := e.Info()
-			if infoErr != nil {
-				continue
-			}
-			files = append(files, entry{name: name, mtime: info.ModTime()})
-		}
-	}
-
-	if len(files) == 0 {
-		return "", fmt.Errorf("no log files found for repo %s", repoID)
-	}
-
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].mtime.After(files[j].mtime) // descending — newest first
-	})
-
-	return filepath.Join(dir, files[0].name), nil
 }
 
 // ReadLogFile parses all StreamEvents from an NDJSON log file.
