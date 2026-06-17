@@ -616,14 +616,18 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	}
 
 	// Write a terminal 'done' frame to the disk log so readAgentLog reports
-	// isRunning=false. This carries ResolvedFiles/Diff/AgentName/Summary so the
-	// frontend can restore resolve details when replaying the log.
-	_ = streamWriter.WriteEvent(agent.DoneEventFromResult(result))
-
-	// Check staged changes (log but don't fail — whitespace issues are non-critical)
-	if checkErr := s.gitOps.CheckStaged(ctx, r.Path); checkErr != nil {
-		logger.Debug("sync: staged changes check found issues", "repo", r.Name, "error", checkErr)
-	}
+	// isRunning=false — but ONLY when commit has actually landed (auto-commit)
+	// or when the agent is truly done and waiting for user review (waiting-confirm).
+	// Previously this was emitted unconditionally before the commit, which caused
+	// a frontend race: readAgentLog saw done, triggered a status refresh, but
+	// the commit hadn't landed yet → the frontend's verifyPoll patch papered
+	// over that gap by retrying.
+	//
+	// Now the done frame is emitted inside each branch at the correct timing:
+	//  - waiting-confirm: agent finished, right before buildPendingInfo.
+	//  - auto-commit: AFTER the commit succeeds, so frontend refresh sees the
+	//    terminal state (up_to_date) on the first try — verifyPoll becomes
+	//    unnecessary and will be removed.
 
 	// Check if auto-confirm is enabled
 	autoConfirm := true
@@ -631,16 +635,12 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		autoConfirm = !s.cfg.Agent.ConfirmBeforeCommit
 	}
 
-	logger.Debug("sync: auto-confirm check",
-		"repo", r.Name,
-		"autoConfirm", autoConfirm,
-		"confirmBeforeCommit", s.cfg.Agent.ConfirmBeforeCommit,
-		"cfg_nil", s.cfg == nil,
-	)
-
 	if !autoConfirm {
 		logger.Info("sync: tryAgentResolve awaiting user confirmation",
 			"repo", r.Name, "reason", "confirm_before_commit=true")
+		// Agent is done, write done frame so the frontend can read the log
+		// and show diff/summary for the user to review.
+		_ = streamWriter.WriteEvent(agent.DoneEventFromResult(result))
 		return s.buildPendingInfo(ctx, r, result)
 	}
 
@@ -656,6 +656,10 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		pending.CommitError = fmt.Sprintf("auto-commit failed: %v", err)
 		return false, pending
 	}
+
+	// Auto-commit succeeded. Now emit the done frame — the frontend's next
+	// status refresh will see up_to_date, no transitional state to retry over.
+	_ = streamWriter.WriteEvent(agent.DoneEventFromResult(result))
 
 	return true, nil
 }
