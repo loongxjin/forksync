@@ -410,18 +410,26 @@ type agentLogResult struct {
 	IsRunning bool                `json:"isRunning"`
 }
 
-// handleReadAgentLog replays the latest on-disk agent log for a repo. Ported
-// from app/src/main/engine.ts readAgentLog so the polling fallback path in
-// useResolveStream keeps working unchanged.
+// handleReadAgentLog replays the on-disk agent log for a repo. When a
+// sessionId query param is provided the exact session's log is read (new
+// precise path); otherwise it falls back to LatestLogFile for backward
+// compatibility with clients that haven't been updated yet.
 func (s *Server) handleReadAgentLog(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
-	latest, err := agent.LatestLogFile(s.deps.ConfigDir(), name)
-	if err != nil || latest == "" {
+	var logPath string
+	var logErr error
+	if sid := r.URL.Query().Get("session"); sid != "" {
+		logPath, logErr = agent.LogFile(s.deps.ConfigDir(), name, sid)
+	} else {
+		logPath, logErr = agent.LatestLogFile(s.deps.ConfigDir(), name)
+	}
+
+	if logErr != nil || logPath == "" {
 		writeBare(w, agentLogResult{Events: []agent.StreamEvent{}, IsRunning: false})
 		return
 	}
-	events, err := agent.ReadLogFile(latest)
+	events, err := agent.ReadLogFile(logPath)
 	if err != nil {
 		writeBare(w, agentLogResult{Events: []agent.StreamEvent{}, IsRunning: false})
 		return
