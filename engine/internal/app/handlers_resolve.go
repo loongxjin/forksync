@@ -299,26 +299,15 @@ func doneEventFromResult(r *agent.AgentResult) agent.StreamEvent {
 	return agent.DoneEventFromResult(r)
 }
 
-// resolveAgentProvider mirrors cmd/resolve.go resolveAgentProvider.
+// resolveAgentProvider extracts cfg.Agent.Preferred and delegates to the shared
+// agent.ResolveProvider (single source of truth for agent selection, also used
+// by the auto-sync path).
 func resolveAgentProvider(cfg *config.Config, requested string) (agent.AgentProvider, error) {
-	if requested != "" {
-		registry := agent.NewRegistry("")
-		provider, err := registry.GetByName(requested)
-		if err != nil {
-			return nil, fmt.Errorf("agent %q not found: %w", requested, err)
-		}
-		return provider, nil
-	}
 	preferred := ""
 	if cfg != nil {
 		preferred = cfg.Agent.Preferred
 	}
-	reg := agent.NewRegistry(preferred)
-	provider, err := reg.GetPreferred()
-	if err != nil {
-		return nil, fmt.Errorf("no agent available: %w", err)
-	}
-	return provider, nil
+	return agent.ResolveProvider(preferred, requested)
 }
 
 // toConflictFiles mirrors cmd/resolve.go toConflictFiles.

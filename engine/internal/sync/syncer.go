@@ -713,16 +713,14 @@ func (s *Syncer) reloadConfigAndSessionMgr() {
 	// Already have a session manager — just refresh its provider so a newly
 	// installed/preferred agent is picked up without a restart.
 	if s.sessionMgr != nil {
-		reg := agent.NewRegistry(cfg.Agent.Preferred)
-		if p, perr := reg.GetPreferred(); perr == nil {
+		if p, perr := agent.ResolveProvider(cfg.Agent.Preferred, ""); perr == nil {
 			s.sessionMgr.SetProvider(p)
 		}
 		return
 	}
 	// agent_resolve is on but no session manager yet — lazily build one now
 	// that an agent may have become available.
-	reg := agent.NewRegistry(cfg.Agent.Preferred)
-	provider, perr := reg.GetPreferred()
+	provider, perr := agent.ResolveProvider(cfg.Agent.Preferred, "")
 	if perr != nil {
 		logger.Info("sync: agent_resolve enabled but no agent available yet",
 			"preferred_cfg", cfg.Agent.Preferred, "error", perr)
