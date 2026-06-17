@@ -100,7 +100,7 @@ type agentCleanupResult struct {
 func (s *Server) handleAgentCleanup(w http.ResponseWriter, r *http.Request) {
 	store := session.NewSessionStore(s.deps.SessionsDir())
 	mgr := session.NewManager(store, nil)
-	count, err := mgr.CleanupExpired()
+	count, err := mgr.CleanupFailed()
 	if err != nil {
 		writeErr[agentCleanupResult](w, fmt.Errorf("cleanup sessions: %w", err))
 		return
