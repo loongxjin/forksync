@@ -88,7 +88,7 @@ func (s *Server) resolvePrepare(w http.ResponseWriter, r *http.Request, r2 types
 }
 
 func (s *Server) resolveAccept(w http.ResponseWriter, r *http.Request, r2 types.Repo, manual, retry bool) {
-	repo, result, err := s.deps.Resolve.Accept(r.Context(), r2, manual, retry)
+	repo, result, err := workflow.AcceptCommit(r.Context(), r2, s.deps.Store, s.deps.GitOps, s.deps.Cfg, s.deps.ConfigDir(), manual, retry)
 
 	// Conflicts still unresolved — mirrors cmd/resolve.go runResolveAccept.
 	if err != nil && !result.Success {

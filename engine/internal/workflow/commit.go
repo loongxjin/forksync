@@ -3,6 +3,8 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -167,8 +169,50 @@ func workflowCompletionInfo(wf *types.SyncWorkflow) (info workflowCompleteInfo) 
 			}
 		}
 	}
-	if info.agentUsed != "" {
-		info.autoResolved = info.conflictsFound
+		if info.agentUsed != "" {
+			info.autoResolved = info.conflictsFound
+		}
+		return
 	}
-	return
+
+// AcceptCommit checks for remaining conflicts, then finalizes the commit.
+// It is the single "Resolve Commit" entry point, moved here from the Resolver
+// type per CONTEXT.md ("Accept is Resolve Commit, not part of Resolve").
+func AcceptCommit(ctx context.Context, repo types.Repo, store repo.Store, gitOps git.OperationsProvider, cfg *config.Config, configDir string, manual bool, retry bool) (types.Repo, CommitResult, error) {
+	remaining := gitOps.DetectConflicts(ctx, repo.Path)
+	if len(remaining) > 0 {
+		repo.Status = types.RepoStatusConflict
+		repo.ErrorMessage = fmt.Sprintf("%d conflicts still unresolved", len(remaining))
+		return repo, CommitResult{}, fmt.Errorf("%d conflicts still unresolved", len(remaining))
+	}
+
+	// Check if we're in a merge state
+	mergeHead := filepath.Join(repo.Path, ".git", "MERGE_HEAD")
+	if _, err := os.Stat(mergeHead); err != nil {
+		repo.Status = types.RepoStatusUpToDate
+		repo.ErrorMessage = ""
+		if updateErr := store.Update(repo); updateErr != nil {
+			logger.Error("resolve: failed to update repo after accept-no-merge", "repo", repo.Name, "error", updateErr)
+		}
+		return repo, CommitResult{Success: true}, nil
+	}
+
+	commitMsg := types.CommitMsgAgentResolved
+	if manual {
+		commitMsg = types.CommitMsgManualResolved
+	}
+
+	result, err := FinalizeCommit(ctx, repo, store, gitOps, cfg, configDir, CommitParams{
+		CommitMsg:          commitMsg,
+		SkipAgentAndAccept: manual,
+		RecordHistory:      !retry,
+	})
+
+	// Reload repo from store to get updated state
+	updated, ok := store.Get(repo.ID)
+	if ok {
+		repo = updated
+	}
+
+	return repo, result, err
 }

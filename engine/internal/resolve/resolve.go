@@ -3,8 +3,6 @@ package resolve
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -102,52 +100,6 @@ func (r *Resolver) Prepare(repo types.Repo) (types.Repo, error) {
 		return repo, err
 	}
 	return repo, nil
-}
-
-// Accept checks for remaining conflicts and finalizes the commit.
-func (r *Resolver) Accept(ctx context.Context, repo types.Repo, manual bool, retry bool) (types.Repo, workflow.CommitResult, error) {
-	remaining := r.gitOps.DetectConflicts(ctx, repo.Path)
-
-	if len(remaining) > 0 {
-		repo.Status = types.RepoStatusConflict
-		repo.ErrorMessage = fmt.Sprintf("%d conflicts still unresolved", len(remaining))
-		return repo, workflow.CommitResult{}, fmt.Errorf("%d conflicts still unresolved", len(remaining))
-	}
-
-	// Check if we're in a merge state
-	mergeHead := filepath.Join(repo.Path, ".git", "MERGE_HEAD")
-	if _, err := os.Stat(mergeHead); err != nil {
-		repo.Status = types.RepoStatusUpToDate
-		repo.ErrorMessage = ""
-		if updateErr := r.store.Update(repo); updateErr != nil {
-			logger.Error("resolve: failed to update repo after accept-no-merge", "repo", repo.Name, "error", updateErr)
-		}
-		return repo, workflow.CommitResult{Success: true}, nil
-	}
-
-	commitMsg := types.CommitMsgAgentResolved
-	if manual {
-		commitMsg = types.CommitMsgManualResolved
-	}
-
-	var configDir string
-	if r.cfgMgr != nil {
-		configDir = r.cfgMgr.ConfigDir()
-	}
-
-	result, err := workflow.FinalizeCommit(ctx, repo, r.store, r.gitOps, r.cfg, configDir, workflow.CommitParams{
-		CommitMsg:          commitMsg,
-		SkipAgentAndAccept: manual,
-		RecordHistory:      !retry,
-	})
-
-	// Reload repo from store to get updated state
-	updated, ok := r.store.Get(repo.ID)
-	if ok {
-		repo = updated
-	}
-
-	return repo, result, err
 }
 
 // AgentResult groups the outcome of an agent resolution attempt.
