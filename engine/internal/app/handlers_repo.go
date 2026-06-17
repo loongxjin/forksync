@@ -306,13 +306,26 @@ func (s *Server) handleRemoveRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Clean up associated sync history records (best-effort), mirroring
-	// cmd/remove.go which opens a fresh history store per call.
-	if hStore, err := history.NewStore(s.deps.ConfigDir()); err == nil {
+	// Clean up associated sync history records (best-effort).
+	// Reuse the shared history store; only open a one-shot store if boot init
+	// failed. Opening a fresh connection here races with concurrent syncer
+	// writes on the same DB (SQLITE_BUSY).
+	hStore := s.deps.HistStore
+	closeAfter := false
+	if hStore == nil {
+		hs, err := history.NewStore(s.deps.ConfigDir())
+		if err == nil {
+			hStore = hs
+			closeAfter = true
+		}
+	}
+	if hStore != nil {
 		if _, clearErr := hStore.ClearByRepo(r2.ID); clearErr != nil {
 			logger.Warn("remove: failed to clear history", "repo", r2.Name, "error", clearErr)
 		}
-		hStore.Close()
+		if closeAfter {
+			hStore.Close()
+		}
 	}
 
 	writeOK(w, removeRepoResult{Removed: r2.Name})

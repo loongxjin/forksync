@@ -33,6 +33,11 @@ type CommitResult struct {
 // FinalizeCommit runs the full commit pipeline:
 // StageAll → CommitNoEdit → (fallback) Commit → update workflow →
 // post-sync commands → delete agent logs → record history.
+//
+// histStore is the shared history store used to record the completion. Pass
+// nil to open (and close) a one-shot store here — prefer passing the shared
+// store from Deps so concurrent syncer/handler writes don't race for the
+// SQLite write lock.
 func FinalizeCommit(
 	ctx context.Context,
 	r types.Repo,
@@ -40,6 +45,7 @@ func FinalizeCommit(
 	gitOps git.OperationsProvider,
 	cfg *config.Config,
 	configDir string,
+	histStore *history.Store,
 	params CommitParams,
 ) (CommitResult, error) {
 	if err := gitOps.StageAll(ctx, r.Path); err != nil {
@@ -91,7 +97,7 @@ func FinalizeCommit(
 	}
 
 	if params.RecordHistory {
-		recordWorkflowComplete(r, 0, cfg, configDir, store, gitOps)
+		recordWorkflowComplete(r, 0, cfg, configDir, store, gitOps, histStore)
 	}
 
 	return CommitResult{Success: true}, nil
@@ -99,13 +105,23 @@ func FinalizeCommit(
 
 // recordWorkflowComplete creates a new history record when a paused workflow is
 // completed by the user (accept or manual resolution).
-func recordWorkflowComplete(r types.Repo, commitsPulled int, cfg *config.Config, configDir string, store repo.Store, gitOps git.OperationsProvider) {
-	histStore, err := history.NewStore(configDir)
-	if err != nil {
-		logger.Error("[workflow] open history store", "error", err)
-		return
+//
+// histStore is the shared store to write through. When nil, a one-shot store
+// is opened (and closed) here as a fallback.
+func recordWorkflowComplete(r types.Repo, commitsPulled int, cfg *config.Config, configDir string, store repo.Store, gitOps git.OperationsProvider, histStore *history.Store) {
+	closeAfter := false
+	if histStore == nil {
+		hs, err := history.NewStore(configDir)
+		if err != nil {
+			logger.Error("[workflow] open history store", "error", err)
+			return
+		}
+		histStore = hs
+		closeAfter = true
 	}
-	defer histStore.Close()
+	if closeAfter {
+		defer histStore.Close()
+	}
 
 	info := workflowCompletionInfo(r.Workflow)
 	oldHEAD := info.oldHEAD
@@ -116,7 +132,7 @@ func recordWorkflowComplete(r types.Repo, commitsPulled int, cfg *config.Config,
 		}
 	}
 
-	_, err = histStore.Insert(history.Record{
+	_, err := histStore.Insert(history.Record{
 		RepoID:         r.ID,
 		RepoName:       r.Name,
 		Status:         string(types.RepoStatusUpToDate),
@@ -178,7 +194,10 @@ func workflowCompletionInfo(wf *types.SyncWorkflow) (info workflowCompleteInfo) 
 // AcceptCommit checks for remaining conflicts, then finalizes the commit.
 // It is the single "Resolve Commit" entry point, moved here from the Resolver
 // type per CONTEXT.md ("Accept is Resolve Commit, not part of Resolve").
-func AcceptCommit(ctx context.Context, repo types.Repo, store repo.Store, gitOps git.OperationsProvider, cfg *config.Config, configDir string, manual bool, retry bool) (types.Repo, CommitResult, error) {
+//
+// histStore is the shared history store forwarded to FinalizeCommit; pass nil
+// to fall back to a one-shot store inside the workflow.
+func AcceptCommit(ctx context.Context, repo types.Repo, store repo.Store, gitOps git.OperationsProvider, cfg *config.Config, configDir string, histStore *history.Store, manual bool, retry bool) (types.Repo, CommitResult, error) {
 	remaining := gitOps.DetectConflicts(ctx, repo.Path)
 	if len(remaining) > 0 {
 		repo.Status = types.RepoStatusConflict
@@ -202,7 +221,7 @@ func AcceptCommit(ctx context.Context, repo types.Repo, store repo.Store, gitOps
 		commitMsg = types.CommitMsgManualResolved
 	}
 
-	result, err := FinalizeCommit(ctx, repo, store, gitOps, cfg, configDir, CommitParams{
+	result, err := FinalizeCommit(ctx, repo, store, gitOps, cfg, configDir, histStore, CommitParams{
 		CommitMsg:          commitMsg,
 		SkipAgentAndAccept: manual,
 		RecordHistory:      !retry,

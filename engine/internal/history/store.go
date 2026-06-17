@@ -55,10 +55,19 @@ func NewStore(configDir string) (*Store, error) {
 	}
 
 	dbPath := filepath.Join(dbDir, "forksync.db")
-	db, err := sql.Open("sqlite", dbPath+fmt.Sprintf("?_busy_timeout=%d&_journal_mode=WAL", sqliteBusyTimeoutMs))
+	db, err := sql.Open("sqlite", dbPath+fmt.Sprintf("?_busy_timeout=%d&_journal_mode=WAL&_txlock=immediate", sqliteBusyTimeoutMs))
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
+
+	// Serialize all access through a single connection. SQLite (even in WAL)
+	// only allows one writer at a time; capping MaxOpenConns to 1 prevents
+	// concurrent connections from racing for the write lock and surfacing
+	// SQLITE_BUSY under load (e.g. syncer inserting records while a summarize
+	// request updates summary_status). The per-Store RWMutex is the primary
+	// serialization point, but this guards against the fallback one-shot stores
+	// and any future direct db access.
+	db.SetMaxOpenConns(1)
 
 	s := &Store{db: db}
 	if err := s.migrate(); err != nil {

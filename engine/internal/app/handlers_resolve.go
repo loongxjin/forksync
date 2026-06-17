@@ -15,6 +15,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
+	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	respkg "github.com/loongxjin/forksync/engine/internal/resolve"
@@ -88,7 +89,7 @@ func (s *Server) resolvePrepare(w http.ResponseWriter, r *http.Request, r2 types
 }
 
 func (s *Server) resolveAccept(w http.ResponseWriter, r *http.Request, r2 types.Repo, manual, retry bool) {
-	repo, result, err := workflow.AcceptCommit(r.Context(), r2, s.deps.Store, s.deps.GitOps, s.deps.Cfg, s.deps.ConfigDir(), manual, retry)
+	repo, result, err := workflow.AcceptCommit(r.Context(), r2, s.deps.Store, s.deps.GitOps, s.deps.Cfg, s.deps.ConfigDir(), s.deps.HistStore, manual, retry)
 
 	// Conflicts still unresolved — mirrors cmd/resolve.go runResolveAccept.
 	if err != nil && !result.Success {
@@ -261,7 +262,7 @@ func (s *Server) runResolveWithAgent(ctx context.Context, r types.Repo, req reso
 
 	if req.NoConfirm || !confirmBeforeCommit {
 		// Auto-commit path (mirrors finalizeCommitWithWorkflow).
-		if commitErr := finalizeCommitSilent(ctx, r, store, s.deps.GitOps, cfg, cfgMgr); commitErr != nil {
+		if commitErr := finalizeCommitSilent(ctx, r, store, s.deps.GitOps, cfg, cfgMgr, s.deps.HistStore); commitErr != nil {
 			logger.Warn("resolve: auto-commit failed", "repo", r.Name, "error", commitErr)
 		}
 		// Refresh repo from store (FinalizeCommit updated it).
@@ -405,8 +406,8 @@ func (s *sinkWriter) Write(p []byte) (int, error) {
 // finalizeCommitSilent wraps workflow.FinalizeCommit with the params used by
 // the --no-confirm resolve path (RecordHistory + SilentOutput), matching
 // cmd/workflow.go finalizeCommitWithWorkflow.
-func finalizeCommitSilent(ctx context.Context, r types.Repo, store repo.Store, gitOps git.OperationsProvider, cfg *config.Config, cfgMgr *config.Manager) error {
-	_, err := workflow.FinalizeCommit(ctx, r, store, gitOps, cfg, cfgMgr.ConfigDir(), workflow.CommitParams{
+func finalizeCommitSilent(ctx context.Context, r types.Repo, store repo.Store, gitOps git.OperationsProvider, cfg *config.Config, cfgMgr *config.Manager, histStore *history.Store) error {
+	_, err := workflow.FinalizeCommit(ctx, r, store, gitOps, cfg, cfgMgr.ConfigDir(), histStore, workflow.CommitParams{
 		CommitMsg:     types.CommitMsgAgentResolved,
 		RecordHistory: true,
 		SilentOutput:  true,

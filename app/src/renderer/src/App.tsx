@@ -16,9 +16,9 @@ function App(): JSX.Element {
     <ErrorBoundary>
       <SettingsProvider>
         <ToastProvider>
+          <HistoryProvider>
           <RepoProvider>
           <AgentProvider>
-            <HistoryProvider>
                 <HashRouter>
                   <Routes>
                     <Route element={<Layout />}>
@@ -31,9 +31,9 @@ function App(): JSX.Element {
                     </Route>
                   </Routes>
                 </HashRouter>
-            </HistoryProvider>
           </AgentProvider>
-        </RepoProvider>
+          </RepoProvider>
+          </HistoryProvider>
         </ToastProvider>
       </SettingsProvider>
     </ErrorBoundary>
