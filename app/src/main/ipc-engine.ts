@@ -203,13 +203,13 @@ export function registerEngineIpcHandlers(): void {
     })
   })
 
-  ipcMain.handle('engine:readAgentLog', async (_event, repoName: string) => {
-    const safeRepoName = assertString(repoName, 'repoName')
-    log.debug('[ipc:readAgentLog]', safeRepoName)
-    const result = await e.readAgentLog(safeRepoName)
-    log.debug('[ipc:readAgentLog] result for', repoName, result.events.length, 'events, isRunning:', result.isRunning)
-    return result
-  })
+	ipcMain.handle('engine:readAgentLog', async (_event, repoName: string, sessionId?: string) => {
+	    const safeRepoName = assertString(repoName, 'repoName')
+	    log.debug('[ipc:readAgentLog]', safeRepoName, 'session:', sessionId || '(none)')
+	    const result = await e.readAgentLog(safeRepoName, sessionId)
+	    log.debug('[ipc:readAgentLog] result for', repoName, result.events.length, 'events, isRunning:', result.isRunning)
+	    return result
+	  })
 
   ipcMain.handle('engine:repoDiff', async (_event, repoName: string) => {
     const safeRepoName = assertString(repoName, 'repoName')
