@@ -287,16 +287,10 @@ func (s *Server) runResolveWithAgent(ctx context.Context, r types.Repo, req reso
 
 	// Wait-for-confirmation path: transition repo to resolved/waiting state
 	// so the frontend can show the diff and offer Accept/Reject.
-	// (Previously this lived inside Resolver.ResolveWithAgent; moved here so
-	// the Resolver stays a pure resolve core that owns no state transitions.)
 	if r.Workflow == nil {
 		r.Workflow = workflow.NewWorkflowFromRepo(r)
 	}
-	workflow.AdvanceStep(r.Workflow, types.StepResolveStrategy, types.StepStatusSuccess, "")
-	workflow.AdvanceStep(r.Workflow, types.StepAgentResolve, types.StepStatusSuccess,
-		fmt.Sprintf("resolved by %s", res.AgentResult.AgentName))
-	workflow.AdvanceStep(r.Workflow, types.StepAcceptChanges, types.StepStatusWaiting, "")
-	r.Workflow.Status = types.WorkflowWaiting
+	workflow.TransitionAgentResolved(r.Workflow, res.AgentResult.AgentName)
 	r.Status = types.RepoStatusResolved
 	r.ErrorMessage = ""
 	if storeErr := store.Update(r); storeErr != nil {

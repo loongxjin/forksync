@@ -464,13 +464,10 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 			s.finalizeResult(result)
 			return result
 		}
-		if pending != nil {
-			// Agent resolved but needs confirmation
-			wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
-				fmt.Sprintf("resolved by %s", pending.Agent))
-			wfpkg.AdvanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
-			wf.Status = types.WorkflowWaiting
-			result.Status = string(types.RepoStatusResolved)
+			if pending != nil {
+				// Agent resolved but needs confirmation.
+				wfpkg.TransitionAgentResolved(wf, pending.Agent)
+				result.Status = string(types.RepoStatusResolved)
 			result.AgentUsed = pending.Agent
 			result.AutoResolved = len(pending.Files)
 			result.PendingConfirm = pending.Files

@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/loongxjin/forksync/engine/pkg/types"
@@ -106,4 +107,23 @@ func SetResolveSessionID(wf *types.SyncWorkflow, sessionID string) {
 	if s := FindStep(wf, types.StepAgentResolve); s != nil {
 		s.ResolveSessionID = sessionID
 	}
+}
+
+// TransitionAgentResolved advances the workflow to the "agent resolved,
+// awaiting user confirmation" state. It is the single source of truth for this
+// transition, shared by both the auto-sync and interactive resolve paths.
+//
+// resolve_strategy → success
+// agent_resolve    → success (with agent name)
+// accept_changes   → waiting
+// workflow status  → waiting
+func TransitionAgentResolved(wf *types.SyncWorkflow, agentName string) {
+	if wf == nil {
+		return
+	}
+	AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
+	AdvanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
+		fmt.Sprintf("resolved by %s", agentName))
+	AdvanceStep(wf, types.StepAcceptChanges, types.StepStatusWaiting, "")
+	wf.Status = types.WorkflowWaiting
 }
