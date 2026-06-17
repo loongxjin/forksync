@@ -30,9 +30,6 @@ func (s *Server) registerResolveRoutes(mux *http.ServeMux) {
 	// registered in handlers_stream.go.
 }
 
-// defaultResolveTimeout mirrors cmd/resolve.go.
-const defaultResolveTimeout = 10 * time.Minute
-
 // resolveRequest is the body for POST /repos/{name}/resolve.
 type resolveRequest struct {
 	Mode      string `json:"mode,omitempty"`      // prepare|accept|reject|agent (default agent)
@@ -176,7 +173,7 @@ func (s *Server) runResolveWithAgent(ctx context.Context, r types.Repo, req reso
 
 	resolver := respkg.NewResolver(s.deps.GitOps, store, cfg, cfgMgr, sessionMgr)
 
-	timeout := resolveTimeout(cfg)
+	timeout := config.AgentTimeout(cfg)
 	resolveStrategy := config.ResolveStrategyOrDefault(cfg)
 
 	var resolved atomic.Bool
@@ -322,17 +319,6 @@ func resolveAgentProvider(cfg *config.Config, requested string) (agent.AgentProv
 		return nil, fmt.Errorf("no agent available: %w", err)
 	}
 	return provider, nil
-}
-
-// resolveTimeout mirrors cmd/resolve.go resolveTimeout.
-func resolveTimeout(cfg *config.Config) time.Duration {
-	timeout := defaultResolveTimeout
-	if cfg != nil && cfg.Agent.Timeout != "" {
-		if d, err := time.ParseDuration(cfg.Agent.Timeout); err == nil {
-			timeout = d
-		}
-	}
-	return timeout
 }
 
 // toConflictFiles mirrors cmd/resolve.go toConflictFiles.

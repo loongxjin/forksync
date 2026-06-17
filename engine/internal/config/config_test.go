@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -249,4 +250,25 @@ agent:
 	assert.Equal(t, "manual", cfg.Agent.ConflictStrategy)
 	// resolve_strategy should keep default
 	assert.Equal(t, "preserve_ours", cfg.Agent.ResolveStrategy)
+}
+
+func TestAgentTimeout(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *Config
+		want time.Duration
+	}{
+		{name: "nil config", cfg: nil, want: DefaultAgentTimeout},
+		{name: "empty timeout", cfg: &Config{}, want: DefaultAgentTimeout},
+		{name: "unparsable timeout", cfg: &Config{Agent: AgentConfig{Timeout: "not-a-duration"}}, want: DefaultAgentTimeout},
+		{name: "zero timeout", cfg: &Config{Agent: AgentConfig{Timeout: "0s"}}, want: DefaultAgentTimeout},
+		{name: "negative timeout", cfg: &Config{Agent: AgentConfig{Timeout: "-5m"}}, want: DefaultAgentTimeout},
+		{name: "valid timeout", cfg: &Config{Agent: AgentConfig{Timeout: "45m"}}, want: 45 * time.Minute},
+		{name: "valid seconds", cfg: &Config{Agent: AgentConfig{Timeout: "90s"}}, want: 90 * time.Second},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, AgentTimeout(tc.cfg))
+		})
+	}
 }

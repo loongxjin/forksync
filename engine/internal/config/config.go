@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"time"
 
 	"github.com/loongxjin/forksync/engine/pkg/types"
 	"github.com/spf13/viper"
@@ -258,6 +259,23 @@ func ResolveStrategyOrDefault(cfg *Config) string {
 		return cfg.Agent.ResolveStrategy
 	}
 	return types.ResolveStrategyPreserveOurs
+}
+
+// DefaultAgentTimeout is the resolve timeout used when the agent timeout is
+// unset or unparsable. Shared by the interactive resolve path (app) and the
+// auto-sync resolve path (sync).
+const DefaultAgentTimeout = 10 * time.Minute
+
+// AgentTimeout parses cfg.Agent.Timeout, returning DefaultAgentTimeout when the
+// config is nil, the value is empty, unparsable, or non-positive. It is the
+// single source of truth for the agent resolve timeout across the engine.
+func AgentTimeout(cfg *Config) time.Duration {
+	if cfg != nil && cfg.Agent.Timeout != "" {
+		if d, err := time.ParseDuration(cfg.Agent.Timeout); err == nil && d > 0 {
+			return d
+		}
+	}
+	return DefaultAgentTimeout
 }
 
 // Set updates a single config key using dot-notation and saves the full config.

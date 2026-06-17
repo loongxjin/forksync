@@ -22,7 +22,6 @@ import (
 
 const (
 	defaultTimeout         = 5 * time.Minute
-	defaultAgentTimeout    = 10 * time.Minute
 	maxDiffSize            = 100 * 1024 // 100KB limit for diff output
 )
 
@@ -286,7 +285,7 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	// otherwise the default 5 minutes may SIGKILL long-running agents.
 	timeout := defaultTimeout
 	if s.shouldUseAgentResolve() {
-		timeout = agentResolveTimeout(s.cfg)
+		timeout = config.AgentTimeout(s.cfg)
 	}
 	logger.Info("sync: executeSync starting",
 		"repo", r.Name,
@@ -755,17 +754,6 @@ func (s *Syncer) saveWorkflow(r types.Repo, wf *types.SyncWorkflow) {
 	if updateErr := s.store.Update(stored); updateErr != nil {
 		logger.Error("syncer: failed to save workflow", "repo", r.Name, "error", updateErr)
 	}
-}
-
-// agentResolveTimeout returns the timeout for agent conflict resolution.
-// Falls back to defaultAgentTimeout if no config is available.
-func agentResolveTimeout(cfg *config.Config) time.Duration {
-	if cfg != nil && cfg.Agent.Timeout != "" {
-		if d, err := time.ParseDuration(cfg.Agent.Timeout); err == nil && d > 0 {
-			return d
-		}
-	}
-	return defaultAgentTimeout
 }
 
 // verifyAndStageResolvedFiles checks that resolved files have no conflict
