@@ -139,6 +139,8 @@ export interface WorkflowStepRecord {
   endedAt?: string
   message?: string
   error?: string
+  /** Identifies the agent-resolve log session for this step (agent_resolve only). */
+  resolveSessionId?: string
 }
 
 export type WorkflowRunStatus = 'running' | 'waiting' | 'success' | 'failed'
