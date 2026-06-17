@@ -28,16 +28,19 @@ type LogWriter struct {
 	path string
 }
 
-// NewLogWriter creates a new LogWriter for the given repoID.
-// The log file is created under <baseDir>/agent-logs/<repoID>/<YYYYMMDD-HHMMSS>.ndjson.
-func NewLogWriter(baseDir, repoID string) (*LogWriter, error) {
+// NewLogWriter creates a new LogWriter for the given repoID + resolve session.
+// The log file is created under <baseDir>/agent-logs/<repoID>/<sessionID>.ndjson.
+// Naming by session id (instead of a timestamp) means each resolve run gets a
+// stable, unique file the frontend can locate precisely — replacing the old
+// "newest file in the dir" lookup that suffered stale-read pollution across
+// resolves.
+func NewLogWriter(baseDir, repoID, sessionID string) (*LogWriter, error) {
 	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create agent log dir: %w", err)
 	}
 
-	ts := time.Now().Format("20060102-150405")
-	path := filepath.Join(dir, ts+".ndjson")
+	path := filepath.Join(dir, sanitizeRepoID(sessionID)+".ndjson")
 
 	file, err := os.Create(path)
 	if err != nil {
@@ -45,7 +48,7 @@ func NewLogWriter(baseDir, repoID string) (*LogWriter, error) {
 	}
 
 	sw := NewStreamWriter(file)
-	logger.Debug("agent: created log writer", "repo", repoID, "path", path)
+	logger.Debug("agent: created log writer", "repo", repoID, "session", sessionID, "path", path)
 	return &LogWriter{file: file, sw: sw, path: path}, nil
 }
 
@@ -84,16 +87,35 @@ func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
 // callers (the interactive resolve path in app, the auto-sync path in sync)
 // never have to nil-check. This is the single shared log-writer setup; callers
 // that also want a live sink wrap the result in a MultiStreamWriter themselves.
-func NewResolveLogWriter(baseDir, repoID string) (*StreamWriter, func()) {
-	lw, err := NewLogWriter(baseDir, repoID)
+// sessionID names the log file so the frontend can locate it precisely.
+func NewResolveLogWriter(baseDir, repoID, sessionID string) (*StreamWriter, func()) {
+	lw, err := NewLogWriter(baseDir, repoID, sessionID)
 	if err != nil {
-		logger.Warn("agent: failed to create resolve log writer", "repo", repoID, "error", err)
+		logger.Warn("agent: failed to create resolve log writer", "repo", repoID, "session", sessionID, "error", err)
 		return NewStreamWriter(nopWriter{}), func() {}
 	}
 	return lw.StreamWriter(), func() { _ = lw.Close() }
 }
 
+// LogFile returns the path of the log file for a specific resolve session.
+// This replaces the old LatestLogFile "newest file in the dir" lookup, which
+// could return a stale log from a previous resolve. With session-named files,
+// the exact file is addressed directly.
+func LogFile(baseDir, repoID, sessionID string) (string, error) {
+	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
+	path := filepath.Join(dir, sanitizeRepoID(sessionID)+".ndjson")
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("no log found for repo %s session %s", repoID, sessionID)
+		}
+		return "", fmt.Errorf("stat log file: %w", err)
+	}
+	return path, nil
+}
+
 // LatestLogFile returns the path of the most recent log file for the given repoID.
+// Sorted by file modification time (descending), so the result is truly the most
+// recently written log regardless of naming convention (timestamp, UUID, etc.).
 func LatestLogFile(baseDir, repoID string) (string, error) {
 	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
 	entries, err := os.ReadDir(dir)
@@ -104,14 +126,22 @@ func LatestLogFile(baseDir, repoID string) (string, error) {
 		return "", fmt.Errorf("read log dir: %w", err)
 	}
 
-	var files []string
+	type entry struct {
+		name string
+		mtime time.Time
+	}
+	var files []entry
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
 		name := e.Name()
 		if strings.HasSuffix(name, ".ndjson") {
-			files = append(files, name)
+			info, infoErr := e.Info()
+			if infoErr != nil {
+				continue
+			}
+			files = append(files, entry{name: name, mtime: info.ModTime()})
 		}
 	}
 
@@ -120,10 +150,10 @@ func LatestLogFile(baseDir, repoID string) (string, error) {
 	}
 
 	sort.Slice(files, func(i, j int) bool {
-		return files[i] > files[j] // descending — newest first
+		return files[i].mtime.After(files[j].mtime) // descending — newest first
 	})
 
-	return filepath.Join(dir, files[0]), nil
+	return filepath.Join(dir, files[0].name), nil
 }
 
 // ReadLogFile parses all StreamEvents from an NDJSON log file.
@@ -155,16 +185,6 @@ func ReadLogFile(path string) ([]StreamEvent, error) {
 	}
 
 	return events, nil
-}
-
-// DeleteAllLogs removes all agent log files for the given repoID.
-func DeleteAllLogs(baseDir, repoID string) error {
-	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
-	if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("delete agent logs for %s: %w", repoID, err)
-	}
-	logger.Debug("agent: deleted all logs", "repo", repoID)
-	return nil
 }
 
 // sanitizeRepoID makes a repoID safe for use as a directory name.

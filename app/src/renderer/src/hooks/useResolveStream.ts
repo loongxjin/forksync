@@ -145,9 +145,9 @@ export interface ResolveStreamHook {
   /** Get stream events for a repo. */
   getStreamEvents: (repoName: string) => AgentStreamEvent[]
   /** Trigger manual resolve: prepare + WS start + disk poll. */
-  startResolve: (repoName: string, opts?: { agent?: string; noConfirm?: boolean }) => Promise<void>
+  startResolve: (repoName: string, sessionId: string, opts?: { agent?: string; noConfirm?: boolean }) => Promise<void>
   /** Load existing agent log from disk with optional polling. */
-  loadAgentLog: (repoName: string) => Promise<void>
+  loadAgentLog: (repoName: string, sessionId?: string) => Promise<void>
   /** Clear all stream state for a repo. */
   clearResult: (repoName: string) => void
   /** Raw stream results (for HomePage side effects). */
@@ -170,9 +170,14 @@ export function useResolveStream(): ResolveStreamHook {
   // ---------------------------------------------------------------------------
   // Core: read disk log → dispatch STREAM_LOAD
   // ---------------------------------------------------------------------------
+  // Per-repo resolve session id, set by loadAgentLog/startResolve so the
+  // polling loop can locate the exact log file (not the newest-in-dir).
+  const sessionIdRef = useRef<Record<string, string>>({})
+
   const readDiskLog = useCallback(async (repoName: string): Promise<boolean> => {
     try {
-      const res = await engineApi.readAgentLog(repoName)
+      const sid = sessionIdRef.current[repoName] || undefined
+      const res = await engineApi.readAgentLog(repoName, sid)
       logger.log('readDiskLog', repoName, res.events.length, 'events, isRunning:', res.isRunning)
       dispatch({ type: 'STREAM_LOAD', repoName, events: res.events, isRunning: res.isRunning })
 
@@ -265,9 +270,11 @@ export function useResolveStream(): ResolveStreamHook {
 
   const startResolve = useCallback(async (
     repoName: string,
+    sessionId: string,
     opts?: { agent?: string; noConfirm?: boolean }
   ): Promise<void> => {
-    logger.log('startResolve', repoName, opts)
+    sessionIdRef.current[repoName] = sessionId
+    logger.log('startResolve', repoName, `session=${sessionId}`, opts)
     dispatch({ type: 'STREAM_CLEAR', repoName })
     try {
       engineApi.resolveStreamStart(repoName, opts)
@@ -284,8 +291,9 @@ export function useResolveStream(): ResolveStreamHook {
     }
   }, [logger, startPolling, readDiskLog])
 
-  const loadAgentLog = useCallback(async (repoName: string): Promise<void> => {
-    logger.log('loadAgentLog', repoName)
+  const loadAgentLog = useCallback(async (repoName: string, sid?: string): Promise<void> => {
+    if (sid) sessionIdRef.current[repoName] = sid
+    logger.log('loadAgentLog', repoName, sid ? `session=${sid}` : 'no-session')
     const isRunning = await readDiskLog(repoName)
     // If the agent is still running, start polling.
     if (isRunning) {

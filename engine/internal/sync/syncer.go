@@ -17,6 +17,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	respkg "github.com/loongxjin/forksync/engine/internal/resolve"
 	"github.com/loongxjin/forksync/engine/pkg/types"
+	"github.com/google/uuid"
 
 	wfpkg "github.com/loongxjin/forksync/engine/internal/workflow"
 )
@@ -430,9 +431,18 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	if autoAgentResolve && s.sessionMgr != nil {
 		wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
 		wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
+		// Stamp a fresh resolve session id so the frontend can locate this
+		// resolve's agent log precisely (by session), not by "newest file".
+		wfpkg.SetResolveSessionID(wf, uuid.New().String())
 		s.saveWorkflow(r, wf)
 
-		resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)
+		// Read back the session id we just stamped so tryAgentResolve can name
+		// its log file precisely (passed explicitly rather than re-derived).
+		resolveSessionID := ""
+		if step := wfpkg.FindStep(wf, types.StepAgentResolve); step != nil {
+			resolveSessionID = step.ResolveSessionID
+		}
+		resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts, resolveSessionID)
 		if resolved {
 			// Agent resolved and auto-committed
 			wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
@@ -539,7 +549,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 // and the pending-confirmation hand-off. Workflow/state transitions are owned
 // by handleMergeConflicts (the caller), NOT by the Resolver core — the auto
 // path's state machine is centralized there.
-func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string) (bool, *pendingInfo) {
+func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string, resolveSessionID string) (bool, *pendingInfo) {
 	if s.sessionMgr == nil {
 		logger.Warn("sync: tryAgentResolve skipped — sessionMgr is nil",
 			"repo", r.Name,
@@ -569,7 +579,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	// Set up log writer for auto-sync background runs so users can replay later.
 	// Uses the shared agent.NewResolveLogWriter (same disk-log setup as the
 	// interactive resolve path); no live sink — this is a background job.
-	streamWriter, closeLog := agent.NewResolveLogWriter(s.configDir, r.Name)
+	streamWriter, closeLog := agent.NewResolveLogWriter(s.configDir, r.Name, resolveSessionID)
 	defer closeLog()
 	logger.Debug("sync: agent log writer active", "repo", r.Name)
 
@@ -606,14 +616,18 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	}
 
 	// Write a terminal 'done' frame to the disk log so readAgentLog reports
-	// isRunning=false. This carries ResolvedFiles/Diff/AgentName/Summary so the
-	// frontend can restore resolve details when replaying the log.
-	_ = streamWriter.WriteEvent(agent.DoneEventFromResult(result))
-
-	// Check staged changes (log but don't fail — whitespace issues are non-critical)
-	if checkErr := s.gitOps.CheckStaged(ctx, r.Path); checkErr != nil {
-		logger.Debug("sync: staged changes check found issues", "repo", r.Name, "error", checkErr)
-	}
+	// isRunning=false — but ONLY when commit has actually landed (auto-commit)
+	// or when the agent is truly done and waiting for user review (waiting-confirm).
+	// Previously this was emitted unconditionally before the commit, which caused
+	// a frontend race: readAgentLog saw done, triggered a status refresh, but
+	// the commit hadn't landed yet → the frontend's verifyPoll patch papered
+	// over that gap by retrying.
+	//
+	// Now the done frame is emitted inside each branch at the correct timing:
+	//  - waiting-confirm: agent finished, right before buildPendingInfo.
+	//  - auto-commit: AFTER the commit succeeds, so frontend refresh sees the
+	//    terminal state (up_to_date) on the first try — verifyPoll becomes
+	//    unnecessary and will be removed.
 
 	// Check if auto-confirm is enabled
 	autoConfirm := true
@@ -621,16 +635,12 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		autoConfirm = !s.cfg.Agent.ConfirmBeforeCommit
 	}
 
-	logger.Debug("sync: auto-confirm check",
-		"repo", r.Name,
-		"autoConfirm", autoConfirm,
-		"confirmBeforeCommit", s.cfg.Agent.ConfirmBeforeCommit,
-		"cfg_nil", s.cfg == nil,
-	)
-
 	if !autoConfirm {
 		logger.Info("sync: tryAgentResolve awaiting user confirmation",
 			"repo", r.Name, "reason", "confirm_before_commit=true")
+		// Agent is done, write done frame so the frontend can read the log
+		// and show diff/summary for the user to review.
+		_ = streamWriter.WriteEvent(agent.DoneEventFromResult(result))
 		return s.buildPendingInfo(ctx, r, result)
 	}
 
@@ -647,8 +657,9 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		return false, pending
 	}
 
-	// Agent logs are meaningless once auto-resolved and committed.
-	agent.DeleteAllLogs(s.configDir, r.Name)
+	// Auto-commit succeeded. Now emit the done frame — the frontend's next
+	// status refresh will see up_to_date, no transitional state to retry over.
+	_ = streamWriter.WriteEvent(agent.DoneEventFromResult(result))
 
 	return true, nil
 }

@@ -425,7 +425,7 @@ func TestTryAgentResolve_NilSessionManager(t *testing.T) {
 	repo := types.Repo{ID: "r1", Name: "demo", Path: "/repo"}
 	s := NewSyncer(newMockStore(repo)) // sessionMgr is nil by default
 
-	resolved, pending := s.tryAgentResolve(context.Background(), repo, []string{"a.go"})
+	resolved, pending := s.tryAgentResolve(context.Background(), repo, []string{"a.go"}, "")
 	if resolved {
 		t.Error("resolved = true, want false (no session manager)")
 	}

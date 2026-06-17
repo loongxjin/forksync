@@ -17,7 +17,7 @@ import (
 //
 // /dev/null is a file, so MkdirAll(<file>/agent-logs/<repo>) must fail.
 func TestBuildResolveStreamWriter_NilSinkAndDiskFailure(t *testing.T) {
-	sw, cleanup := buildResolveStreamWriter("/dev/null", "repo-x", nil)
+	sw, cleanup := buildResolveStreamWriter("/dev/null", "repo-x", "sess-x", nil)
 	// cleanup must not panic even though lw is nil.
 	defer cleanup()
 
@@ -38,7 +38,7 @@ func TestBuildResolveStreamWriter_SinkOnlyWhenDiskFails(t *testing.T) {
 	var got []agent.StreamEvent
 	sink := func(ev agent.StreamEvent) { got = append(got, ev) }
 
-	sw, cleanup := buildResolveStreamWriter("/dev/null", "repo-y", sink)
+		sw, cleanup := buildResolveStreamWriter("/dev/null", "repo-y", "sess-y", sink)
 	defer cleanup()
 
 	ev := agent.StreamEvent{Type: agent.StreamEventStdout, Data: "hello"}

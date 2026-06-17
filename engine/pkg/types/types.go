@@ -199,6 +199,11 @@ type WorkflowStepRecord struct {
 	EndedAt   *Time              `json:"endedAt,omitempty"`
 	Message   string             `json:"message,omitempty"`
 	Error     string             `json:"error,omitempty"`
+	// ResolveSessionID identifies the agent-resolve log session for this step.
+	// Set on the agent_resolve step when a resolve run starts; the frontend uses
+	// it to read the precise log file (instead of "the newest file in the dir",
+	// which suffered stale-read pollution across resolves). Empty on other steps.
+	ResolveSessionID string `json:"resolveSessionId,omitempty"`
 }
 
 // WorkflowRunStatus represents the overall status of a workflow run.

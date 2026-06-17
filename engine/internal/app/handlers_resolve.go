@@ -206,7 +206,13 @@ func (s *Server) runResolveWithAgent(ctx context.Context, r types.Repo, req reso
 	defer cancel()
 
 	// Build the stream writer fan-out: disk log (+ optional live sink).
-	streamWriter, closeLogWriter := buildResolveStreamWriter(cfgMgr.ConfigDir(), r.Name, streamSink)
+	// Name the log by the resolve session id stamped on the agent_resolve step
+	// (by Prepare) so the frontend can locate it precisely by session.
+	resolveSessionID := ""
+	if step := workflow.FindStep(r.Workflow, types.StepAgentResolve); step != nil {
+		resolveSessionID = step.ResolveSessionID
+	}
+	streamWriter, closeLogWriter := buildResolveStreamWriter(cfgMgr.ConfigDir(), r.Name, resolveSessionID, streamSink)
 	defer closeLogWriter()
 
 	res, err := resolver.ResolveWithAgent(ctx, r, resolveStrategy, streamWriter)
@@ -341,10 +347,10 @@ func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
 //
 // The returned cleanup is always safe to defer even if the disk log failed to
 // open (lw == nil).
-func buildResolveStreamWriter(configDir, repoName string, streamSink func(agent.StreamEvent)) (*agent.StreamWriter, func()) {
+func buildResolveStreamWriter(configDir, repoName, sessionID string, streamSink func(agent.StreamEvent)) (*agent.StreamWriter, func()) {
 	// Disk-log arm — shared with the auto-sync path via agent.NewResolveLogWriter.
 	// It always returns a non-nil writer (no-op on failure) and a safe cleanup.
-	diskWriter, closeLog := agent.NewResolveLogWriter(configDir, repoName)
+	diskWriter, closeLog := agent.NewResolveLogWriter(configDir, repoName, sessionID)
 
 	if streamSink == nil {
 		// Non-streaming path: disk log only.
@@ -404,18 +410,26 @@ type agentLogResult struct {
 	IsRunning bool                `json:"isRunning"`
 }
 
-// handleReadAgentLog replays the latest on-disk agent log for a repo. Ported
-// from app/src/main/engine.ts readAgentLog so the polling fallback path in
-// useResolveStream keeps working unchanged.
+// handleReadAgentLog replays the on-disk agent log for a repo. When a
+// sessionId query param is provided the exact session's log is read (new
+// precise path); otherwise it falls back to LatestLogFile for backward
+// compatibility with clients that haven't been updated yet.
 func (s *Server) handleReadAgentLog(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 
-	latest, err := agent.LatestLogFile(s.deps.ConfigDir(), name)
-	if err != nil || latest == "" {
+	var logPath string
+	var logErr error
+	if sid := r.URL.Query().Get("session"); sid != "" {
+		logPath, logErr = agent.LogFile(s.deps.ConfigDir(), name, sid)
+	} else {
+		logPath, logErr = agent.LatestLogFile(s.deps.ConfigDir(), name)
+	}
+
+	if logErr != nil || logPath == "" {
 		writeBare(w, agentLogResult{Events: []agent.StreamEvent{}, IsRunning: false})
 		return
 	}
-	events, err := agent.ReadLogFile(latest)
+	events, err := agent.ReadLogFile(logPath)
 	if err != nil {
 		writeBare(w, agentLogResult{Events: []agent.StreamEvent{}, IsRunning: false})
 		return

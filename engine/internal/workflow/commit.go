@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/config"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
@@ -84,11 +83,6 @@ func FinalizeCommit(
 
 	// Execute post-sync commands now that the merge is committed.
 	RunPostSyncCommands(ctx, r)
-
-	// Workflow completed — agent logs are no longer needed.
-	if configDir != "" {
-		agent.DeleteAllLogs(configDir, r.Name)
-	}
 
 	if err := store.Update(r); err != nil {
 		logger.Error("workflow: failed to update repo", "repo", r.Name, "error", err)

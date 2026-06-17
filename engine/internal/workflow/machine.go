@@ -94,3 +94,16 @@ func FindStep(wf *types.SyncWorkflow, step types.WorkflowStep) *types.WorkflowSt
 	}
 	return nil
 }
+
+// SetResolveSessionID stamps the agent_resolve step with the given resolve
+// session id. Callers generate a fresh id per resolve run and use it to name
+// and locate that run's agent log, replacing the old "newest file in the dir"
+// lookup that suffered stale-read pollution across resolves.
+func SetResolveSessionID(wf *types.SyncWorkflow, sessionID string) {
+	if wf == nil || sessionID == "" {
+		return
+	}
+	if s := FindStep(wf, types.StepAgentResolve); s != nil {
+		s.ResolveSessionID = sessionID
+	}
+}

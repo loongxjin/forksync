@@ -92,7 +92,7 @@ export interface EngineAPI {
   onResolveStreamTick(callback: (repoName: string) => void): () => void
   onResolveStreamDone(callback: (repoName: string, result: ApiResponse<ResolveData>) => void): () => void
   onResolveStreamError(callback: (repoName: string, error: string) => void): () => void
-  readAgentLog(repoName: string): Promise<{ events: AgentStreamEvent[]; isRunning: boolean }>
+  readAgentLog(repoName: string, sessionId?: string): Promise<{ events: AgentStreamEvent[]; isRunning: boolean }>
 }
 
 /** Typed access to the engine API exposed via preload contextBridge */
