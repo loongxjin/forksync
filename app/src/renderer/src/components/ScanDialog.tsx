@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import type { ScannedRepo, BranchMapping } from '@shared/types/engine'
 import { Modal } from '@/components/ui/modal'
 import { BranchMappingInput } from '@/components/BranchMappingInput'
+import { engineApi } from '@/lib/api'
 
 interface ScanDialogProps {
   open: boolean
@@ -57,7 +58,7 @@ export function ScanDialog({
 
   const handleSelectDirectory = async (): Promise<void> => {
     try {
-      const result = await window.api.openDirectory()
+      const result = await engineApi.openDirectory()
       if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
         setDir(result.filePaths[0])
       }

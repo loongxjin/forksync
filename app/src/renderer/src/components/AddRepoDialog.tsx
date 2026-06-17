@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import type { BranchMapping } from '@shared/types/engine'
 import { Modal } from '@/components/ui/modal'
 import { BranchMappingInput } from '@/components/BranchMappingInput'
+import { engineApi } from '@/lib/api'
 
 interface AddRepoDialogProps {
   open: boolean
@@ -28,7 +29,7 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
 
   const handleSelectDirectory = async (): Promise<void> => {
     try {
-      const result = await window.api.openDirectory()
+      const result = await engineApi.openDirectory()
       if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
         const selectedPath = result.filePaths[0]
         setPath(selectedPath)
@@ -42,7 +43,7 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
   const loadBranches = async (repoPath: string, upstreamUrl?: string): Promise<void> => {
     setLoadingBranches(true)
     try {
-      const result = await window.api.scan(repoPath)
+      const result = await engineApi.scan(repoPath)
       if (result.success && result.data.repos && result.data.repos.length > 0) {
         const scannedRepo = result.data.repos[0]
         setLocalBranches(scannedRepo.localBranches || [])

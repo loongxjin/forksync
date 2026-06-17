@@ -501,7 +501,7 @@ export function HomePage(): JSX.Element {
       const path = (file as File & { path?: string }).path
       if (!path) continue
       try {
-        const isGit = await window.api.isGitRepo(path)
+        const isGit = await engineApi.isGitRepo(path)
         if (isGit) {
           await addRepo(path)
         } else {
@@ -614,7 +614,7 @@ export function HomePage(): JSX.Element {
                         resolveResult={resolveResults[repo.name] ?? null}
                         actions={{
                           onResolveWithAgent: () => handleResolve(repo),
-                          onOpenIDE: () => window.api.ideOpen(repo.path, 'default'),
+                          onOpenIDE: () => engineApi.ideOpen(repo.path, 'default'),
                           onAbort: () => handleReject(repo.name),
                           onAccept: () => handleAccept(repo.name),
                           onReject: () => handleReject(repo.name),
