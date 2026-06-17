@@ -169,11 +169,11 @@ func workflowCompletionInfo(wf *types.SyncWorkflow) (info workflowCompleteInfo) 
 			}
 		}
 	}
-		if info.agentUsed != "" {
-			info.autoResolved = info.conflictsFound
-		}
-		return
+	if info.agentUsed != "" {
+		info.autoResolved = info.conflictsFound
 	}
+	return
+}
 
 // AcceptCommit checks for remaining conflicts, then finalizes the commit.
 // It is the single "Resolve Commit" entry point, moved here from the Resolver
