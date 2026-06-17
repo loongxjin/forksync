@@ -189,8 +189,10 @@ func (r *Resolver) ResolveWithAgent(
 		return nil, fmt.Errorf("agent resolve: %w", err)
 	}
 
-	// Verify: check for remaining conflict markers
-	trulyUnresolved := verifyAgentResolution(ctx, r.gitOps, repo, conflictPaths)
+	// Verify: check for remaining conflict markers and auto-stage resolved files.
+	// Delegated to the git seam (OperationsProvider.FilterResolvedFiles) so the
+	// verify-and-stage step has one implementation shared with the auto-sync path.
+	trulyUnresolved := r.gitOps.FilterResolvedFiles(ctx, repo.Path, conflictPaths)
 
 	if len(trulyUnresolved) > 0 {
 		return &AgentResult{
@@ -237,32 +239,4 @@ func (r *Resolver) ResolveWithAgent(
 		Diff:          result.Diff,
 		ResolvedFiles: conflictPaths,
 	}, nil
-}
-
-// verifyAgentResolution checks remaining conflict files and auto-stages those
-// that have been resolved (no conflict markers).
-func verifyAgentResolution(ctx context.Context, gitOps git.OperationsProvider, r types.Repo, remaining []string) []string {
-	if len(remaining) == 0 {
-		return nil
-	}
-
-	var trulyUnresolved []string
-	for _, f := range remaining {
-		content, err := gitOps.GetConflictedContent(ctx, r.Path, f)
-		if err != nil {
-			trulyUnresolved = append(trulyUnresolved, f)
-			continue
-		}
-		if git.HasConflictMarkers(content) {
-			trulyUnresolved = append(trulyUnresolved, f)
-			continue
-		}
-		// Markers removed but not staged — auto-stage to mark as resolved
-		if stageErr := gitOps.StageFile(ctx, r.Path, f); stageErr != nil {
-			logger.Warn("resolve: auto-stage resolved file failed",
-				"repo", r.Name, "file", f, "error", stageErr)
-			trulyUnresolved = append(trulyUnresolved, f)
-		}
-	}
-	return trulyUnresolved
 }

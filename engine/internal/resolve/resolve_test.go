@@ -73,6 +73,28 @@ func (f *fakeGitOps) StageFile(_ context.Context, _ string, file string) error {
 
 func (f *fakeGitOps) Diff(_ context.Context, _ string) ([]byte, error) { return f.diffBytes, nil }
 
+// FilterResolvedFiles mirrors the real *Operations implementation so the
+// characterization tests exercise the same verify-and-stage semantics through
+// the git seam, using the fake's content/stage knobs.
+func (f *fakeGitOps) FilterResolvedFiles(ctx context.Context, _ string, files []string) []string {
+	var still []string
+	for _, file := range files {
+		content, err := f.GetConflictedContent(ctx, "", file)
+		if err != nil {
+			still = append(still, file)
+			continue
+		}
+		if git.HasConflictMarkers(content) {
+			still = append(still, file)
+			continue
+		}
+		if err := f.StageFile(ctx, "", file); err != nil {
+			still = append(still, file)
+		}
+	}
+	return still
+}
+
 func (f *fakeGitOps) AbortMerge(_ context.Context, _ string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
