@@ -30,9 +30,6 @@ func (s *Server) registerResolveRoutes(mux *http.ServeMux) {
 	// registered in handlers_stream.go.
 }
 
-// defaultResolveTimeout mirrors cmd/resolve.go.
-const defaultResolveTimeout = 10 * time.Minute
-
 // resolveRequest is the body for POST /repos/{name}/resolve.
 type resolveRequest struct {
 	Mode      string `json:"mode,omitempty"`      // prepare|accept|reject|agent (default agent)
@@ -176,7 +173,7 @@ func (s *Server) runResolveWithAgent(ctx context.Context, r types.Repo, req reso
 
 	resolver := respkg.NewResolver(s.deps.GitOps, store, cfg, cfgMgr, sessionMgr)
 
-	timeout := resolveTimeout(cfg)
+	timeout := config.AgentTimeout(cfg)
 	resolveStrategy := config.ResolveStrategyOrDefault(cfg)
 
 	var resolved atomic.Bool
@@ -302,37 +299,15 @@ func doneEventFromResult(r *agent.AgentResult) agent.StreamEvent {
 	return agent.DoneEventFromResult(r)
 }
 
-// resolveAgentProvider mirrors cmd/resolve.go resolveAgentProvider.
+// resolveAgentProvider extracts cfg.Agent.Preferred and delegates to the shared
+// agent.ResolveProvider (single source of truth for agent selection, also used
+// by the auto-sync path).
 func resolveAgentProvider(cfg *config.Config, requested string) (agent.AgentProvider, error) {
-	if requested != "" {
-		registry := agent.NewRegistry("")
-		provider, err := registry.GetByName(requested)
-		if err != nil {
-			return nil, fmt.Errorf("agent %q not found: %w", requested, err)
-		}
-		return provider, nil
-	}
 	preferred := ""
 	if cfg != nil {
 		preferred = cfg.Agent.Preferred
 	}
-	reg := agent.NewRegistry(preferred)
-	provider, err := reg.GetPreferred()
-	if err != nil {
-		return nil, fmt.Errorf("no agent available: %w", err)
-	}
-	return provider, nil
-}
-
-// resolveTimeout mirrors cmd/resolve.go resolveTimeout.
-func resolveTimeout(cfg *config.Config) time.Duration {
-	timeout := defaultResolveTimeout
-	if cfg != nil && cfg.Agent.Timeout != "" {
-		if d, err := time.ParseDuration(cfg.Agent.Timeout); err == nil {
-			timeout = d
-		}
-	}
-	return timeout
+	return agent.ResolveProvider(preferred, requested)
 }
 
 // toConflictFiles mirrors cmd/resolve.go toConflictFiles.
@@ -367,39 +342,23 @@ func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
 // The returned cleanup is always safe to defer even if the disk log failed to
 // open (lw == nil).
 func buildResolveStreamWriter(configDir, repoName string, streamSink func(agent.StreamEvent)) (*agent.StreamWriter, func()) {
-	var writers []*agent.StreamWriter
+	// Disk-log arm — shared with the auto-sync path via agent.NewResolveLogWriter.
+	// It always returns a non-nil writer (no-op on failure) and a safe cleanup.
+	diskWriter, closeLog := agent.NewResolveLogWriter(configDir, repoName)
 
-	if streamSink != nil {
-		writers = append(writers, agent.NewStreamWriter(&sinkWriter{fn: streamSink}))
+	if streamSink == nil {
+		// Non-streaming path: disk log only.
+		return diskWriter, closeLog
 	}
 
-	// closeLog is nil-safe: only closes the disk writer if it was opened.
-	closeLog := func() {}
-	lw, lwErr := agent.NewLogWriter(configDir, repoName)
-	if lwErr != nil {
-		logger.Warn("resolve: failed to create log writer", "repo", repoName, "error", lwErr)
-	} else {
-		writers = append(writers, lw.StreamWriter())
-		closeLog = func() { _ = lw.Close() }
-	}
-
-	if len(writers) == 0 {
-		// Neither sink nor disk — return a no-op writer so callers don't have
-		// to nil-check. (Extremely unlikely: streamSink==nil AND disk failed.)
-		return agent.NewStreamWriter(nopWriter{}), closeLog
-	}
-	if len(writers) == 1 {
-		return writers[0], closeLog
+	// Streaming path: fan out to the live WS sink AND the disk log.
+	writers := []*agent.StreamWriter{
+		agent.NewStreamWriter(&sinkWriter{fn: streamSink}),
+		diskWriter,
 	}
 	msw := agent.NewMultiStreamWriter(writers...)
 	return msw.StreamWriter(), closeLog
 }
-
-// nopWriter is an io.Writer that discards everything, used only when both the
-// live sink and the disk log are unavailable.
-type nopWriter struct{}
-
-func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 // sinkWriter is an io.Writer that forwards each full NDJSON line to a callback.
 // agent.StreamWriter writes one JSON object + newline per WriteEvent, then

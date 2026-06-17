@@ -453,8 +453,7 @@ func generateSummary(ctx context.Context, cfg *config.Config, histStore *history
 		agentName = cfg.Sync.SummaryAgent
 	}
 	if agentName == "" {
-		registry := agent.NewRegistry("")
-		if prov, err := registry.GetPreferred(); err == nil {
+		if prov, err := agent.ResolveProvider("", ""); err == nil {
 			agentName = prov.Name()
 		}
 	}

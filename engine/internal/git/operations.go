@@ -36,6 +36,12 @@ type OperationsProvider interface {
 	IsMergingState(ctx context.Context, repoPath string) (bool, []string, error)
 	DetectConflicts(ctx context.Context, repoPath string) []string
 	GetConflictedContent(ctx context.Context, repoPath, filePath string) (string, error)
+	// FilterResolvedFiles checks the given files for conflict markers and
+	// auto-stages those that are clean (no markers). Returns the subset that
+	// still has markers (or could not be read/staged). It is the single
+	// verify-and-stage step shared by the Conflict Resolver and the auto-sync
+	// path.
+	FilterResolvedFiles(ctx context.Context, repoPath string, files []string) []string
 	Diff(ctx context.Context, repoPath string) ([]byte, error)
 	DiffStaged(ctx context.Context, repoPath string) ([]byte, error)
 	GetHEAD(ctx context.Context, repoPath string) (string, error)

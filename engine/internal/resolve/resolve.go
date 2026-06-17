@@ -160,19 +160,80 @@ type AgentResult struct {
 	Unresolved    []string
 }
 
-// ResolveWithAgent runs the full agent resolution flow.
+// ResolveWithAgent runs the full agent resolution flow and transitions the repo
+// to the interactive-resolve "resolved, awaiting confirmation" state.
 // r.sessionMgr must be set (via NewResolver) before calling this method.
+//
+// This is the interactive-resolve entry point. It owns the workflow transition
+// to WorkflowWaiting / RepoStatusResolved. The auto-sync path should call
+// RunAgentResolve instead and drive its own (different) state machine.
 func (r *Resolver) ResolveWithAgent(
 	ctx context.Context,
 	repo types.Repo,
 	strategy string,
 	streamWriter *agent.StreamWriter,
 ) (*AgentResult, error) {
+	out, err := r.RunAgentResolve(ctx, repo, strategy, streamWriter, nil /* detect conflicts */)
+	if err != nil {
+		return nil, err
+	}
+	// No conflicts (short-circuit) or verify failed — leave state untouched.
+	// The caller decides; there is nothing to transition to.
+	if out.AgentResult == nil || !out.Success || len(out.Unresolved) > 0 {
+		return out, nil
+	}
+
+	// Transition to the interactive "resolved, awaiting confirmation" state.
+	// Operate on out.Repo (the same value the caller will receive) so the
+	// transitions are visible to the caller.
+	repo = out.Repo
+	if repo.Workflow == nil {
+		repo.Workflow = workflow.NewWorkflowFromRepo(repo)
+	}
+	workflow.AdvanceStep(repo.Workflow, types.StepResolveStrategy, types.StepStatusSuccess, "")
+	workflow.AdvanceStep(repo.Workflow, types.StepAgentResolve, types.StepStatusSuccess,
+		fmt.Sprintf("resolved by %s", out.AgentResult.AgentName))
+	workflow.AdvanceStep(repo.Workflow, types.StepAcceptChanges, types.StepStatusWaiting, "")
+	repo.Workflow.Status = types.WorkflowWaiting
+	repo.Status = types.RepoStatusResolved
+	repo.ErrorMessage = ""
+	out.Repo = repo
+	storeErr := r.store.Update(repo)
+	if storeErr != nil {
+		logger.Error("resolve: failed to update repo after agent resolution", "repo", repo.Name, "error", storeErr)
+	}
+
+	// NOTE: the adapter already emits a state_persisted event when it finishes.
+	// We no longer emit a second one here — it was redundant and caused the
+	// terminal drawer to render an extra empty line.
+
+	return out, nil
+}
+
+// RunAgentResolve drives the agent over the conflicts, verifies conflict
+// markers are gone, auto-stages resolved files, and fills out an AgentResult.
+// It does NOT commit and does NOT transition the workflow/repo status — those
+// are the caller's responsibility (the interactive path transitions to
+// WorkflowWaiting; the auto-sync path's handleMergeConflicts drives its own
+// state machine). conflictPaths, when non-nil, is used directly; when nil the
+// conflicts are detected from the working tree.
+//
+// This is the single shared "resolve core" (drive agent → verify → stage).
+// r.sessionMgr must be set (via NewResolver) before calling this method.
+func (r *Resolver) RunAgentResolve(
+	ctx context.Context,
+	repo types.Repo,
+	strategy string,
+	streamWriter *agent.StreamWriter,
+	conflictPaths []string,
+) (*AgentResult, error) {
 	if r.sessionMgr == nil {
 		return nil, fmt.Errorf("resolve: session manager not configured")
 	}
 
-	conflictPaths := r.gitOps.DetectConflicts(ctx, repo.Path)
+	if conflictPaths == nil {
+		conflictPaths = r.gitOps.DetectConflicts(ctx, repo.Path)
+	}
 	if len(conflictPaths) == 0 {
 		return &AgentResult{Success: true, Repo: repo}, nil
 	}
@@ -189,10 +250,17 @@ func (r *Resolver) ResolveWithAgent(
 		return nil, fmt.Errorf("agent resolve: %w", err)
 	}
 
-	// Verify: check for remaining conflict markers
-	trulyUnresolved := verifyAgentResolution(ctx, r.gitOps, repo, conflictPaths)
+	// Verify: check for remaining conflict markers and auto-stage resolved files.
+	// Delegated to the git seam (OperationsProvider.FilterResolvedFiles) so the
+	// verify-and-stage step has one implementation shared with the auto-sync path.
+	trulyUnresolved := r.gitOps.FilterResolvedFiles(ctx, repo.Path, conflictPaths)
 
 	if len(trulyUnresolved) > 0 {
+		// Populate the agent result for the caller (diff/name still useful in
+		// the failure case for reporting), but mark unresolved.
+		agentName := r.sessionMgr.ProviderName()
+		result.ResolvedFiles = conflictPaths
+		result.AgentName = agentName
 		return &AgentResult{
 			Success:       false,
 			Repo:          repo,
@@ -210,26 +278,6 @@ func (r *Resolver) ResolveWithAgent(
 	result.ResolvedFiles = conflictPaths
 	result.AgentName = agentName
 
-	// Update status — agent resolved successfully
-	if repo.Workflow == nil {
-		repo.Workflow = workflow.NewWorkflowFromRepo(repo)
-	}
-	workflow.AdvanceStep(repo.Workflow, types.StepResolveStrategy, types.StepStatusSuccess, "")
-	workflow.AdvanceStep(repo.Workflow, types.StepAgentResolve, types.StepStatusSuccess,
-		fmt.Sprintf("resolved by %s", agentName))
-	workflow.AdvanceStep(repo.Workflow, types.StepAcceptChanges, types.StepStatusWaiting, "")
-	repo.Workflow.Status = types.WorkflowWaiting
-	repo.Status = types.RepoStatusResolved
-	repo.ErrorMessage = ""
-	storeErr := r.store.Update(repo)
-	if storeErr != nil {
-		logger.Error("resolve: failed to update repo after agent resolution", "repo", repo.Name, "error", storeErr)
-	}
-
-	// NOTE: the adapter already emits a state_persisted event when it finishes.
-	// We no longer emit a second one here — it was redundant and caused the
-	// terminal drawer to render an extra empty line.
-
 	return &AgentResult{
 		Success:       true,
 		Repo:          repo,
@@ -237,32 +285,4 @@ func (r *Resolver) ResolveWithAgent(
 		Diff:          result.Diff,
 		ResolvedFiles: conflictPaths,
 	}, nil
-}
-
-// verifyAgentResolution checks remaining conflict files and auto-stages those
-// that have been resolved (no conflict markers).
-func verifyAgentResolution(ctx context.Context, gitOps git.OperationsProvider, r types.Repo, remaining []string) []string {
-	if len(remaining) == 0 {
-		return nil
-	}
-
-	var trulyUnresolved []string
-	for _, f := range remaining {
-		content, err := gitOps.GetConflictedContent(ctx, r.Path, f)
-		if err != nil {
-			trulyUnresolved = append(trulyUnresolved, f)
-			continue
-		}
-		if git.HasConflictMarkers(content) {
-			trulyUnresolved = append(trulyUnresolved, f)
-			continue
-		}
-		// Markers removed but not staged — auto-stage to mark as resolved
-		if stageErr := gitOps.StageFile(ctx, r.Path, f); stageErr != nil {
-			logger.Warn("resolve: auto-stage resolved file failed",
-				"repo", r.Name, "file", f, "error", stageErr)
-			trulyUnresolved = append(trulyUnresolved, f)
-		}
-	}
-	return trulyUnresolved
 }

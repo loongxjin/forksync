@@ -87,3 +87,28 @@ func (r *Registry) ListAll() []types.AgentInfo {
 func (r *Registry) Preferred() string {
 	return r.preferred
 }
+
+// ResolveProvider picks a single agent provider for a resolve run. When
+// requested is non-empty, that named agent is returned (regardless of the
+// preferred setting, matching the explicit --agent flag). Otherwise the
+// preferred (or first available) agent is returned.
+//
+// preferred is the user's configured preferred agent name (cfg.Agent.Preferred,
+// possibly empty). It is the single source of truth for agent selection shared
+// by the interactive resolve path (app) and the auto-sync path (sync).
+func ResolveProvider(preferred, requested string) (AgentProvider, error) {
+	if requested != "" {
+		reg := NewRegistry("")
+		provider, err := reg.GetByName(requested)
+		if err != nil {
+			return nil, fmt.Errorf("agent %q not found: %w", requested, err)
+		}
+		return provider, nil
+	}
+	reg := NewRegistry(preferred)
+	provider, err := reg.GetPreferred()
+	if err != nil {
+		return nil, fmt.Errorf("no agent available: %w", err)
+	}
+	return provider, nil
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/notify"
 	"github.com/loongxjin/forksync/engine/internal/repo"
+	respkg "github.com/loongxjin/forksync/engine/internal/resolve"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 
 	wfpkg "github.com/loongxjin/forksync/engine/internal/workflow"
@@ -22,7 +23,6 @@ import (
 
 const (
 	defaultTimeout         = 5 * time.Minute
-	defaultAgentTimeout    = 10 * time.Minute
 	maxDiffSize            = 100 * 1024 // 100KB limit for diff output
 )
 
@@ -286,7 +286,7 @@ func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) 
 	// otherwise the default 5 minutes may SIGKILL long-running agents.
 	timeout := defaultTimeout
 	if s.shouldUseAgentResolve() {
-		timeout = agentResolveTimeout(s.cfg)
+		timeout = config.AgentTimeout(s.cfg)
 	}
 	logger.Info("sync: executeSync starting",
 		"repo", r.Name,
@@ -478,11 +478,21 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 			// History recorded when user accepts the resolution
 			return result
 		}
-		// Agent failed
+		// Agent failed. Roll the merge back so the repo is not left stuck
+		// mid-merge (MERGE_HEAD present, unmerged index entries) across scheduler
+		// ticks — matching the interactive resolve path's defer-Reject safety.
+		// Status becomes SyncNeeded (rolled back, ready to retry) rather than
+		// Conflict: the working tree no longer carries conflict markers after
+		// the abort, so Conflict would be misleading. result.ConflictFiles
+		// (set at the top of handleMergeConflicts from mergeResult.Conflicts) is
+		// preserved so the UI can still show what would conflict on retry.
 		wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusFailed, "agent failed to resolve conflicts")
 		wfpkg.MarkWorkflowDone(wf, types.WorkflowFailed)
-		result.Status = string(types.RepoStatusConflict)
-		s.updateRepoStatus(r.ID, types.RepoStatusConflict, "")
+		if abortErr := s.gitOps.AbortMerge(ctx, r.Path); abortErr != nil {
+			logger.Warn("sync: abort merge after agent failure", "repo", r.Name, "error", abortErr)
+		}
+		result.Status = string(types.RepoStatusSyncNeeded)
+		s.updateRepoStatus(r.ID, types.RepoStatusSyncNeeded, "agent failed; merge rolled back")
 		s.saveWorkflow(r, wf)
 		s.notifyResult(r.Name, result)
 		s.finalizeResult(result)
@@ -522,6 +532,13 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 //   - resolved=true, pending=nil: all conflicts resolved and committed (auto-confirm)
 //   - resolved=false, pending=*pendingInfo: conflicts resolved but awaiting user confirmation
 //   - resolved=false, pending=nil: agent failed to resolve
+//
+// The resolve core (drive agent → verify markers → stage) is shared with the
+// interactive resolve path via resolve.Resolver.RunAgentResolve. What stays
+// sync-specific: the disk-log done frame, auto-commit + post-sync + history,
+// and the pending-confirmation hand-off. Workflow/state transitions are owned
+// by handleMergeConflicts (the caller), NOT by the Resolver core — the auto
+// path's state machine is centralized there.
 func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string) (bool, *pendingInfo) {
 	if s.sessionMgr == nil {
 		logger.Warn("sync: tryAgentResolve skipped — sessionMgr is nil",
@@ -549,83 +566,49 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		}(),
 	)
 
-	// Create or reuse a session for this repo
-	sess, err := s.sessionMgr.GetOrCreate(ctx, r.ID, r.Path)
+	// Set up log writer for auto-sync background runs so users can replay later.
+	// Uses the shared agent.NewResolveLogWriter (same disk-log setup as the
+	// interactive resolve path); no live sink — this is a background job.
+	streamWriter, closeLog := agent.NewResolveLogWriter(s.configDir, r.Name)
+	defer closeLog()
+	logger.Debug("sync: agent log writer active", "repo", r.Name)
+
+	// Drive the agent + verify + stage via the shared Resolver core. conflictPaths
+	// come from the merge result (authoritative); pass them in so the core does
+	// not re-detect. The core does NOT commit and does NOT transition state —
+	// both are sync-owned.
+	resolver := respkg.NewResolver(s.gitOps, s.store, s.cfg, nil, s.sessionMgr)
+	out, err := resolver.RunAgentResolve(ctx, r, s.resolveStrategyOrDefault(), streamWriter, conflictPaths)
 	if err != nil {
-		logger.Error("sync: tryAgentResolve GetOrCreate session failed",
-			"repo", r.Name, "error", err)
-		return false, nil
-	}
-	logger.Info("sync: tryAgentResolve session ready",
-		"repo", r.Name, "session_id", sess.ID, "is_new", sess.IsNew)
-
-	// Determine resolve sub-strategy for the agent prompt
-	resolveStrategy := s.resolveStrategyOrDefault()
-
-	// Determine prompt language from config
-	language := "zh"
-	if s.cfg != nil && s.cfg.Sync.SummaryLanguage != "" {
-		language = s.cfg.Sync.SummaryLanguage
-	}
-
-	// Set up log writer for auto-sync background runs so users can replay later
-	var streamWriter *agent.StreamWriter
-	lw, lwErr := agent.NewLogWriter(s.configDir, r.Name)
-	if lwErr != nil {
-		logger.Warn("sync: failed to create agent log writer", "repo", r.Name, "error", lwErr)
-	}
-	if lw != nil {
-		defer lw.Close()
-		streamWriter = lw.StreamWriter()
-			logger.Debug("sync: agent log writer active", "repo", r.Name)
-	}
-
-	// Resolve conflicts via agent
-	logger.Info("sync: tryAgentResolve invoking agent",
-		"repo", r.Name,
-		"agent", s.sessionMgr.ProviderName(),
-		"resolve_strategy", resolveStrategy,
-		"language", language,
-		"conflicts", len(conflictPaths),
-	)
-	result, err := s.sessionMgr.ResolveConflicts(ctx, r.ID, r.Path, conflictPaths, resolveStrategy, language, streamWriter)
-	if err != nil {
-			logger.Error("sync: agent resolve failed",
+		logger.Error("sync: agent resolve failed",
 			"repo", r.Name,
 			"agent", s.sessionMgr.ProviderName(),
 			"error", err,
 		)
 		return false, nil
 	}
-	if !result.Success {
-			logger.Error("sync: agent reported unsuccessful resolve",
+	// No conflicts to resolve — nothing to do.
+	if out.AgentResult == nil {
+		return false, nil
+	}
+	result := out.AgentResult
+
+	// Verify failed: agent left conflict markers. The core already reported
+	// them in out.Unresolved; nothing to stage or commit.
+	if !out.Success || len(out.Unresolved) > 0 {
+		logger.Error("sync: agent left conflict markers in files",
 			"repo", r.Name,
 			"agent", s.sessionMgr.ProviderName(),
+			"files", out.Unresolved,
 			"summary", result.Summary,
 		)
 		return false, nil
 	}
 
-	// The agent adapters don't populate ResolvedFiles, but we know exactly
-	// which files had conflicts. Tell verifyAndStageResolvedFiles to check
-	// and stage those so the subsequent commit succeeds.
-	result.ResolvedFiles = conflictPaths
-	// Populate Diff so the disk-log done frame carries it for replay.
-	if diffBytes, dErr := s.gitOps.Diff(ctx, r.Path); dErr == nil {
-		result.Diff = string(diffBytes)
-	}
-
 	// Write a terminal 'done' frame to the disk log so readAgentLog reports
 	// isRunning=false. This carries ResolvedFiles/Diff/AgentName/Summary so the
 	// frontend can restore resolve details when replaying the log.
-	if streamWriter != nil {
-		_ = streamWriter.WriteEvent(agent.DoneEventFromResult(result))
-	}
-
-	// Verify no conflict markers remain and stage resolved files
-	if !s.verifyAndStageResolvedFiles(ctx, r, result) {
-		return false, nil
-	}
+	_ = streamWriter.WriteEvent(agent.DoneEventFromResult(result))
 
 	// Check staged changes (log but don't fail — whitespace issues are non-critical)
 	if checkErr := s.gitOps.CheckStaged(ctx, r.Path); checkErr != nil {
@@ -714,16 +697,14 @@ func (s *Syncer) reloadConfigAndSessionMgr() {
 	// Already have a session manager — just refresh its provider so a newly
 	// installed/preferred agent is picked up without a restart.
 	if s.sessionMgr != nil {
-		reg := agent.NewRegistry(cfg.Agent.Preferred)
-		if p, perr := reg.GetPreferred(); perr == nil {
+		if p, perr := agent.ResolveProvider(cfg.Agent.Preferred, ""); perr == nil {
 			s.sessionMgr.SetProvider(p)
 		}
 		return
 	}
 	// agent_resolve is on but no session manager yet — lazily build one now
 	// that an agent may have become available.
-	reg := agent.NewRegistry(cfg.Agent.Preferred)
-	provider, perr := reg.GetPreferred()
+	provider, perr := agent.ResolveProvider(cfg.Agent.Preferred, "")
 	if perr != nil {
 		logger.Info("sync: agent_resolve enabled but no agent available yet",
 			"preferred_cfg", cfg.Agent.Preferred, "error", perr)
@@ -755,52 +736,6 @@ func (s *Syncer) saveWorkflow(r types.Repo, wf *types.SyncWorkflow) {
 	if updateErr := s.store.Update(stored); updateErr != nil {
 		logger.Error("syncer: failed to save workflow", "repo", r.Name, "error", updateErr)
 	}
-}
-
-// agentResolveTimeout returns the timeout for agent conflict resolution.
-// Falls back to defaultAgentTimeout if no config is available.
-func agentResolveTimeout(cfg *config.Config) time.Duration {
-	if cfg != nil && cfg.Agent.Timeout != "" {
-		if d, err := time.ParseDuration(cfg.Agent.Timeout); err == nil && d > 0 {
-			return d
-		}
-	}
-	return defaultAgentTimeout
-}
-
-// verifyAndStageResolvedFiles checks that resolved files have no conflict markers and stages them.
-func (s *Syncer) verifyAndStageResolvedFiles(ctx context.Context, r types.Repo, result *agent.AgentResult) bool {
-	var stillConflicted []string
-	for _, file := range result.ResolvedFiles {
-		content, err := s.gitOps.GetConflictedContent(ctx, r.Path, file)
-		if err != nil {
-			continue
-		}
-		if git.HasConflictMarkers(content) {
-			stillConflicted = append(stillConflicted, file)
-		}
-	}
-	if len(stillConflicted) > 0 {
-			logger.Error("sync: agent left conflict markers in files",
-			"repo", r.Name,
-			"agent", s.sessionMgr.ProviderName(),
-			"files", stillConflicted,
-			"summary", result.Summary,
-		)
-		return false
-	}
-
-	for _, file := range result.ResolvedFiles {
-		if err := s.gitOps.StageFile(ctx, r.Path, file); err != nil {
-				logger.Error("sync: failed to stage resolved file",
-				"repo", r.Name,
-				"file", file,
-				"error", err,
-			)
-			return false
-		}
-	}
-	return true
 }
 
 // buildPendingInfo creates a pendingInfo for user confirmation flow.
