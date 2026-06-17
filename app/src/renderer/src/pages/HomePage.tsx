@@ -381,7 +381,12 @@ export function HomePage(): JSX.Element {
   const handleRetryCommit = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
     try {
-      const res = await engineApi.resolve(repoName, { accept: true, retry: true })
+      // Route through resolveAccept (the accept-commit endpoint), not
+      // resolve({accept:true}). resolve()'s opts has no `accept` field, so
+      // {accept:true} was silently dropped and the call landed in agent mode
+      // (mode = opts.prepare ? 'prepare' : 'agent'), re-running the agent
+      // instead of retrying the commit.
+      const res = await engineApi.resolveAccept(repoName)
       if (!res.success) {
         showToast?.(res.error ?? 'Retry commit failed', 'error')
       } else {
