@@ -405,12 +405,21 @@ func (s *Server) handleSummarize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hStore, err := history.NewStore(s.deps.ConfigDir())
-	if err != nil {
-		writeErr[summarizeData](w, fmt.Errorf("open history store: %w", err))
-		return
+	// Reuse the long-lived history store from Deps instead of opening a fresh
+	// SQLite connection per request. The summarizer writes summary_status to
+	// the same DB that the syncer concurrently writes records to, so a
+	// per-request connection races for the write lock (SQLITE_BUSY). Fall back
+	// to a one-shot store only if the shared one failed to initialize at boot.
+	hStore := s.deps.HistStore
+	if hStore == nil {
+		hs, err := history.NewStore(s.deps.ConfigDir())
+		if err != nil {
+			writeErr[summarizeData](w, fmt.Errorf("open history store: %w", err))
+			return
+		}
+		defer hs.Close()
+		hStore = hs
 	}
-	defer hStore.Close()
 
 	record, err := hStore.LatestByRepo(r2.ID)
 	if err != nil {
