@@ -77,15 +77,6 @@ func TestSinkWriter_MalformedJSONForwardsAsStdout(t *testing.T) {
 	}
 }
 
-// TestNopWriter confirms nopWriter satisfies io.Writer and discards.
-func TestNopWriter(t *testing.T) {
-	var _ io.Writer = nopWriter{}
-	n, err := nopWriter{}.Write([]byte("anything"))
-	if err != nil || n != len("anything") {
-		t.Fatalf("nopWriter.Write = %d, %v", n, err)
-	}
-}
-
 // TestLimitBody_RejectsOversizedBody confirms the global body cap is enforced:
 // a handler wrapped by limitBody observes a *http.MaxBytesError when a client
 // sends more than maxBytes.

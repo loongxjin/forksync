@@ -342,39 +342,23 @@ func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {
 // The returned cleanup is always safe to defer even if the disk log failed to
 // open (lw == nil).
 func buildResolveStreamWriter(configDir, repoName string, streamSink func(agent.StreamEvent)) (*agent.StreamWriter, func()) {
-	var writers []*agent.StreamWriter
+	// Disk-log arm — shared with the auto-sync path via agent.NewResolveLogWriter.
+	// It always returns a non-nil writer (no-op on failure) and a safe cleanup.
+	diskWriter, closeLog := agent.NewResolveLogWriter(configDir, repoName)
 
-	if streamSink != nil {
-		writers = append(writers, agent.NewStreamWriter(&sinkWriter{fn: streamSink}))
+	if streamSink == nil {
+		// Non-streaming path: disk log only.
+		return diskWriter, closeLog
 	}
 
-	// closeLog is nil-safe: only closes the disk writer if it was opened.
-	closeLog := func() {}
-	lw, lwErr := agent.NewLogWriter(configDir, repoName)
-	if lwErr != nil {
-		logger.Warn("resolve: failed to create log writer", "repo", repoName, "error", lwErr)
-	} else {
-		writers = append(writers, lw.StreamWriter())
-		closeLog = func() { _ = lw.Close() }
-	}
-
-	if len(writers) == 0 {
-		// Neither sink nor disk — return a no-op writer so callers don't have
-		// to nil-check. (Extremely unlikely: streamSink==nil AND disk failed.)
-		return agent.NewStreamWriter(nopWriter{}), closeLog
-	}
-	if len(writers) == 1 {
-		return writers[0], closeLog
+	// Streaming path: fan out to the live WS sink AND the disk log.
+	writers := []*agent.StreamWriter{
+		agent.NewStreamWriter(&sinkWriter{fn: streamSink}),
+		diskWriter,
 	}
 	msw := agent.NewMultiStreamWriter(writers...)
 	return msw.StreamWriter(), closeLog
 }
-
-// nopWriter is an io.Writer that discards everything, used only when both the
-// live sink and the disk log are unavailable.
-type nopWriter struct{}
-
-func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
 
 // sinkWriter is an io.Writer that forwards each full NDJSON line to a callback.
 // agent.StreamWriter writes one JSON object + newline per WriteEvent, then

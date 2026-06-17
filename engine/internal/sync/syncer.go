@@ -567,17 +567,12 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		language = s.cfg.Sync.SummaryLanguage
 	}
 
-	// Set up log writer for auto-sync background runs so users can replay later
-	var streamWriter *agent.StreamWriter
-	lw, lwErr := agent.NewLogWriter(s.configDir, r.Name)
-	if lwErr != nil {
-		logger.Warn("sync: failed to create agent log writer", "repo", r.Name, "error", lwErr)
-	}
-	if lw != nil {
-		defer lw.Close()
-		streamWriter = lw.StreamWriter()
-			logger.Debug("sync: agent log writer active", "repo", r.Name)
-	}
+	// Set up log writer for auto-sync background runs so users can replay later.
+	// Uses the shared agent.NewResolveLogWriter (same disk-log setup as the
+	// interactive resolve path); no live sink — this is a background job.
+	streamWriter, closeLog := agent.NewResolveLogWriter(s.configDir, r.Name)
+	defer closeLog()
+	logger.Debug("sync: agent log writer active", "repo", r.Name)
 
 	// Resolve conflicts via agent
 	logger.Info("sync: tryAgentResolve invoking agent",

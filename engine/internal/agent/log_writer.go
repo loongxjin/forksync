@@ -72,6 +72,27 @@ func (lw *LogWriter) StreamWriter() *StreamWriter {
 	return lw.sw
 }
 
+// nopWriter is an io.Writer that discards everything — the fallback when a
+// resolve run has neither a live sink nor a usable disk log.
+type nopWriter struct{}
+
+func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
+
+// NewResolveLogWriter creates the disk-log arm of a resolve run's stream fan-out.
+// It returns a StreamWriter (always non-nil) and a cleanup func (always safe to
+// defer). On disk-open failure it logs a warning and returns a no-op writer so
+// callers (the interactive resolve path in app, the auto-sync path in sync)
+// never have to nil-check. This is the single shared log-writer setup; callers
+// that also want a live sink wrap the result in a MultiStreamWriter themselves.
+func NewResolveLogWriter(baseDir, repoID string) (*StreamWriter, func()) {
+	lw, err := NewLogWriter(baseDir, repoID)
+	if err != nil {
+		logger.Warn("agent: failed to create resolve log writer", "repo", repoID, "error", err)
+		return NewStreamWriter(nopWriter{}), func() {}
+	}
+	return lw.StreamWriter(), func() { _ = lw.Close() }
+}
+
 // LatestLogFile returns the path of the most recent log file for the given repoID.
 func LatestLogFile(baseDir, repoID string) (string, error) {
 	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
