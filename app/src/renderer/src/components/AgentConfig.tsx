@@ -281,7 +281,9 @@ export function AgentConfig(): JSX.Element {
                     {s.status === 'active' ? <CheckCircle2 size={12} className="text-success" /> : <XCircle size={12} className="text-muted-foreground/50" />}
                   </span>
                   <span className="font-medium">{s.agentName}</span>
-                  <span className="text-muted-foreground">{s.repoId}</span>
+                  <span className="text-muted-foreground" title={s.repoId}>
+                    {s.repoName || s.repoId}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">{s.status}</span>

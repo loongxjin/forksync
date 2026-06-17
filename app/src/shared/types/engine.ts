@@ -175,6 +175,7 @@ export interface AgentInfo {
 export interface AgentSessionInfo {
   id: string
   repoId: string
+  repoName: string
   agentName: string
   status: AgentSessionStatus
   createdAt: string
