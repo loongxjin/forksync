@@ -110,7 +110,7 @@ func BuildDeps() (*Deps, error) {
 	if deps.SessionMgr != nil {
 		syncOpts = append(syncOpts, syncpkg.WithSessionManager(deps.SessionMgr))
 	}
-	deps.Syncer = syncpkg.NewSyncerFromConfig(cfg, store, cfgMgr.ConfigDir(), syncOpts...)
+		deps.Syncer = syncpkg.NewSyncerFromConfig(cfgMgr, store, cfgMgr.ConfigDir(), syncOpts...)
 
 	// Resolver reuses the same gitOps/store/cfg/sessionMgr.
 	deps.Resolve = respkg.NewResolver(deps.GitOps, store, cfg, cfgMgr, deps.SessionMgr)

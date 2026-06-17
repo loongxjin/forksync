@@ -31,7 +31,8 @@ const (
 type Syncer struct {
 	gitOps       git.OperationsProvider
 	store        repo.Store
-	cfg          *config.Config
+	cfgProvider  config.Provider  // live config, refreshed each sync via refreshConfig
+	cfgSnapshot  *config.Config   // snapshot taken at sync start; use config() to access
 	notifier     *notify.Notifier
 	sessionMgr   *session.Manager
 	historyStore *history.Store
@@ -69,6 +70,64 @@ func NewSyncer(store repo.Store, opts ...Option) *Syncer {
 		opt(s)
 	}
 	return s
+}
+
+// config returns the config snapshot for the current sync. Call refreshConfig
+// at the start of each sync to pick up the latest settings from disk.
+// Never returns nil — returns a zero-value Config if no provider is set.
+func (s *Syncer) config() *config.Config {
+	if s.cfgSnapshot == nil {
+		if s.cfgProvider != nil {
+			s.refreshConfig()
+		}
+		if s.cfgSnapshot == nil {
+			return &config.Config{}
+		}
+	}
+	return s.cfgSnapshot
+}
+
+// refreshConfig reloads the configuration from the provider so the next sync
+// sees the latest settings. Replaces the old reloadConfigAndSessionMgr.
+func (s *Syncer) refreshConfig() {
+	if s.cfgProvider == nil {
+		return
+	}
+	prevStrategy := ""
+	if s.cfgSnapshot != nil {
+		prevStrategy = s.cfgSnapshot.Agent.ConflictStrategy
+	}
+	s.cfgSnapshot = s.cfgProvider.Config()
+
+	// Lazily build or refresh sessionMgr if agent_resolve is now enabled.
+	if s.cfgSnapshot.Agent.ConflictStrategy != types.StrategyAgentResolve {
+		return
+	}
+	if s.sessionMgr != nil {
+		// Refresh provider so a newly installed/preferred agent is picked up.
+		if p, perr := agent.ResolveProvider(s.cfgSnapshot.Agent.Preferred, ""); perr == nil {
+			s.sessionMgr.SetProvider(p)
+		}
+		return
+	}
+	// agent_resolve is on but no session manager yet — lazily build one.
+	provider, perr := agent.ResolveProvider(s.cfgSnapshot.Agent.Preferred, "")
+	if perr != nil {
+		logger.Info("sync: agent_resolve enabled but no agent available yet",
+			"preferred_cfg", s.cfgSnapshot.Agent.Preferred, "error", perr)
+		return
+	}
+	sessionStore := session.NewSessionStore(filepath.Join(s.configDir, "sessions"))
+	if initErr := sessionStore.Init(); initErr != nil {
+		logger.Error("sync: failed to init session store for lazy sessionMgr", "error", initErr)
+		return
+	}
+	s.sessionMgr = session.NewManager(sessionStore, provider)
+	logger.Info("sync: lazily created session manager after config change",
+		"prev_strategy", prevStrategy,
+		"new_strategy", s.cfgSnapshot.Agent.ConflictStrategy,
+		"provider", provider.Name(),
+	)
 }
 
 // pendingInfo holds agent resolution details when awaiting user confirmation.
@@ -277,31 +336,22 @@ func (s *Syncer) failSync(r types.Repo, result *Result, wf *types.SyncWorkflow, 
 // executeSync performs the actual sync: fetch → status check → merge → post-sync commands.
 func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) *Result {
 	wf := result.Workflow
-	// Pick up config changes made via the settings UI since the server started.
-	// The Syncer's cfg and sessionMgr are snapshotted at boot; without this a
-	// user flipping conflict_strategy to agent_resolve would have to restart the
-	// app before auto-resolve took effect.
-	s.reloadConfigAndSessionMgr()
-
-	// Set timeout — use agent timeout if auto-resolve is configured,
+		// Pick up config changes made via the settings UI since the server started.
+		s.refreshConfig()
+	
+		// Set timeout — use agent timeout if auto-resolve is configured,
 	// otherwise the default 5 minutes may SIGKILL long-running agents.
 	timeout := defaultTimeout
 	if s.shouldUseAgentResolve() {
-		timeout = config.AgentTimeout(s.cfg)
+		timeout = config.AgentTimeout(s.config())
 	}
-	logger.Info("sync: executeSync starting",
-		"repo", r.Name,
-		"timeout", timeout,
-		"agent_resolve", s.shouldUseAgentResolve(),
-		"conflict_strategy", func() string {
-			if s.cfg != nil {
-				return s.cfg.Agent.ConflictStrategy
-			}
-			return "<nil cfg>"
-		}(),
-		"sessionMgr_nil", s.sessionMgr == nil,
-		"cfg_nil", s.cfg == nil,
-	)
+		logger.Info("sync: executeSync starting",
+			"repo", r.Name,
+			"timeout", timeout,
+			"agent_resolve", s.shouldUseAgentResolve(),
+			"conflict_strategy", s.config().Agent.ConflictStrategy,
+			"sessionMgr_nil", s.sessionMgr == nil,
+		)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -414,11 +464,8 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 
-	// Determine auto-resolve strategy from global config
-	autoAgentResolve := false
-	if s.cfg != nil && s.cfg.Agent.ConflictStrategy == types.StrategyAgentResolve {
-		autoAgentResolve = true
-	}
+		// Determine auto-resolve strategy from global config
+		autoAgentResolve := s.config().Agent.ConflictStrategy == types.StrategyAgentResolve
 
 	logger.Info("sync: handleMergeConflicts strategy decision",
 		"repo", r.Name,
@@ -491,7 +538,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 			// resolve uses, instead of the old inline AbortMerge.
 			wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusFailed, "agent failed to resolve conflicts")
 			wfpkg.MarkWorkflowDone(wf, types.WorkflowFailed)
-			resolver := respkg.NewResolver(s.gitOps, s.store, s.cfg, nil, s.sessionMgr)
+			resolver := respkg.NewResolver(s.gitOps, s.store, s.config(), nil, s.sessionMgr)
 			if _, rejectErr := resolver.Reject(ctx, r); rejectErr != nil {
 				logger.Warn("sync: reject after agent failure", "repo", r.Name, "error", rejectErr)
 			}
@@ -504,22 +551,12 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 		return result
 	}
 
-	// Manual resolve path: pause at resolve_strategy
-	logger.Info("sync: entering MANUAL resolve path (repo left in waiting state)",
-		"repo", r.Name,
-		"reason", func() string {
-			if s.cfg == nil {
-				return "cfg is nil"
-			}
-			if s.cfg.Agent.ConflictStrategy != types.StrategyAgentResolve {
-				return "conflict_strategy != agent_resolve (is " + s.cfg.Agent.ConflictStrategy + ")"
-			}
-			if s.sessionMgr == nil {
-				return "sessionMgr is nil (no agent available at server boot)"
-			}
-			return "unknown"
-		}(),
-	)
+		// Manual resolve path: pause at resolve_strategy
+		logger.Info("sync: entering MANUAL resolve path (repo left in waiting state)",
+			"repo", r.Name,
+			"conflict_strategy", s.config().Agent.ConflictStrategy,
+			"sessionMgr_nil", s.sessionMgr == nil,
+		)
 	wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
 	wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
 	wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
@@ -556,20 +593,10 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	logger.Info("sync: tryAgentResolve starting",
 		"repo", r.Name,
 		"conflicts", len(conflictPaths),
-		"provider", s.sessionMgr.ProviderName(),
-		"conflict_strategy", func() string {
-			if s.cfg != nil {
-				return s.cfg.Agent.ConflictStrategy
-			}
-			return "<nil>"
-		}(),
-		"confirm_before_commit", func() bool {
-			if s.cfg != nil {
-				return s.cfg.Agent.ConfirmBeforeCommit
-			}
-			return false
-		}(),
-	)
+			"provider", s.sessionMgr.ProviderName(),
+			"conflict_strategy", s.config().Agent.ConflictStrategy,
+			"confirm_before_commit", s.config().Agent.ConfirmBeforeCommit,
+		)
 
 	// Set up log writer for auto-sync background runs so users can replay later.
 	// Uses the shared agent.NewResolveLogWriter (same disk-log setup as the
@@ -582,7 +609,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	// come from the merge result (authoritative); pass them in so the core does
 	// not re-detect. The core does NOT commit and does NOT transition state —
 	// both are sync-owned.
-	resolver := respkg.NewResolver(s.gitOps, s.store, s.cfg, nil, s.sessionMgr)
+	resolver := respkg.NewResolver(s.gitOps, s.store, s.config(), nil, s.sessionMgr)
 	out, err := resolver.RunAgentResolve(ctx, r, s.resolveStrategyOrDefault(), streamWriter, conflictPaths)
 	if err != nil {
 		logger.Error("sync: agent resolve failed",
@@ -625,10 +652,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	//    unnecessary and will be removed.
 
 	// Check if auto-confirm is enabled
-	autoConfirm := true
-	if s.cfg != nil {
-		autoConfirm = !s.cfg.Agent.ConfirmBeforeCommit
-	}
+		autoConfirm := !s.config().Agent.ConfirmBeforeCommit
 
 	if !autoConfirm {
 		logger.Info("sync: tryAgentResolve awaiting user confirmation",
@@ -661,72 +685,12 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 
 // resolveStrategyOrDefault returns the resolve strategy from config, or the default.
 func (s *Syncer) resolveStrategyOrDefault() string {
-	return config.ResolveStrategyOrDefault(s.cfg)
+	return config.ResolveStrategyOrDefault(s.config())
 }
 
 // shouldUseAgentResolve checks whether agent auto-resolve is configured globally.
 func (s *Syncer) shouldUseAgentResolve() bool {
-	if s.cfg != nil {
-		return s.cfg.Agent.ConflictStrategy == types.StrategyAgentResolve
-	}
-	return false
-}
-
-// reloadConfigAndSessionMgr picks up config changes made via the settings UI
-// since the server started. The Syncer's cfg/sessionMgr are snapshotted at
-// boot (in app.BuildDeps), so without this a user flipping conflict_strategy
-// to agent_resolve (or installing an agent after launch) would need to restart
-// the whole app before auto-resolve took effect.
-//
-// It reloads s.cfg from disk, and if agent_resolve is now enabled but the
-// session manager was never built (because no agent was available at boot, or
-// the strategy was off), it lazily constructs one. Safe to call on every sync.
-func (s *Syncer) reloadConfigAndSessionMgr() {
-	if s.configDir == "" {
-		return
-	}
-	mgr := config.NewManagerWithDir(s.configDir)
-	cfg, err := mgr.Load()
-	if err != nil {
-		return // keep using the in-memory snapshot
-	}
-	prevStrategy := ""
-	if s.cfg != nil {
-		prevStrategy = s.cfg.Agent.ConflictStrategy
-	}
-	s.cfg = cfg
-
-	// Nothing to (re)build if agent_resolve isn't enabled.
-	if cfg.Agent.ConflictStrategy != types.StrategyAgentResolve {
-		return
-	}
-	// Already have a session manager — just refresh its provider so a newly
-	// installed/preferred agent is picked up without a restart.
-	if s.sessionMgr != nil {
-		if p, perr := agent.ResolveProvider(cfg.Agent.Preferred, ""); perr == nil {
-			s.sessionMgr.SetProvider(p)
-		}
-		return
-	}
-	// agent_resolve is on but no session manager yet — lazily build one now
-	// that an agent may have become available.
-	provider, perr := agent.ResolveProvider(cfg.Agent.Preferred, "")
-	if perr != nil {
-		logger.Info("sync: agent_resolve enabled but no agent available yet",
-			"preferred_cfg", cfg.Agent.Preferred, "error", perr)
-		return
-	}
-	sessionStore := session.NewSessionStore(filepath.Join(s.configDir, "sessions"))
-	if initErr := sessionStore.Init(); initErr != nil {
-		logger.Error("sync: failed to init session store for lazy sessionMgr", "error", initErr)
-		return
-	}
-	s.sessionMgr = session.NewManager(sessionStore, provider)
-	logger.Info("sync: lazily created session manager after config change",
-		"prev_strategy", prevStrategy,
-		"new_strategy", cfg.Agent.ConflictStrategy,
-		"provider", provider.Name(),
-	)
+	return s.config().Agent.ConflictStrategy == types.StrategyAgentResolve
 }
 
 // saveWorkflow updates the repo's workflow in the store.
@@ -826,20 +790,24 @@ func (s *Syncer) updateRepoStatus(id string, status types.RepoStatus, errMsg str
 	}
 }
 
-// NewSyncerFromConfig creates a Syncer using config defaults.
-func NewSyncerFromConfig(cfg *config.Config, store repo.Store, configDir string, opts ...Option) *Syncer {
+// NewSyncerFromConfig creates a Syncer using a live config provider.
+// The provider is queried for the latest config at the start of each sync,
+// so settings changes take effect without restarting the app.
+func NewSyncerFromConfig(cfgProvider config.Provider, store repo.Store, configDir string, opts ...Option) *Syncer {
 	var gitOps git.OperationsProvider
-	if cfg != nil && cfg.Proxy.Enabled && cfg.Proxy.URL != "" {
+	cfg := cfgProvider.Config()
+	if cfg.Proxy.Enabled && cfg.Proxy.URL != "" {
 		gitOps = git.NewOperationsWithProxy(cfg.Proxy.URL)
 	} else {
 		gitOps = git.NewOperations()
 	}
 	s := &Syncer{
-		gitOps:    gitOps,
-		store:     store,
-		cfg:       cfg,
-		configDir: configDir,
-		active:    make(map[string]bool),
+		gitOps:      gitOps,
+		store:       store,
+		cfgProvider: cfgProvider,
+		cfgSnapshot: cfg,
+		configDir:   configDir,
+		active:      make(map[string]bool),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -893,7 +861,7 @@ func (s *Syncer) recordHistory(result *Result) int64 {
 
 	// Pre-set summary_status to "pending" if auto-summarization is enabled
 	summaryStatus := ""
-	if s.cfg != nil && s.cfg.Sync.AutoSummary &&
+	if s.config().Sync.AutoSummary &&
 		result.Status == string(types.RepoStatusUpToDate) && result.CommitsPulled > 0 {
 		summaryStatus = string(types.SummaryStatusPending)
 	}

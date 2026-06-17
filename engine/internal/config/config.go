@@ -55,9 +55,27 @@ type ProxyConfig struct {
 	URL     string `mapstructure:"url" yaml:"url"`
 }
 
+// Provider gives access to the current application configuration.
+// It is the interface Syncer depends on; config.Manager implements it.
+type Provider interface {
+	Config() *Config
+}
+
 type Manager struct {
 	configDir string
 	viper     *viper.Viper
+}
+
+// Config returns the current configuration, re-reading from disk on every call.
+// It implements the Provider interface so Syncer can always see the latest
+// settings without a separate reload step.
+func (m *Manager) Config() *Config {
+	cfg, err := m.Load()
+	if err != nil {
+		// Return a zero-value config on load failure so callers never nil-check.
+		return &Config{}
+	}
+	return cfg
 }
 
 func NewManager() *Manager {
