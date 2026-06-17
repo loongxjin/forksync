@@ -303,12 +303,7 @@ export function HomePage(): JSX.Element {
   const refreshRef = useRef(refresh)
   refreshRef.current = refresh
 
-  // Ref to track the resolve verification poll timer so it can be cleaned up.
-  const verifyPollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Retry counter for the verification poll (max 5 attempts = 10s total).
-  const verifyAttemptsRef = useRef<Record<string, number>>({})
-
-  // Path B side effects: when stream results arrive, trigger refresh + summarization.
+  // Keep refresh in a ref to avoid the effect re-triggering when repos change
   // Data merging is handled by useResolveStream hook — this effect only handles
   // business side effects (refresh, loadHistory, auto-confirm summarization).
   useEffect(() => {
@@ -322,14 +317,9 @@ export function HomePage(): JSX.Element {
         triggerSummarize(repoName)
       }
     }
-    if (hasNew) {
-      logger.log('calling refresh after stream done')
-      // Clear any pending verification poll from a previous stream
-      if (verifyPollRef.current) {
-        clearTimeout(verifyPollRef.current)
-        verifyPollRef.current = null
-      }
-      refreshRef.current().then(() => {
+	    if (hasNew) {
+	      logger.log('calling refresh after stream done')
+	      refreshRef.current().then(() => {
         logger.log('refresh completed after stream done')
       }).catch((e) => {
         logger.error('refresh failed after stream done', e)
@@ -337,58 +327,6 @@ export function HomePage(): JSX.Element {
       loadHistory()
     }
   }, [streamResults, loadHistory, engineConfig])
-
-  // Verification poll: after streamResults updated repos, check if any repo
-  // is still in a transitional state ("resolving"). If so, schedule a delayed
-  // refresh to pick up the persisted state. This handles the race where the
-  // Go engine's "done" event arrives before store.Update() completes.
-  // Max 5 retries (10s total) to prevent infinite loops.
-  useEffect(() => {
-    // Only run when repos change and there are pending streamResults
-    const pendingNames = Object.keys(streamResults)
-    if (pendingNames.length === 0) return
-
-    const namesToVerify = pendingNames.filter((name) => {
-      const repo = repos.find((r) => r.name === name)
-      if (!repo) return false
-      const attempts = verifyAttemptsRef.current[name] ?? 0
-      if (attempts >= 5) return false
-      return repo.status === 'resolving' ||
-        repo.workflow?.steps?.some(
-          (s: { step: string; status: string }) => s.step === 'agent_resolve' && s.status === 'running'
-        )
-    })
-
-    if (namesToVerify.length > 0) {
-      logger.log('verification: repos still transitional after refresh, scheduling poll')
-      if (verifyPollRef.current) clearTimeout(verifyPollRef.current)
-      verifyPollRef.current = setTimeout(async () => {
-        verifyPollRef.current = null
-        // Increment attempt counters
-        for (const name of namesToVerify) {
-          verifyAttemptsRef.current[name] = (verifyAttemptsRef.current[name] ?? 0) + 1
-        }
-        logger.log('verification: running delayed refresh')
-        try {
-          await refreshRef.current()
-        } catch (e) {
-          logger.error('verification refresh failed', e)
-        }
-      }, 2000)
-    } else {
-      // All repos reached terminal state or max retries hit — reset counters
-      for (const name of pendingNames) {
-        delete verifyAttemptsRef.current[name]
-      }
-    }
-
-    return () => {
-      if (verifyPollRef.current) {
-        clearTimeout(verifyPollRef.current)
-        verifyPollRef.current = null
-      }
-    }
-  }, [repos, streamResults])
 
   const handleRetryCommit = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
