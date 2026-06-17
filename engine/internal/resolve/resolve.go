@@ -47,10 +47,6 @@ func NewResolver(
 
 // Reject rolls back the merge and resets the workflow.
 func (r *Resolver) Reject(ctx context.Context, repo types.Repo) (types.Repo, error) {
-	if r.cfgMgr != nil {
-		agent.DeleteAllLogs(r.cfgMgr.ConfigDir(), repo.Name)
-	}
-
 	err := r.gitOps.AbortMerge(ctx, repo.Path)
 	if err != nil {
 		logger.Warn("resolve: merge --abort failed", "repo", repo.Name, "error", err)

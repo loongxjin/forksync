@@ -657,9 +657,6 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 		return false, pending
 	}
 
-	// Agent logs are meaningless once auto-resolved and committed.
-	agent.DeleteAllLogs(s.configDir, r.Name)
-
 	return true, nil
 }
 
