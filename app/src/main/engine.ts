@@ -298,12 +298,15 @@ export class EngineClient {
     }
   }
 
-  /** Read the latest agent log replay (now served by the Go server). */
-  async readAgentLog(repoName: string): Promise<{
+  /** Read agent log for a repo. When sessionId is provided the exact session's
+   *  log is read (by session name); otherwise the newest log is returned (backward
+   *  compatibility with older agent logs that don't carry a session id). */
+  async readAgentLog(repoName: string, sessionId?: string): Promise<{
     events: AgentStreamEvent[]
     isRunning: boolean
   }> {
-    const res = await this.getRaw(`/repos/${encodeURIComponent(repoName)}/agent-log`)
+    const qs = sessionId ? `?session=${encodeURIComponent(sessionId)}` : ''
+    const res = await this.getRaw(`/repos/${encodeURIComponent(repoName)}/agent-log${qs}`)
     return (await res.json()) as { events: AgentStreamEvent[]; isRunning: boolean }
   }
 

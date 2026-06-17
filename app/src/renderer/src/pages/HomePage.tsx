@@ -154,9 +154,16 @@ export function HomePage(): JSX.Element {
     if (!initialized) return
     for (const repo of repos) {
       if (autoLoadedRef.current.has(repo.name)) continue
+
+      // Extract the resolve session id from the agent_resolve step so the
+      // log is read by session name (precise), not "newest file in the dir".
+      const resolveSessionId = repo.workflow?.steps?.find(
+        (s) => s.step === 'agent_resolve'
+      )?.resolveSessionId ?? ''
+
       if (repo.status === 'resolving') {
         autoLoadedRef.current.add(repo.name)
-        loadAgentLog(repo.name)
+        loadAgentLog(repo.name, resolveSessionId)
         continue
       }
       if (repo.status === 'syncing' && repo.workflow) {
@@ -165,7 +172,7 @@ export function HomePage(): JSX.Element {
         )
         if (agentStep) {
           autoLoadedRef.current.add(repo.name)
-          loadAgentLog(repo.name)
+          loadAgentLog(repo.name, resolveSessionId)
         }
       }
     }
@@ -275,8 +282,13 @@ export function HomePage(): JSX.Element {
         updateRepo({ ...repo, status: wfRes.data.status ?? repo.status, workflow: wfRes.data.workflow })
       }
 
+      // Extract resolve session id from the agent_resolve step so the log can
+      // be read by session name (not "newest file in the dir").
+      const resolveSessionId = wfRes.data?.workflow?.steps?.find(
+        (s) => s.step === 'agent_resolve'
+      )?.resolveSessionId ?? ''
       clearResult(repo.name)
-      await startResolve(repo.name, { agent: preferred || undefined, noConfirm })
+      await startResolve(repo.name, resolveSessionId, { agent: preferred || undefined, noConfirm })
       setTerminalDrawerRepo(repo.name)
     } catch (err) {
       await refresh().catch(() => {})
@@ -445,8 +457,10 @@ export function HomePage(): JSX.Element {
     // Always re-read the disk log on (re)open — this picks up any events
     // that arrived while the drawer was closed, restarts polling if the
     // agent is still running, and restores resolveResults from the done frame.
-    loadAgentLog(repoName)
-  }, [loadAgentLog])
+    const repo = repos.find((r) => r.name === repoName)
+    const sid = repo?.workflow?.steps?.find((s) => s.step === 'agent_resolve')?.resolveSessionId ?? ''
+    loadAgentLog(repoName, sid)
+  }, [loadAgentLog, repos])
 
   // Repo actions
   const removingRef = useRef<string | null>(null)
