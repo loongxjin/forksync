@@ -768,37 +768,20 @@ func agentResolveTimeout(cfg *config.Config) time.Duration {
 	return defaultAgentTimeout
 }
 
-// verifyAndStageResolvedFiles checks that resolved files have no conflict markers and stages them.
+// verifyAndStageResolvedFiles checks that resolved files have no conflict
+// markers and stages them. It delegates to the shared git seam
+// (OperationsProvider.FilterResolvedFiles) so the verify-and-stage step has one
+// implementation across the Conflict Resolver and the auto-sync path.
 func (s *Syncer) verifyAndStageResolvedFiles(ctx context.Context, r types.Repo, result *agent.AgentResult) bool {
-	var stillConflicted []string
-	for _, file := range result.ResolvedFiles {
-		content, err := s.gitOps.GetConflictedContent(ctx, r.Path, file)
-		if err != nil {
-			continue
-		}
-		if git.HasConflictMarkers(content) {
-			stillConflicted = append(stillConflicted, file)
-		}
-	}
+	stillConflicted := s.gitOps.FilterResolvedFiles(ctx, r.Path, result.ResolvedFiles)
 	if len(stillConflicted) > 0 {
-			logger.Error("sync: agent left conflict markers in files",
+		logger.Error("sync: agent left conflict markers in files",
 			"repo", r.Name,
 			"agent", s.sessionMgr.ProviderName(),
 			"files", stillConflicted,
 			"summary", result.Summary,
 		)
 		return false
-	}
-
-	for _, file := range result.ResolvedFiles {
-		if err := s.gitOps.StageFile(ctx, r.Path, file); err != nil {
-				logger.Error("sync: failed to stage resolved file",
-				"repo", r.Name,
-				"file", file,
-				"error", err,
-			)
-			return false
-		}
 	}
 	return true
 }
