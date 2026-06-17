@@ -489,78 +489,99 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 		if step := wfpkg.FindStep(wf, types.StepAgentResolve); step != nil {
 			resolveSessionID = step.ResolveSessionID
 		}
-		resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts, resolveSessionID)
-		if resolved {
-			// Agent resolved and auto-committed
-			wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
-				fmt.Sprintf("resolved by %s", s.sessionMgr.ProviderName()))
-			wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
-			wfpkg.AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
-			wfpkg.MarkWorkflowDone(wf, types.WorkflowSuccess)
-			result.Status = string(types.RepoStatusUpToDate)
-			result.AutoResolved = len(mergeResult.Conflicts)
-			result.PostSyncResults = wfpkg.RunPostSyncCommands(ctx, r)
-			if postSyncErr := wfpkg.PostSyncError(result.PostSyncResults); postSyncErr != "" {
-				result.ErrorMessage = postSyncErr
-				s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, result.ErrorMessage)
-			} else {
-				s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
+			out, sw, closeLog := s.tryAgentResolve(ctx, r, mergeResult.Conflicts, resolveSessionID)
+			defer closeLog()
+
+			if out == nil || !out.Success || len(out.Unresolved) > 0 {
+				// Agent failed. Roll the merge back via the shared Reject path so
+				// the repo is not left stuck mid-merge (MERGE_HEAD present, unmerged
+				// index entries) across scheduler ticks — same path the interactive
+				// resolve uses, instead of the old inline AbortMerge.
+				wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusFailed, "agent failed to resolve conflicts")
+				wfpkg.MarkWorkflowDone(wf, types.WorkflowFailed)
+				resolver := respkg.NewResolver(s.gitOps, s.store, s.config(), nil, s.sessionMgr)
+				if _, rejectErr := resolver.Reject(ctx, r); rejectErr != nil {
+					logger.Warn("sync: reject after agent failure", "repo", r.Name, "error", rejectErr)
+				}
+				result.Status = string(types.RepoStatusSyncNeeded)
+				// Reject clears ErrorMessage; restore a useful one for the UI.
+				s.updateRepoStatus(r.ID, types.RepoStatusSyncNeeded, "agent failed; merge rolled back")
+				s.saveWorkflow(r, wf)
+				s.notifyResult(r.Name, result)
+				s.finalizeResult(result)
+				return result
 			}
-			s.saveWorkflow(r, wf)
-			s.notifyResult(r.Name, result)
-			s.finalizeResult(result)
-			return result
-		}
-		if pending != nil {
-			// Agent resolved but needs confirmation.
-			wfpkg.TransitionAgentResolved(wf, pending.Agent)
-			result.Status = string(types.RepoStatusResolved)
-			result.AgentUsed = pending.Agent
-			result.AutoResolved = len(pending.Files)
-			result.PendingConfirm = pending.Files
-			result.CommitError = pending.CommitError
+
+			// Agent succeeded. Build agent result and decide auto-commit vs waiting.
+			agentName := s.sessionMgr.ProviderName()
+			_, pending := s.buildPendingInfo(ctx, r, out.AgentResult)
 			result.AgentResult = &types.AgentResolveResult{
 				Success:       true,
-				ResolvedFiles: pending.Files,
-				Diff:          pending.Diff,
-				Summary:       pending.Summary,
-				AgentName:     pending.Agent,
+				ResolvedFiles: out.AgentResult.ResolvedFiles,
+				Diff:          out.AgentResult.Diff,
+				Summary:       out.AgentResult.Summary,
+				AgentName:     agentName,
 			}
+			result.AgentUsed = agentName
+			result.AutoResolved = len(out.AgentResult.ResolvedFiles)
+
+			autoConfirm := !s.config().Agent.ConfirmBeforeCommit
+			if autoConfirm {
+				commitMsg := fmt.Sprintf("Merge upstream changes (auto-resolved by %s)", agentName)
+				if cerr := s.gitOps.Commit(ctx, r.Path, commitMsg); cerr != nil {
+					logger.Warn("sync: auto-commit failed after agent resolution, falling back to confirmation",
+						"repo", r.Name, "agent", agentName, "error", cerr)
+					pending.CommitError = fmt.Sprintf("auto-commit failed: %v", cerr)
+					wfpkg.TransitionAgentResolved(wf, pending.Agent)
+					result.Status = string(types.RepoStatusResolved)
+					result.PendingConfirm = pending.Files
+					result.CommitError = pending.CommitError
+					s.updateRepoStatus(r.ID, types.RepoStatusResolved, "")
+					s.saveWorkflow(r, wf)
+					s.notifyResult(r.Name, result)
+					return result
+				}
+				_ = sw.WriteEvent(agent.DoneEventFromResult(out.AgentResult))
+				wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
+					fmt.Sprintf("resolved by %s", agentName))
+				wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
+				wfpkg.AdvanceStep(wf, types.StepCommit, types.StepStatusSuccess, "")
+				wfpkg.MarkWorkflowDone(wf, types.WorkflowSuccess)
+				result.Status = string(types.RepoStatusUpToDate)
+				result.PostSyncResults = wfpkg.RunPostSyncCommands(ctx, r)
+				if postSyncErr := wfpkg.PostSyncError(result.PostSyncResults); postSyncErr != "" {
+					result.ErrorMessage = postSyncErr
+					s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, result.ErrorMessage)
+				} else {
+					s.updateRepoStatus(r.ID, types.RepoStatusUpToDate, "")
+				}
+				s.saveWorkflow(r, wf)
+				s.notifyResult(r.Name, result)
+				s.finalizeResult(result)
+				return result
+			}
+			// Waiting-confirm path.
+			_ = sw.WriteEvent(agent.DoneEventFromResult(out.AgentResult))
+			wfpkg.TransitionAgentResolved(wf, pending.Agent)
+			result.Status = string(types.RepoStatusResolved)
+			result.PendingConfirm = pending.Files
+			result.CommitError = pending.CommitError
 			s.updateRepoStatus(r.ID, types.RepoStatusResolved, "")
 			s.saveWorkflow(r, wf)
 			s.notifyResult(r.Name, result)
-			// History recorded when user accepts the resolution
 			return result
 		}
-		// Agent failed. Roll the merge back via the shared Reject path so
-		// the repo is not left stuck mid-merge (MERGE_HEAD present, unmerged
-		// index entries) across scheduler ticks — same path the interactive
-		// resolve uses, instead of the old inline AbortMerge.
-		wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusFailed, "agent failed to resolve conflicts")
-		wfpkg.MarkWorkflowDone(wf, types.WorkflowFailed)
-		resolver := respkg.NewResolver(s.gitOps, s.store, s.config(), nil, s.sessionMgr)
-		if _, rejectErr := resolver.Reject(ctx, r); rejectErr != nil {
-			logger.Warn("sync: reject after agent failure", "repo", r.Name, "error", rejectErr)
-		}
-		result.Status = string(types.RepoStatusSyncNeeded)
-		// Reject clears ErrorMessage; restore a useful one for the UI.
-		s.updateRepoStatus(r.ID, types.RepoStatusSyncNeeded, "agent failed; merge rolled back")
-		s.saveWorkflow(r, wf)
-		s.notifyResult(r.Name, result)
-		s.finalizeResult(result)
-		return result
-	}
 
-	// Manual resolve path: pause at resolve_strategy
-	logger.Info("sync: entering MANUAL resolve path (repo left in waiting state)",
+		// Manual resolve path: pause at resolve_strategy
+		logger.Info("sync: entering MANUAL resolve path (repo left in waiting state)",
 		"repo", r.Name,
 		"conflict_strategy", s.config().Agent.ConflictStrategy,
 		"sessionMgr_nil", s.sessionMgr == nil,
 	)
-	wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
-	wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
-	wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
-	wf.Status = types.WorkflowWaiting
+		wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
+		wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
+		wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
+		wf.Status = types.WorkflowWaiting
 	result.Status = string(types.RepoStatusWaiting)
 	s.updateRepoStatus(r.ID, types.RepoStatusWaiting, "")
 	s.saveWorkflow(r, wf)
@@ -569,118 +590,47 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	return result
 }
 
-// tryAgentResolve attempts to resolve conflicts using the agent CLI.
-// Returns (resolved, pending):
-//   - resolved=true, pending=nil: all conflicts resolved and committed (auto-confirm)
-//   - resolved=false, pending=*pendingInfo: conflicts resolved but awaiting user confirmation
-//   - resolved=false, pending=nil: agent failed to resolve
-//
-// The resolve core (drive agent → verify markers → stage) is shared with the
-// interactive resolve path via resolve.Resolver.RunAgentResolve. What stays
-// sync-specific: the disk-log done frame, auto-commit + post-sync + history,
-// and the pending-confirmation hand-off. Workflow/state transitions are owned
-// by handleMergeConflicts (the caller), NOT by the Resolver core — the auto
-// path's state machine is centralized there.
-func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string, resolveSessionID string) (bool, *pendingInfo) {
+
+func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string, resolveSessionID string) (*respkg.AgentResult, *agent.StreamWriter, func()) {
+	noop := func() {}
 	if s.sessionMgr == nil {
 		logger.Warn("sync: tryAgentResolve skipped — sessionMgr is nil",
 			"repo", r.Name,
 			"hint", "agent_resolve strategy requires a session manager; server may have started before an agent was installed",
 		)
-		return false, nil
+		return nil, nil, noop
 	}
 
 	logger.Info("sync: tryAgentResolve starting",
 		"repo", r.Name,
 		"conflicts", len(conflictPaths),
 		"provider", s.sessionMgr.ProviderName(),
-		"conflict_strategy", s.config().Agent.ConflictStrategy,
-		"confirm_before_commit", s.config().Agent.ConfirmBeforeCommit,
 	)
 
-	// Set up log writer for auto-sync background runs so users can replay later.
-	// Uses the shared agent.NewResolveLogWriter (same disk-log setup as the
-	// interactive resolve path); no live sink — this is a background job.
 	streamWriter, closeLog := agent.NewResolveLogWriter(s.configDir, r.Name, resolveSessionID)
-	defer closeLog()
 	logger.Debug("sync: agent log writer active", "repo", r.Name)
 
-	// Drive the agent + verify + stage via the shared Resolver core. conflictPaths
-	// come from the merge result (authoritative); pass them in so the core does
-	// not re-detect. The core does NOT commit and does NOT transition state —
-	// both are sync-owned.
 	resolver := respkg.NewResolver(s.gitOps, s.store, s.config(), nil, s.sessionMgr)
 	out, err := resolver.RunAgentResolve(ctx, r, s.resolveStrategyOrDefault(), streamWriter, conflictPaths)
 	if err != nil {
-		logger.Error("sync: agent resolve failed",
-			"repo", r.Name,
-			"agent", s.sessionMgr.ProviderName(),
-			"error", err,
-		)
-		return false, nil
+		logger.Error("sync: agent resolve failed", "repo", r.Name, "agent", s.sessionMgr.ProviderName(), "error", err)
+		closeLog()
+		return nil, nil, noop
 	}
-	// No conflicts to resolve — nothing to do.
 	if out.AgentResult == nil {
-		return false, nil
+		closeLog()
+		return nil, nil, noop
 	}
-	result := out.AgentResult
-
-	// Verify failed: agent left conflict markers. The core already reported
-	// them in out.Unresolved; nothing to stage or commit.
 	if !out.Success || len(out.Unresolved) > 0 {
 		logger.Error("sync: agent left conflict markers in files",
-			"repo", r.Name,
-			"agent", s.sessionMgr.ProviderName(),
-			"files", out.Unresolved,
-			"summary", result.Summary,
-		)
-		return false, nil
+			"repo", r.Name, "agent", s.sessionMgr.ProviderName(), "files", out.Unresolved)
+		closeLog()
+		return nil, nil, noop
 	}
 
-	// Write a terminal 'done' frame to the disk log so readAgentLog reports
-	// isRunning=false — but ONLY when commit has actually landed (auto-commit)
-	// or when the agent is truly done and waiting for user review (waiting-confirm).
-	// Previously this was emitted unconditionally before the commit, which caused
-	// a frontend race: readAgentLog saw done, triggered a status refresh, but
-	// the commit hadn't landed yet → the frontend's verifyPoll patch papered
-	// over that gap by retrying.
-	//
-	// Now the done frame is emitted inside each branch at the correct timing:
-	//  - waiting-confirm: agent finished, right before buildPendingInfo.
-	//  - auto-commit: AFTER the commit succeeds, so frontend refresh sees the
-	//    terminal state (up_to_date) on the first try — verifyPoll becomes
-	//    unnecessary and will be removed.
-
-	// Check if auto-confirm is enabled
-	autoConfirm := !s.config().Agent.ConfirmBeforeCommit
-
-	if !autoConfirm {
-		logger.Info("sync: tryAgentResolve awaiting user confirmation",
-			"repo", r.Name, "reason", "confirm_before_commit=true")
-		// Agent is done, write done frame so the frontend can read the log
-		// and show diff/summary for the user to review.
-		_ = streamWriter.WriteEvent(agent.DoneEventFromResult(result))
-		return s.buildPendingInfo(ctx, r, result)
-	}
-
-	// Complete the merge with a commit
-	commitMsg := fmt.Sprintf("Merge upstream changes (auto-resolved by %s)", s.sessionMgr.ProviderName())
-	if err := s.gitOps.Commit(ctx, r.Path, commitMsg); err != nil {
-		logger.Warn("sync: auto-commit failed after agent resolution, falling back to confirmation",
-			"repo", r.Name,
-			"agent", s.sessionMgr.ProviderName(),
-			"error", err,
-		)
-		_, pending := s.buildPendingInfo(ctx, r, result)
-		pending.CommitError = fmt.Sprintf("auto-commit failed: %v", err)
-		return false, pending
-	}
-
-	// Auto-commit succeeded. Now emit the done frame — the frontend's next
-	// status refresh will see up_to_date, no transitional state to retry over.
-	_ = streamWriter.WriteEvent(agent.DoneEventFromResult(result))
-
-	return true, nil
+	// Success. Return the result to the caller — handleMergeConflicts
+	// will decide auto-commit vs waiting-confirm and emit the done frame.
+	return out, streamWriter, closeLog
 }
 
 // resolveStrategyOrDefault returns the resolve strategy from config, or the default.
