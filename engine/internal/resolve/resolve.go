@@ -15,6 +15,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	"github.com/loongxjin/forksync/engine/internal/workflow"
 	"github.com/loongxjin/forksync/engine/pkg/types"
+	"github.com/google/uuid"
 )
 
 // Resolver handles conflict resolution via agent CLIs.
@@ -85,6 +86,9 @@ func (r *Resolver) Prepare(repo types.Repo) (types.Repo, error) {
 	}
 	workflow.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
 	workflow.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
+	// Stamp a fresh resolve session id so the frontend can locate this
+	// resolve's agent log precisely (by session), not by "newest file".
+	workflow.SetResolveSessionID(wf, uuid.New().String())
 	// Restore accept_changes from skipped to pending so it can be used later.
 	for i := range wf.Steps {
 		if wf.Steps[i].Step == types.StepAcceptChanges && wf.Steps[i].Status == types.StepStatusSkipped {

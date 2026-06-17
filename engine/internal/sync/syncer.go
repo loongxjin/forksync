@@ -17,6 +17,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	respkg "github.com/loongxjin/forksync/engine/internal/resolve"
 	"github.com/loongxjin/forksync/engine/pkg/types"
+	"github.com/google/uuid"
 
 	wfpkg "github.com/loongxjin/forksync/engine/internal/workflow"
 )
@@ -430,6 +431,9 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	if autoAgentResolve && s.sessionMgr != nil {
 		wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusSuccess, "")
 		wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusRunning, "")
+		// Stamp a fresh resolve session id so the frontend can locate this
+		// resolve's agent log precisely (by session), not by "newest file".
+		wfpkg.SetResolveSessionID(wf, uuid.New().String())
 		s.saveWorkflow(r, wf)
 
 		resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)

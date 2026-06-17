@@ -470,6 +470,10 @@ func TestPrepare_PositionsWorkflowForAgent(t *testing.T) {
 	if agentResolve == nil || agentResolve.Status != types.StepStatusRunning {
 		t.Error("AgentResolve step not advanced to Running")
 	}
+	// Prepare stamps a resolve session id so the frontend can locate the log.
+	if agentResolve.ResolveSessionID == "" {
+		t.Error("AgentResolve step has empty ResolveSessionID after Prepare")
+	}
 	// No git work done during Prepare.
 	if gitOps.commitCalled || gitOps.stageAllCalled {
 		t.Error("Prepare performed git work; it must only position the workflow")
