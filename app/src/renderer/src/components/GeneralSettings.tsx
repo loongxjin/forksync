@@ -6,6 +6,7 @@ import { IDEConfig } from '@/components/IDEConfig'
 import { useTranslation } from 'react-i18next'
 import { Moon, Sun, Monitor } from 'lucide-react'
 import { useDebouncedConfig } from '@/hooks/useDebouncedConfig'
+import { engineApi } from '@/lib/api'
 
 /** A simple toggle switch component */
 
@@ -26,7 +27,7 @@ export function GeneralSettings(): JSX.Element {
   const handleAutoLaunch = async (val: boolean): Promise<void> => {
     await updateConfig('sync.auto_launch', String(val))
     // Also update OS login item
-    await window.api.setAutoLaunch(val)
+    await engineApi.setAutoLaunch(val)
   }
 
   const isLoading = configLoading || !engineConfig

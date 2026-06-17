@@ -381,7 +381,12 @@ export function HomePage(): JSX.Element {
   const handleRetryCommit = useCallback(async (repoName: string) => {
     setLocalLoading((prev) => ({ ...prev, [repoName]: true }))
     try {
-      const res = await engineApi.resolve(repoName, { accept: true, retry: true })
+      // Route through resolveAccept (the accept-commit endpoint), not
+      // resolve({accept:true}). resolve()'s opts has no `accept` field, so
+      // {accept:true} was silently dropped and the call landed in agent mode
+      // (mode = opts.prepare ? 'prepare' : 'agent'), re-running the agent
+      // instead of retrying the commit.
+      const res = await engineApi.resolveAccept(repoName)
       if (!res.success) {
         showToast?.(res.error ?? 'Retry commit failed', 'error')
       } else {
@@ -496,7 +501,7 @@ export function HomePage(): JSX.Element {
       const path = (file as File & { path?: string }).path
       if (!path) continue
       try {
-        const isGit = await window.api.isGitRepo(path)
+        const isGit = await engineApi.isGitRepo(path)
         if (isGit) {
           await addRepo(path)
         } else {
@@ -609,7 +614,7 @@ export function HomePage(): JSX.Element {
                         resolveResult={resolveResults[repo.name] ?? null}
                         actions={{
                           onResolveWithAgent: () => handleResolve(repo),
-                          onOpenIDE: () => window.api.ideOpen(repo.path, 'default'),
+                          onOpenIDE: () => engineApi.ideOpen(repo.path, 'default'),
                           onAbort: () => handleReject(repo.name),
                           onAccept: () => handleAccept(repo.name),
                           onReject: () => handleReject(repo.name),
