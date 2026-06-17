@@ -11,8 +11,6 @@ import (
 	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
-const defaultSessionTTL = 24 * time.Hour
-
 // Manager manages agent sessions for all repositories.
 // It provides the high-level API that the rest of the codebase uses.
 type Manager struct {
@@ -20,7 +18,6 @@ type Manager struct {
 	provider agent.AgentProvider
 	mu       sync.Mutex
 	active   map[string]*agent.Session // in-memory cache: repoID → session
-	ttl      time.Duration
 }
 
 // NewManager creates a new session manager.
@@ -29,7 +26,6 @@ func NewManager(store *SessionStore, provider agent.AgentProvider) *Manager {
 		store:    store,
 		provider: provider,
 		active:   make(map[string]*agent.Session),
-		ttl:      defaultSessionTTL,
 	}
 }
 
@@ -54,14 +50,10 @@ func (m *Manager) SetProvider(p agent.AgentProvider) {
 	m.provider = p
 }
 
-// SetTTL configures the session expiration duration.
-func (m *Manager) SetTTL(d time.Duration) {
-	m.ttl = d
-}
-
 // GetOrCreate returns an active session for the given repository.
 // If an active session exists (in memory or on disk), it is reused.
-// If the session is expired, a new one is created.
+// If the user switched agent, the stale record is discarded and a new
+// session is created with the current provider.
 func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*agent.Session, error) {
 	// 1. Check in-memory cache
 	m.mu.Lock()
@@ -71,31 +63,26 @@ func (m *Manager) GetOrCreate(ctx context.Context, repoID, repoPath string) (*ag
 	}
 	m.mu.Unlock()
 
-	// 2. Check disk store
+	// 2. Check disk store — reuse an active record whose agent still matches
+	// the current provider. If the user switched agent, the cached session is
+	// for the wrong CLI: drop it and create a fresh one below.
 	rec, err := m.store.Load(repoID)
-	if err == nil && rec.Status == string(types.SessionStatusActive) {
-		// If the user switched preferred agent, the cached session is stale.
-		// Invalidate it so a new session is created with the current provider.
-		if rec.AgentName != m.provider.Name() {
-			logger.Debug("session: cached session agent mismatch, invalidating",
-				"repo", repoID, "cached", rec.AgentName, "current", m.provider.Name())
-			_ = m.store.UpdateStatus(repoID, string(types.SessionStatusExpired))
-		} else if time.Since(rec.LastUsedAt) < m.ttl {
-			sess := &agent.Session{
-				ID:        rec.SessionID,
-				Provider:  rec.AgentName,
-				RepoPath:  rec.RepoPath,
-				StartedAt: rec.CreatedAt,
-			}
-			m.mu.Lock()
-			m.active[repoID] = sess
-			m.mu.Unlock()
-			return sess, nil
+	if err == nil && rec.Status == string(types.SessionStatusActive) && rec.AgentName == m.provider.Name() {
+		sess := &agent.Session{
+			ID:        rec.SessionID,
+			Provider:  rec.AgentName,
+			RepoPath:  rec.RepoPath,
+			StartedAt: rec.CreatedAt,
 		}
-		// Expired — mark it
-		if err := m.store.UpdateStatus(repoID, string(types.SessionStatusExpired)); err != nil {
-			logger.Warn("session: failed to mark expired", "repo", repoID, "error", err)
-		}
+		m.mu.Lock()
+		m.active[repoID] = sess
+		m.mu.Unlock()
+		return sess, nil
+	}
+	if err == nil && rec.AgentName != m.provider.Name() {
+		logger.Debug("session: cached session agent mismatch, discarding",
+			"repo", repoID, "cached", rec.AgentName, "current", m.provider.Name())
+		_ = m.store.Delete(repoID)
 	}
 
 	// 3. Create new session
@@ -303,9 +290,9 @@ func (m *Manager) ResetSession(_ context.Context, repoID string) (bool, error) {
 	return hadActive || hadDisk, nil
 }
 
-// CleanupExpired removes expired and failed session records.
-func (m *Manager) CleanupExpired() (int, error) {
-	return m.store.CleanupExpired()
+// CleanupFailed removes failed session records.
+func (m *Manager) CleanupFailed() (int, error) {
+	return m.store.CleanupFailed()
 }
 
 // ListSessions returns all persisted session records.
