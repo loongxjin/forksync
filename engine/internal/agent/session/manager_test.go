@@ -79,34 +79,6 @@ func TestManager_GetOrCreate_ExistingSession(t *testing.T) {
 	}
 }
 
-func TestManager_GetOrCreate_ExpiredSession(t *testing.T) {
-	tmpDir := t.TempDir()
-	store := NewSessionStore(tmpDir)
-	provider := &mockProvider{}
-
-	// Pre-save an expired session
-	_ = store.Save(&SessionRecord{
-		RepoID:     "repo-1",
-		RepoPath:   "/path/to/repo",
-		AgentName:  "mock",
-		SessionID:  "old-sess",
-		CreatedAt:  time.Now().Add(-48 * time.Hour),
-		LastUsedAt: time.Now().Add(-48 * time.Hour),
-		Status:     "active",
-	})
-
-	mgr := NewManager(store, provider)
-
-	sess, err := mgr.GetOrCreate(context.Background(), "repo-1", "/path/to/repo")
-	if err != nil {
-		t.Fatalf("GetOrCreate: %v", err)
-	}
-	// Should create a new session since the old one is expired (> 24h)
-	if sess.ID == "old-sess" {
-		t.Error("should not reuse expired session")
-	}
-}
-
 func TestManager_ResolveConflicts(t *testing.T) {
 	tmpDir := t.TempDir()
 	store := NewSessionStore(tmpDir)
@@ -185,23 +157,22 @@ func TestManager_CloseAll(t *testing.T) {
 	}
 }
 
-func TestManager_CleanupExpired(t *testing.T) {
+func TestManager_CleanupFailed(t *testing.T) {
 	tmpDir := t.TempDir()
 	store := NewSessionStore(tmpDir)
 	provider := &mockProvider{}
 
 	// Save some sessions with different statuses
 	_ = store.Save(&SessionRecord{RepoID: "r1", Status: "active"})
-	_ = store.Save(&SessionRecord{RepoID: "r2", Status: "expired"})
-	_ = store.Save(&SessionRecord{RepoID: "r3", Status: "failed"})
+	_ = store.Save(&SessionRecord{RepoID: "r2", Status: "failed"})
 
 	mgr := NewManager(store, provider)
-	cleaned, err := mgr.CleanupExpired()
+	cleaned, err := mgr.CleanupFailed()
 	if err != nil {
-		t.Fatalf("CleanupExpired: %v", err)
+		t.Fatalf("CleanupFailed: %v", err)
 	}
-	if cleaned != 2 {
-		t.Errorf("cleaned = %d; want 2", cleaned)
+	if cleaned != 1 {
+		t.Errorf("cleaned = %d; want 1", cleaned)
 	}
 }
 
@@ -220,7 +191,7 @@ func TestManager_ListSessions(t *testing.T) {
 		RepoID:    "r2",
 		AgentName: "mock",
 		SessionID: "s2",
-		Status:    "expired",
+		Status:    "failed",
 	})
 
 	mgr := NewManager(store, provider)

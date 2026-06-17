@@ -103,7 +103,7 @@ func TestSessionStore_ListAll(t *testing.T) {
 	records := []*SessionRecord{
 		{RepoID: "repo-1", AgentName: "claude", SessionID: "sess-1", Status: "active"},
 		{RepoID: "repo-2", AgentName: "opencode", SessionID: "sess-2", Status: "active"},
-		{RepoID: "repo-3", AgentName: "codex", SessionID: "sess-3", Status: "expired"},
+		{RepoID: "repo-3", AgentName: "codex", SessionID: "sess-3", Status: "failed"},
 	}
 
 	for _, r := range records {
@@ -131,13 +131,13 @@ func TestSessionStore_UpdateStatus(t *testing.T) {
 	}
 	_ = s.Save(rec)
 
-	if err := s.UpdateStatus("repo-upd", "expired"); err != nil {
+	if err := s.UpdateStatus("repo-upd", "failed"); err != nil {
 		t.Fatalf("UpdateStatus: %v", err)
 	}
 
 	loaded, _ := s.Load("repo-upd")
-	if loaded.Status != "expired" {
-		t.Errorf("Status = %q; want %q", loaded.Status, "expired")
+	if loaded.Status != "failed" {
+		t.Errorf("Status = %q; want %q", loaded.Status, "failed")
 	}
 }
 
