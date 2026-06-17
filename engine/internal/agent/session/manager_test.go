@@ -14,7 +14,7 @@ type mockProvider struct {
 	resolveFunc      func(ctx context.Context, session *agent.Session, prompt string) (*agent.AgentResult, error)
 }
 
-func (m *mockProvider) Name() string { return "mock" }
+func (m *mockProvider) Name() string      { return "mock" }
 func (m *mockProvider) IsAvailable() bool { return true }
 func (m *mockProvider) StartSession(ctx context.Context, opts agent.SessionOptions) (*agent.Session, error) {
 	if m.startSessionFunc != nil {

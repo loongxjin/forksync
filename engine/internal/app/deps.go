@@ -61,11 +61,11 @@ func BuildDeps() (*Deps, error) {
 	}
 
 	deps := &Deps{
-		Cfg:        cfg,
-		CfgMgr:     cfgMgr,
-		Store:      store,
-		GitOps:     newGitOps(cfg),
-		configDir:  cfgMgr.ConfigDir(),
+		Cfg:         cfg,
+		CfgMgr:      cfgMgr,
+		Store:       store,
+		GitOps:      newGitOps(cfg),
+		configDir:   cfgMgr.ConfigDir(),
 		histCleanup: func() {},
 	}
 
@@ -110,7 +110,7 @@ func BuildDeps() (*Deps, error) {
 	if deps.SessionMgr != nil {
 		syncOpts = append(syncOpts, syncpkg.WithSessionManager(deps.SessionMgr))
 	}
-		deps.Syncer = syncpkg.NewSyncerFromConfig(cfgMgr, store, cfgMgr.ConfigDir(), syncOpts...)
+	deps.Syncer = syncpkg.NewSyncerFromConfig(cfgMgr, store, cfgMgr.ConfigDir(), syncOpts...)
 
 	// Resolver reuses the same gitOps/store/cfg/sessionMgr.
 	deps.Resolve = respkg.NewResolver(deps.GitOps, store, cfg, cfgMgr, deps.SessionMgr)

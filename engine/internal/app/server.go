@@ -151,9 +151,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 // handleVersion mirrors `forksync version`.
 func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
 	writeOK(w, map[string]string{
-		"version":  version.Version,
-		"commit":   version.Commit,
-		"builtAt":  version.BuildDate,
+		"version": version.Version,
+		"commit":  version.Commit,
+		"builtAt": version.BuildDate,
 	})
 }
 

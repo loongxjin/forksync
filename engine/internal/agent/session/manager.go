@@ -139,8 +139,8 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 		if retryErr != nil {
 			if updateErr := m.store.UpdateStatus(repoID, string(types.SessionStatusFailed)); updateErr != nil {
 				logger.Error("session: failed to mark failed after retry", "repo", repoID, "error", updateErr)
-				}
-				return nil, fmt.Errorf("resume failed (%v); recreate session also failed: %w", err, retryErr)
+			}
+			return nil, fmt.Errorf("resume failed (%v); recreate session also failed: %w", err, retryErr)
 		}
 		// Retry with merged prompt (this is a new session too)
 		prompt = agent.BuildInitialConflictPrompt(conflictFiles, strategy, language)
@@ -148,8 +148,8 @@ func (m *Manager) ResolveConflicts(ctx context.Context, repoID, repoPath string,
 		if err != nil {
 			if updateErr := m.store.UpdateStatus(repoID, string(types.SessionStatusFailed)); updateErr != nil {
 				logger.Error("session: failed to mark failed after retry", "repo", repoID, "error", updateErr)
-				}
-				return result, err
+			}
+			return result, err
 		}
 	}
 
@@ -196,18 +196,18 @@ func (m *Manager) resolveWithOptionalStream(ctx context.Context, sess *agent.Ses
 			Timestamp: time.Now().UTC(),
 		})
 
-			// Try adapter-specific streaming methods via type assertion.
-			// All concrete adapters (ClaudeAdapter, OpenCodeAdapter, CodexAdapter)
-			// implement ResolveConflictsWithStream with the same signature.
-			if p, ok := m.provider.(interface {
-				ResolveConflictsWithStream(context.Context, *agent.Session, string, *agent.StreamWriter) (*agent.AgentResult, error)
-			}); ok {
-				logger.Debug("[TRACE] session: adapter supports streaming, calling ResolveConflictsWithStream", "provider", m.provider.Name())
-				result, err := p.ResolveConflictsWithStream(ctx, sess, prompt, sw)
-				logger.Debug("[TRACE] session: ResolveConflictsWithStream RETURNED", "provider", m.provider.Name(), "err", err, "success", result != nil && result.Success)
-				return result, err
-			}
-			logger.Warn("[TRACE] session: adapter does NOT support streaming, falling back to non-streaming", "agent", m.provider.Name())
+		// Try adapter-specific streaming methods via type assertion.
+		// All concrete adapters (ClaudeAdapter, OpenCodeAdapter, CodexAdapter)
+		// implement ResolveConflictsWithStream with the same signature.
+		if p, ok := m.provider.(interface {
+			ResolveConflictsWithStream(context.Context, *agent.Session, string, *agent.StreamWriter) (*agent.AgentResult, error)
+		}); ok {
+			logger.Debug("[TRACE] session: adapter supports streaming, calling ResolveConflictsWithStream", "provider", m.provider.Name())
+			result, err := p.ResolveConflictsWithStream(ctx, sess, prompt, sw)
+			logger.Debug("[TRACE] session: ResolveConflictsWithStream RETURNED", "provider", m.provider.Name(), "err", err, "success", result != nil && result.Success)
+			return result, err
+		}
+		logger.Warn("[TRACE] session: adapter does NOT support streaming, falling back to non-streaming", "agent", m.provider.Name())
 	}
 
 	return m.provider.ResolveConflicts(ctx, sess, prompt)

@@ -191,15 +191,15 @@ func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *S
 	}
 
 	summary := extractSummary(output, maxSummaryLength)
-		logger.Debug("[TRACE] baseAdapter: agent process completed", "agent", a.name, "sessionID", sessionID)
-		// NOTE: do NOT send a terminal 'done' event here — see claude.go fix.
-		_ = sw.WriteEvent(StreamEvent{
-			Type:      StreamEventStatePersisted,
-			Timestamp: time.Now().UTC(),
-			Success:   true,
-			Summary:   StripANSI(summary),
-			SessionID: sessionID,
-		})
+	logger.Debug("[TRACE] baseAdapter: agent process completed", "agent", a.name, "sessionID", sessionID)
+	// NOTE: do NOT send a terminal 'done' event here — see claude.go fix.
+	_ = sw.WriteEvent(StreamEvent{
+		Type:      StreamEventStatePersisted,
+		Timestamp: time.Now().UTC(),
+		Success:   true,
+		Summary:   StripANSI(summary),
+		SessionID: sessionID,
+	})
 
 	return &AgentResult{
 		Success:   true,

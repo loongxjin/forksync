@@ -278,7 +278,7 @@ func (s *Server) runResolveWithAgent(ctx context.Context, r types.Repo, req reso
 		}
 		return &resolveOutcome{
 			data: types.ResolveData{
-				RepoID: r.ID,
+				RepoID:      r.ID,
 				AgentResult: agentResultToTypes(res.AgentResult),
 			},
 			repo: r,

@@ -38,7 +38,7 @@ func TestBuildResolveStreamWriter_SinkOnlyWhenDiskFails(t *testing.T) {
 	var got []agent.StreamEvent
 	sink := func(ev agent.StreamEvent) { got = append(got, ev) }
 
-		sw, cleanup := buildResolveStreamWriter("/dev/null", "repo-y", "sess-y", sink)
+	sw, cleanup := buildResolveStreamWriter("/dev/null", "repo-y", "sess-y", sink)
 	defer cleanup()
 
 	ev := agent.StreamEvent{Type: agent.StreamEventStdout, Data: "hello"}

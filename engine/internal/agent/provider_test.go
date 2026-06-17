@@ -10,11 +10,11 @@ import (
 
 // MockProvider implements AgentProvider for testing.
 type MockProvider struct {
-	NameFunc          func() string
-	IsAvailableFunc   func() bool
-	StartSessionFunc  func(ctx context.Context, opts SessionOptions) (*Session, error)
-	ResolveFunc       func(ctx context.Context, session *Session, prompt string) (*AgentResult, error)
-	EndSessionFunc    func(ctx context.Context, sessionID string) error
+	NameFunc         func() string
+	IsAvailableFunc  func() bool
+	StartSessionFunc func(ctx context.Context, opts SessionOptions) (*Session, error)
+	ResolveFunc      func(ctx context.Context, session *Session, prompt string) (*AgentResult, error)
+	EndSessionFunc   func(ctx context.Context, sessionID string) error
 }
 
 func (m *MockProvider) Name() string {

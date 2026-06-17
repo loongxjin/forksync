@@ -30,14 +30,14 @@ type fakeGitOps struct {
 	mu sync.Mutex
 
 	// inputs / return knobs
-	conflicts     []string                // returned by DetectConflicts
-	fileContent   map[string]string       // returned by GetConflictedContent (per file)
-	contentErr    map[string]error        // optional read error per file
-	diffBytes     []byte                  // returned by Diff
-	stagedFiles   []string                // records every StageFile call
-	stageErr      map[string]error        // optional stage error per file
-	abortCalled   bool
-	commitCalled  bool
+	conflicts      []string          // returned by DetectConflicts
+	fileContent    map[string]string // returned by GetConflictedContent (per file)
+	contentErr     map[string]error  // optional read error per file
+	diffBytes      []byte            // returned by Diff
+	stagedFiles    []string          // records every StageFile call
+	stageErr       map[string]error  // optional stage error per file
+	abortCalled    bool
+	commitCalled   bool
 	stageAllCalled bool
 }
 
@@ -117,11 +117,13 @@ func (f *fakeGitOps) StageAll(_ context.Context, _ string) error {
 }
 
 // The remaining OperationsProvider methods are not exercised by Resolver.
-func (f *fakeGitOps) Fetch(context.Context, types.Repo) error                       { panic("not used") }
-func (f *fakeGitOps) Status(context.Context, types.Repo) (*git.StatusResult, error) { panic("not used") }
-func (f *fakeGitOps) Merge(context.Context, types.Repo) (*git.MergeResult, error)   { panic("not used") }
-func (f *fakeGitOps) ResolveUpstreamRef(context.Context, types.Repo) string         { panic("not used") }
-func (f *fakeGitOps) IsGitRepo(context.Context, string) bool                        { panic("not used") }
+func (f *fakeGitOps) Fetch(context.Context, types.Repo) error { panic("not used") }
+func (f *fakeGitOps) Status(context.Context, types.Repo) (*git.StatusResult, error) {
+	panic("not used")
+}
+func (f *fakeGitOps) Merge(context.Context, types.Repo) (*git.MergeResult, error) { panic("not used") }
+func (f *fakeGitOps) ResolveUpstreamRef(context.Context, types.Repo) string       { panic("not used") }
+func (f *fakeGitOps) IsGitRepo(context.Context, string) bool                      { panic("not used") }
 func (f *fakeGitOps) IsMergingState(context.Context, string) (bool, []string, error) {
 	panic("not used")
 }
@@ -152,8 +154,8 @@ type fakeAgentProvider struct {
 	resolveErr    error
 }
 
-func (p *fakeAgentProvider) Name() string                                         { return "fake" }
-func (p *fakeAgentProvider) IsAvailable() bool                                    { return true }
+func (p *fakeAgentProvider) Name() string      { return "fake" }
+func (p *fakeAgentProvider) IsAvailable() bool { return true }
 func (p *fakeAgentProvider) StartSession(_ context.Context, _ agent.SessionOptions) (*agent.Session, error) {
 	return &agent.Session{ID: "sess-1", Provider: "fake", StartedAt: time.Now(), IsNew: true}, nil
 }

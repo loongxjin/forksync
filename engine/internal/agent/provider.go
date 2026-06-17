@@ -108,7 +108,7 @@ func conflictFileList(files []string, language string) string {
 	return sb.String()
 }
 
-func  mergeStrategyText(strategy string, language string) string {
+func mergeStrategyText(strategy string, language string) string {
 	var sb strings.Builder
 	en := language == "en"
 

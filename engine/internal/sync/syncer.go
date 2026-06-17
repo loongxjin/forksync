@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
@@ -17,22 +18,21 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/repo"
 	respkg "github.com/loongxjin/forksync/engine/internal/resolve"
 	"github.com/loongxjin/forksync/engine/pkg/types"
-	"github.com/google/uuid"
 
 	wfpkg "github.com/loongxjin/forksync/engine/internal/workflow"
 )
 
 const (
-	defaultTimeout         = 5 * time.Minute
-	maxDiffSize            = 100 * 1024 // 100KB limit for diff output
+	defaultTimeout = 5 * time.Minute
+	maxDiffSize    = 100 * 1024 // 100KB limit for diff output
 )
 
 // Syncer handles repository synchronization.
 type Syncer struct {
 	gitOps       git.OperationsProvider
 	store        repo.Store
-	cfgProvider  config.Provider  // live config, refreshed each sync via refreshConfig
-	cfgSnapshot  *config.Config   // snapshot taken at sync start; use config() to access
+	cfgProvider  config.Provider // live config, refreshed each sync via refreshConfig
+	cfgSnapshot  *config.Config  // snapshot taken at sync start; use config() to access
 	notifier     *notify.Notifier
 	sessionMgr   *session.Manager
 	historyStore *history.Store
@@ -336,22 +336,22 @@ func (s *Syncer) failSync(r types.Repo, result *Result, wf *types.SyncWorkflow, 
 // executeSync performs the actual sync: fetch → status check → merge → post-sync commands.
 func (s *Syncer) executeSync(ctx context.Context, r types.Repo, result *Result) *Result {
 	wf := result.Workflow
-		// Pick up config changes made via the settings UI since the server started.
-		s.refreshConfig()
-	
-		// Set timeout — use agent timeout if auto-resolve is configured,
+	// Pick up config changes made via the settings UI since the server started.
+	s.refreshConfig()
+
+	// Set timeout — use agent timeout if auto-resolve is configured,
 	// otherwise the default 5 minutes may SIGKILL long-running agents.
 	timeout := defaultTimeout
 	if s.shouldUseAgentResolve() {
 		timeout = config.AgentTimeout(s.config())
 	}
-		logger.Info("sync: executeSync starting",
-			"repo", r.Name,
-			"timeout", timeout,
-			"agent_resolve", s.shouldUseAgentResolve(),
-			"conflict_strategy", s.config().Agent.ConflictStrategy,
-			"sessionMgr_nil", s.sessionMgr == nil,
-		)
+	logger.Info("sync: executeSync starting",
+		"repo", r.Name,
+		"timeout", timeout,
+		"agent_resolve", s.shouldUseAgentResolve(),
+		"conflict_strategy", s.config().Agent.ConflictStrategy,
+		"sessionMgr_nil", s.sessionMgr == nil,
+	)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -464,8 +464,8 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 	wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusRunning, "")
 	s.saveWorkflow(r, wf)
 
-		// Determine auto-resolve strategy from global config
-		autoAgentResolve := s.config().Agent.ConflictStrategy == types.StrategyAgentResolve
+	// Determine auto-resolve strategy from global config
+	autoAgentResolve := s.config().Agent.ConflictStrategy == types.StrategyAgentResolve
 
 	logger.Info("sync: handleMergeConflicts strategy decision",
 		"repo", r.Name,
@@ -511,10 +511,10 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 			s.finalizeResult(result)
 			return result
 		}
-			if pending != nil {
-				// Agent resolved but needs confirmation.
-				wfpkg.TransitionAgentResolved(wf, pending.Agent)
-				result.Status = string(types.RepoStatusResolved)
+		if pending != nil {
+			// Agent resolved but needs confirmation.
+			wfpkg.TransitionAgentResolved(wf, pending.Agent)
+			result.Status = string(types.RepoStatusResolved)
 			result.AgentUsed = pending.Agent
 			result.AutoResolved = len(pending.Files)
 			result.PendingConfirm = pending.Files
@@ -533,30 +533,30 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 			return result
 		}
 		// Agent failed. Roll the merge back via the shared Reject path so
-			// the repo is not left stuck mid-merge (MERGE_HEAD present, unmerged
-			// index entries) across scheduler ticks — same path the interactive
-			// resolve uses, instead of the old inline AbortMerge.
-			wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusFailed, "agent failed to resolve conflicts")
-			wfpkg.MarkWorkflowDone(wf, types.WorkflowFailed)
-			resolver := respkg.NewResolver(s.gitOps, s.store, s.config(), nil, s.sessionMgr)
-			if _, rejectErr := resolver.Reject(ctx, r); rejectErr != nil {
-				logger.Warn("sync: reject after agent failure", "repo", r.Name, "error", rejectErr)
-			}
-			result.Status = string(types.RepoStatusSyncNeeded)
-			// Reject clears ErrorMessage; restore a useful one for the UI.
-			s.updateRepoStatus(r.ID, types.RepoStatusSyncNeeded, "agent failed; merge rolled back")
+		// the repo is not left stuck mid-merge (MERGE_HEAD present, unmerged
+		// index entries) across scheduler ticks — same path the interactive
+		// resolve uses, instead of the old inline AbortMerge.
+		wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusFailed, "agent failed to resolve conflicts")
+		wfpkg.MarkWorkflowDone(wf, types.WorkflowFailed)
+		resolver := respkg.NewResolver(s.gitOps, s.store, s.config(), nil, s.sessionMgr)
+		if _, rejectErr := resolver.Reject(ctx, r); rejectErr != nil {
+			logger.Warn("sync: reject after agent failure", "repo", r.Name, "error", rejectErr)
+		}
+		result.Status = string(types.RepoStatusSyncNeeded)
+		// Reject clears ErrorMessage; restore a useful one for the UI.
+		s.updateRepoStatus(r.ID, types.RepoStatusSyncNeeded, "agent failed; merge rolled back")
 		s.saveWorkflow(r, wf)
 		s.notifyResult(r.Name, result)
 		s.finalizeResult(result)
 		return result
 	}
 
-		// Manual resolve path: pause at resolve_strategy
-		logger.Info("sync: entering MANUAL resolve path (repo left in waiting state)",
-			"repo", r.Name,
-			"conflict_strategy", s.config().Agent.ConflictStrategy,
-			"sessionMgr_nil", s.sessionMgr == nil,
-		)
+	// Manual resolve path: pause at resolve_strategy
+	logger.Info("sync: entering MANUAL resolve path (repo left in waiting state)",
+		"repo", r.Name,
+		"conflict_strategy", s.config().Agent.ConflictStrategy,
+		"sessionMgr_nil", s.sessionMgr == nil,
+	)
 	wfpkg.AdvanceStep(wf, types.StepResolveStrategy, types.StepStatusWaiting, "")
 	wfpkg.MarkStepSkipped(wf, types.StepAgentResolve)
 	wfpkg.MarkStepSkipped(wf, types.StepAcceptChanges)
@@ -593,10 +593,10 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	logger.Info("sync: tryAgentResolve starting",
 		"repo", r.Name,
 		"conflicts", len(conflictPaths),
-			"provider", s.sessionMgr.ProviderName(),
-			"conflict_strategy", s.config().Agent.ConflictStrategy,
-			"confirm_before_commit", s.config().Agent.ConfirmBeforeCommit,
-		)
+		"provider", s.sessionMgr.ProviderName(),
+		"conflict_strategy", s.config().Agent.ConflictStrategy,
+		"confirm_before_commit", s.config().Agent.ConfirmBeforeCommit,
+	)
 
 	// Set up log writer for auto-sync background runs so users can replay later.
 	// Uses the shared agent.NewResolveLogWriter (same disk-log setup as the
@@ -652,7 +652,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	//    unnecessary and will be removed.
 
 	// Check if auto-confirm is enabled
-		autoConfirm := !s.config().Agent.ConfirmBeforeCommit
+	autoConfirm := !s.config().Agent.ConfirmBeforeCommit
 
 	if !autoConfirm {
 		logger.Info("sync: tryAgentResolve awaiting user confirmation",

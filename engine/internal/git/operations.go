@@ -11,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loongxjin/forksync/engine/internal/logger"
-	"github.com/loongxjin/forksync/engine/pkg/types"
 	git "github.com/go-git/go-git/v5"
 	gitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	gitTransport "github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/loongxjin/forksync/engine/internal/logger"
+	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
 // errStop is a sentinel error used to break out of iterator ForEach loops.
@@ -101,10 +101,10 @@ func (o *Operations) runGit(ctx context.Context, repoPath string, args ...string
 	fullArgs := append([]string{"-C", repoPath}, args...)
 	cmd := exec.CommandContext(ctx, "git", fullArgs...)
 	cmd.Env = o.proxyEnv()
-		output, err := cmd.Output()
-		elapsed := time.Since(start)
-		if err != nil {
-			logger.Warn("git command failed",
+	output, err := cmd.Output()
+	elapsed := time.Since(start)
+	if err != nil {
+		logger.Warn("git command failed",
 			"args", strings.Join(fullArgs, " "),
 			"elapsed", elapsed,
 			"error", err,
@@ -124,10 +124,10 @@ func (o *Operations) runGitCombined(ctx context.Context, repoPath string, args .
 	fullArgs := append([]string{"-C", repoPath}, args...)
 	cmd := exec.CommandContext(ctx, "git", fullArgs...)
 	cmd.Env = o.proxyEnv()
-		output, err := cmd.CombinedOutput()
-		elapsed := time.Since(start)
-		if err != nil {
-			logger.Warn("git command failed",
+	output, err := cmd.CombinedOutput()
+	elapsed := time.Since(start)
+	if err != nil {
+		logger.Warn("git command failed",
 			"args", strings.Join(fullArgs, " "),
 			"elapsed", elapsed,
 			"output", string(output),
@@ -505,7 +505,7 @@ func (o *Operations) mergeCLI(ctx context.Context, repo types.Repo) (*MergeResul
 			// Filter out files that have been manually resolved but not yet staged.
 			// Auto-stage them so they don't appear as unresolved conflicts.
 			stillConflicted := o.FilterResolvedFiles(ctx, repo.Path, conflicts)
-				logger.Info("git: mergeCLI after FilterResolvedFiles",
+			logger.Info("git: mergeCLI after FilterResolvedFiles",
 				"repo", repo.Name,
 				"still_conflicted", stillConflicted,
 				"auto_staged_count", len(conflicts)-len(stillConflicted),
