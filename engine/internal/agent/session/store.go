@@ -174,8 +174,8 @@ func (s *SessionStore) ListAll() ([]*SessionRecord, error) {
 	return records, nil
 }
 
-// CleanupExpired removes all session files with status "expired" or "failed".
-func (s *SessionStore) CleanupExpired() (int, error) {
+// CleanupFailed removes all session files with status "failed".
+func (s *SessionStore) CleanupFailed() (int, error) {
 	records, err := s.ListAll()
 	if err != nil {
 		return 0, err
@@ -183,7 +183,7 @@ func (s *SessionStore) CleanupExpired() (int, error) {
 
 	cleaned := 0
 	for _, rec := range records {
-		if rec.Status == string(types.SessionStatusExpired) || rec.Status == string(types.SessionStatusFailed) {
+		if rec.Status == string(types.SessionStatusFailed) {
 			if err := s.Delete(rec.RepoID); err == nil {
 				cleaned++
 			}
