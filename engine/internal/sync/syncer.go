@@ -478,11 +478,21 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 			// History recorded when user accepts the resolution
 			return result
 		}
-		// Agent failed
+		// Agent failed. Roll the merge back so the repo is not left stuck
+		// mid-merge (MERGE_HEAD present, unmerged index entries) across scheduler
+		// ticks — matching the interactive resolve path's defer-Reject safety.
+		// Status becomes SyncNeeded (rolled back, ready to retry) rather than
+		// Conflict: the working tree no longer carries conflict markers after
+		// the abort, so Conflict would be misleading. result.ConflictFiles
+		// (set at the top of handleMergeConflicts from mergeResult.Conflicts) is
+		// preserved so the UI can still show what would conflict on retry.
 		wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusFailed, "agent failed to resolve conflicts")
 		wfpkg.MarkWorkflowDone(wf, types.WorkflowFailed)
-		result.Status = string(types.RepoStatusConflict)
-		s.updateRepoStatus(r.ID, types.RepoStatusConflict, "")
+		if abortErr := s.gitOps.AbortMerge(ctx, r.Path); abortErr != nil {
+			logger.Warn("sync: abort merge after agent failure", "repo", r.Name, "error", abortErr)
+		}
+		result.Status = string(types.RepoStatusSyncNeeded)
+		s.updateRepoStatus(r.ID, types.RepoStatusSyncNeeded, "agent failed; merge rolled back")
 		s.saveWorkflow(r, wf)
 		s.notifyResult(r.Name, result)
 		s.finalizeResult(result)
