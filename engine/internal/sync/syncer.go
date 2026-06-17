@@ -436,7 +436,13 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 		wfpkg.SetResolveSessionID(wf, uuid.New().String())
 		s.saveWorkflow(r, wf)
 
-		resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts)
+		// Read back the session id we just stamped so tryAgentResolve can name
+		// its log file precisely (passed explicitly rather than re-derived).
+		resolveSessionID := ""
+		if step := wfpkg.FindStep(wf, types.StepAgentResolve); step != nil {
+			resolveSessionID = step.ResolveSessionID
+		}
+		resolved, pending := s.tryAgentResolve(ctx, r, mergeResult.Conflicts, resolveSessionID)
 		if resolved {
 			// Agent resolved and auto-committed
 			wfpkg.AdvanceStep(wf, types.StepAgentResolve, types.StepStatusSuccess,
@@ -543,7 +549,7 @@ func (s *Syncer) handleMergeConflicts(ctx context.Context, r types.Repo, result 
 // and the pending-confirmation hand-off. Workflow/state transitions are owned
 // by handleMergeConflicts (the caller), NOT by the Resolver core — the auto
 // path's state machine is centralized there.
-func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string) (bool, *pendingInfo) {
+func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPaths []string, resolveSessionID string) (bool, *pendingInfo) {
 	if s.sessionMgr == nil {
 		logger.Warn("sync: tryAgentResolve skipped — sessionMgr is nil",
 			"repo", r.Name,
@@ -573,7 +579,7 @@ func (s *Syncer) tryAgentResolve(ctx context.Context, r types.Repo, conflictPath
 	// Set up log writer for auto-sync background runs so users can replay later.
 	// Uses the shared agent.NewResolveLogWriter (same disk-log setup as the
 	// interactive resolve path); no live sink — this is a background job.
-	streamWriter, closeLog := agent.NewResolveLogWriter(s.configDir, r.Name)
+	streamWriter, closeLog := agent.NewResolveLogWriter(s.configDir, r.Name, resolveSessionID)
 	defer closeLog()
 	logger.Debug("sync: agent log writer active", "repo", r.Name)
 

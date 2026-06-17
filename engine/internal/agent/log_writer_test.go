@@ -7,7 +7,7 @@ import (
 // TestNewResolveLogWriter_Success covers the happy path: a usable baseDir
 // yields a non-nil StreamWriter whose events reach disk, plus a safe cleanup.
 func TestNewResolveLogWriter_Success(t *testing.T) {
-	sw, cleanup := NewResolveLogWriter(t.TempDir(), "repo-1")
+	sw, cleanup := NewResolveLogWriter(t.TempDir(), "repo-1", "sess-1")
 	defer cleanup()
 
 	if sw == nil {
@@ -25,7 +25,7 @@ func TestNewResolveLogWriter_Success(t *testing.T) {
 // a cleanup that is safe to call. This is what lets both paths avoid nil-checks.
 func TestNewResolveLogWriter_DiskFailureFallsBackToNop(t *testing.T) {
 	// /dev/null is a file, so MkdirAll(<file>/agent-logs/<repo>) must fail.
-	sw, cleanup := NewResolveLogWriter("/dev/null", "repo-x")
+	sw, cleanup := NewResolveLogWriter("/dev/null", "repo-x", "sess-x")
 	defer cleanup() // must not panic
 
 	if sw == nil {

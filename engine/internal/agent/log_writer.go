@@ -28,16 +28,19 @@ type LogWriter struct {
 	path string
 }
 
-// NewLogWriter creates a new LogWriter for the given repoID.
-// The log file is created under <baseDir>/agent-logs/<repoID>/<YYYYMMDD-HHMMSS>.ndjson.
-func NewLogWriter(baseDir, repoID string) (*LogWriter, error) {
+// NewLogWriter creates a new LogWriter for the given repoID + resolve session.
+// The log file is created under <baseDir>/agent-logs/<repoID>/<sessionID>.ndjson.
+// Naming by session id (instead of a timestamp) means each resolve run gets a
+// stable, unique file the frontend can locate precisely — replacing the old
+// "newest file in the dir" lookup that suffered stale-read pollution across
+// resolves.
+func NewLogWriter(baseDir, repoID, sessionID string) (*LogWriter, error) {
 	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create agent log dir: %w", err)
 	}
 
-	ts := time.Now().Format("20060102-150405")
-	path := filepath.Join(dir, ts+".ndjson")
+	path := filepath.Join(dir, sanitizeRepoID(sessionID)+".ndjson")
 
 	file, err := os.Create(path)
 	if err != nil {
@@ -45,7 +48,7 @@ func NewLogWriter(baseDir, repoID string) (*LogWriter, error) {
 	}
 
 	sw := NewStreamWriter(file)
-	logger.Debug("agent: created log writer", "repo", repoID, "path", path)
+	logger.Debug("agent: created log writer", "repo", repoID, "session", sessionID, "path", path)
 	return &LogWriter{file: file, sw: sw, path: path}, nil
 }
 
@@ -84,13 +87,30 @@ func (nopWriter) Write(p []byte) (int, error) { return len(p), nil }
 // callers (the interactive resolve path in app, the auto-sync path in sync)
 // never have to nil-check. This is the single shared log-writer setup; callers
 // that also want a live sink wrap the result in a MultiStreamWriter themselves.
-func NewResolveLogWriter(baseDir, repoID string) (*StreamWriter, func()) {
-	lw, err := NewLogWriter(baseDir, repoID)
+// sessionID names the log file so the frontend can locate it precisely.
+func NewResolveLogWriter(baseDir, repoID, sessionID string) (*StreamWriter, func()) {
+	lw, err := NewLogWriter(baseDir, repoID, sessionID)
 	if err != nil {
-		logger.Warn("agent: failed to create resolve log writer", "repo", repoID, "error", err)
+		logger.Warn("agent: failed to create resolve log writer", "repo", repoID, "session", sessionID, "error", err)
 		return NewStreamWriter(nopWriter{}), func() {}
 	}
 	return lw.StreamWriter(), func() { _ = lw.Close() }
+}
+
+// LogFile returns the path of the log file for a specific resolve session.
+// This replaces the old LatestLogFile "newest file in the dir" lookup, which
+// could return a stale log from a previous resolve. With session-named files,
+// the exact file is addressed directly.
+func LogFile(baseDir, repoID, sessionID string) (string, error) {
+	dir := filepath.Join(baseDir, agentLogDirName, sanitizeRepoID(repoID))
+	path := filepath.Join(dir, sanitizeRepoID(sessionID)+".ndjson")
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("no log found for repo %s session %s", repoID, sessionID)
+		}
+		return "", fmt.Errorf("stat log file: %w", err)
+	}
+	return path, nil
 }
 
 // LatestLogFile returns the path of the most recent log file for the given repoID.
