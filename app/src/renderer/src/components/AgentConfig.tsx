@@ -3,7 +3,7 @@ import { useAgents } from '@/contexts/AgentContext'
 import { useSettings } from '@/contexts/SettingsContext'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, XCircle, Clock, Trash2 } from 'lucide-react'
+import { CheckCircle2, XCircle, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Toggle } from '@/components/ui/toggle'
@@ -32,9 +32,6 @@ export function AgentConfig(): JSX.Element {
   // Debounced config inputs
   const [agentTimeout, setAgentTimeout, savingTimeout] = useDebouncedConfig(
     'agent.timeout', engineConfig?.Agent?.Timeout || '', updateConfig
-  )
-  const [sessionTTL, setSessionTTL, savingTTL] = useDebouncedConfig(
-    'agent.session_ttl', engineConfig?.Agent?.SessionTTL || '', updateConfig
   )
 
   const [cleaning, setCleaning] = useState(false)
@@ -256,21 +253,6 @@ export function AgentConfig(): JSX.Element {
         <p className="text-xs text-muted-foreground -mt-3">
           {t('settings.agent.autoConfirmDesc')}
         </p>
-
-        {/* Session TTL */}
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">{t('settings.agent.sessionTTL')}</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              value={sessionTTL}
-              onChange={(e) => setSessionTTL(e.target.value)}
-              placeholder={t('settings.agent.sessionTTLPlaceholder')}
-              className="max-w-[200px]"
-              disabled={isLoading}
-            />
-            {savingTTL && <span className="text-xs text-muted-foreground">{t('common.saving')}</span>}
-          </div>
-        </div>
       </div>
 
       <Separator />
@@ -282,7 +264,7 @@ export function AgentConfig(): JSX.Element {
             {t('settings.agent.sessions', { count: sessions.length })}
           </Label>
           <Button variant="outline" size="sm" onClick={handleCleanup} disabled={cleaning}>
-            {cleaning ? t('common.processing') : t('settings.agent.cleanupExpired')}
+            {cleaning ? t('common.processing') : t('settings.agent.cleanupFailed')}
           </Button>
         </div>
         {sessions.length === 0 ? (
@@ -296,7 +278,7 @@ export function AgentConfig(): JSX.Element {
               >
                 <div className="flex items-center gap-2">
                   <span>
-                    {s.status === 'active' ? <CheckCircle2 size={12} className="text-success" /> : s.status === 'expired' ? <Clock size={12} className="text-warning" /> : <XCircle size={12} className="text-muted-foreground/50" />}
+                    {s.status === 'active' ? <CheckCircle2 size={12} className="text-success" /> : <XCircle size={12} className="text-muted-foreground/50" />}
                   </span>
                   <span className="font-medium">{s.agentName}</span>
                   <span className="text-muted-foreground">{s.repoId}</span>

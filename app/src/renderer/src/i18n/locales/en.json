@@ -229,10 +229,8 @@
       "resolveStrategy": "Merge Preference",
       "autoConfirm": "Auto-confirm Agent Results",
       "autoConfirmDesc": "Skip manual confirmation when agent resolves conflicts successfully",
-      "sessionTTL": "Session TTL",
-      "sessionTTLPlaceholder": "e.g. 24h",
       "sessions": "Sessions ({{count}})",
-    "cleanupExpired": "🧹 Cleanup Expired",
+    "cleanupFailed": "🧹 Cleanup Failed",
     "resetSession": "Remove Session",
     "resetConfirm": "Remove agent session for \"{{repoId}}\"?",
     "noSessions": "No active sessions."
