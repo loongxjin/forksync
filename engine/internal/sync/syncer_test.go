@@ -411,3 +411,25 @@ func TestWithSessionManager(t *testing.T) {
 		t.Error("expected nil session manager after WithSessionManager(nil)")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// tryAgentResolve — nil session manager guard
+// ---------------------------------------------------------------------------
+
+// TestTryAgentResolve_NilSessionManager confirms the auto-resolve path short-
+// circuits (returns false, nil) when no session manager is configured, instead
+// of panicking or attempting agent work. This guards the convergence onto
+// Resolver.RunAgentResolve: the nil check stays in tryAgentResolve (the
+// sync-owned shell) before the Resolver core is built.
+func TestTryAgentResolve_NilSessionManager(t *testing.T) {
+	repo := types.Repo{ID: "r1", Name: "demo", Path: "/repo"}
+	s := NewSyncer(newMockStore(repo)) // sessionMgr is nil by default
+
+	resolved, pending := s.tryAgentResolve(context.Background(), repo, []string{"a.go"})
+	if resolved {
+		t.Error("resolved = true, want false (no session manager)")
+	}
+	if pending != nil {
+		t.Errorf("pending = %+v, want nil", pending)
+	}
+}
