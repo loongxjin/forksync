@@ -15,18 +15,18 @@ import (
 
 // IDEInfo mirrors frontend/src/shared/types/ide.ts IDEInfo.
 type IDEInfo struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
 	CLIICommand string `json:"cliCommand"`
-	AppName    string `json:"appName"`
-	Installed  bool   `json:"installed"`
-	OpenMethod string `json:"openMethod"`
-	IsCustom   bool   `json:"isCustom,omitempty"`
+	AppName     string `json:"appName"`
+	Installed   bool   `json:"installed"`
+	OpenMethod  string `json:"openMethod"`
+	IsCustom    bool   `json:"isCustom,omitempty"`
 }
 
 type CustomIDE struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
 	CLIICommand string `json:"cliCommand"`
 }
 
