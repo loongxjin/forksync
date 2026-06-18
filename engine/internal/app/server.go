@@ -45,6 +45,7 @@ type Server struct {
 	deps   *Deps
 	server *http.Server
 	ln     net.Listener
+	mux    *http.ServeMux // routes are registered here; rebuilt-chain reads it
 
 	// token is the random bearer token required on every state-changing
 	// request. It is generated at Start and announced to the parent process so
@@ -71,12 +72,16 @@ func NewServer(addr string, deps *Deps) (*Server, error) {
 	s := &Server{
 		deps: deps,
 		ln:   ln,
+		mux:  mux,
 		server: &http.Server{
 			// maxBodyBytes caps request bodies for all routes. The engine only
 			// accepts small JSON payloads (paths, config values, post-sync
 			// commands) — 1 MiB is far beyond any legitimate request and stops
 			// a malicious/buggy client from streaming an unbounded body.
-			Handler:           limitBody(mux, maxBodyBytes),
+			//
+			// The chain built here uses the empty token placeholder (a
+			// pass-through); Start rebuilds it once s.token is generated.
+			Handler:           authToken(limitBody(mux, maxBodyBytes), ""),
 			ReadHeaderTimeout: 10 * time.Second,
 		},
 	}
@@ -132,6 +137,11 @@ func (s *Server) Start(ctx context.Context) error {
 	// right after the address. The parent (Electron) reads both lines off stdout
 	// and injects the token into every engine request. The renderer never sees it.
 	s.token = generateToken()
+
+	// Rebuild the handler chain now that s.token is set. The chain built in
+	// NewServer used the empty placeholder; authToken with an empty token is a
+	// pass-through, so this swap is what actually enforces auth.
+	s.server.Handler = authToken(limitBody(s.mux, maxBodyBytes), s.token)
 
 	// Announce the address + token to the parent process.
 	fmt.Fprintf(os.Stdout, "%s%s\n", addrReadyPrefix, s.Addr())
