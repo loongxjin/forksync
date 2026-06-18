@@ -1,0 +1,193 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"path/filepath"
+
+	"github.com/loongxjin/forksync/engine/core/agent"
+	"github.com/loongxjin/forksync/engine/core/agent/session"
+	"github.com/loongxjin/forksync/engine/core/config"
+	"github.com/loongxjin/forksync/engine/core/eventbus"
+	"github.com/loongxjin/forksync/engine/core/git"
+	"github.com/loongxjin/forksync/engine/core/history"
+	"github.com/loongxjin/forksync/engine/core/logger"
+	"github.com/loongxjin/forksync/engine/core/repo"
+	respkg "github.com/loongxjin/forksync/engine/core/resolve"
+	sched "github.com/loongxjin/forksync/engine/core/scheduler"
+	syncpkg "github.com/loongxjin/forksync/engine/core/sync"
+	"github.com/loongxjin/forksync/engine/pkg/types"
+)
+
+// Deps holds the long-lived, shared dependencies constructed once at server
+// startup. Every HTTP handler reads from a single *Deps instance — this is the
+// HTTP-era replacement for cmd/config_helper.go's package-level singletons.
+type Deps struct {
+	Cfg     *config.Config
+	CfgMgr  *config.Manager
+	Store   repo.Store
+	GitOps  git.OperationsProvider
+	Syncer  *syncpkg.Syncer
+	Resolve *respkg.Resolver
+
+	// Bus broadcasts repo/history state changes to /stream/events subscribers,
+	// letting the renderer stop polling. Published by the eventsStore wrapper
+	// (Store) and by the history store on insert/update/cleanup.
+	Bus *eventbus.Bus
+
+	// rawStore is the unwrapped repo store. The GET /status handler uses it
+	// for internal housekeeping (CleanupStaleWorkflows, reconcileConflictStatus)
+	// to avoid feedback: every store.Update inside /status would fire a
+	// repos_changed event, which triggers another /status call on the renderer.
+	rawStore repo.Store
+
+	// HistStore is the long-lived history DB handle. May be nil if init failed.
+	HistStore *history.Store
+	// AgentRegistry is configured with the user's preferred agent.
+	AgentRegistry *agent.Registry
+	// SessionMgr drives agent sessions; nil unless agent_resolve strategy is on.
+	SessionMgr *session.Manager
+
+	// configDir is cached to avoid repeated lookups on ConfigMgr.
+	configDir string
+
+	histCleanup func()
+}
+
+// BuildDeps constructs a Deps instance by loading config, stores, syncer and
+// resolver exactly once. This is the single construction point that replaces
+// the old cmd/getSharedConfig / loadRepoStore / setupSyncer / newGitOps
+// helpers (which lived in cmd/config_helper.go and cmd/serve.go).
+func BuildDeps() (*Deps, error) {
+	cfgMgr := config.NewManager()
+	cfg, err := cfgMgr.Load()
+	if err != nil {
+		// Mirror the old behavior: a missing/broken config is non-fatal; we run
+		// with a nil cfg and the handlers degrade gracefully.
+		logger.Warn("app: config load skipped", "error", err)
+	}
+
+	rawStore := repo.NewJSONStore(cfgMgr.ConfigDir())
+	if err := rawStore.Load(); err != nil {
+		return nil, fmt.Errorf("load repo store: %w", err)
+	}
+
+	// Event bus: publishes repo/history changes to /stream/events. Created
+	// before the store wrapper so every mutation is observable.
+	bus := eventbus.New()
+
+	deps := &Deps{
+		Cfg:         cfg,
+		CfgMgr:      cfgMgr,
+		Store:       wrapStoreWithEvents(rawStore, bus),
+		Bus:         bus,
+		rawStore:    rawStore,
+		GitOps:      newGitOps(cfg),
+		configDir:   cfgMgr.ConfigDir(),
+		histCleanup: func() {},
+	}
+
+	// History store (SQLite). Optional — handlers tolerate nil.
+	if histStore, err := history.NewStore(cfgMgr.ConfigDir()); err == nil {
+		deps.HistStore = histStore
+		deps.histCleanup = func() { histStore.Close() }
+	} else {
+		logger.Warn("app: history store init failed", "error", err)
+	}
+
+	// Agent registry (preferred agent from config, if any).
+	preferred := ""
+	if cfg != nil {
+		preferred = cfg.Agent.Preferred
+	}
+	deps.AgentRegistry = agent.NewRegistry(preferred)
+
+	// Session manager — only when agent_resolve is configured AND an agent is
+	// available (mirrors cmd/serve.go newSessionManager).
+	if cfg != nil && cfg.Agent.ConflictStrategy == types.StrategyAgentResolve {
+		provider, perr := deps.AgentRegistry.GetPreferred()
+		if perr == nil {
+			sessionStore := session.NewSessionStore(deps.SessionsDir())
+			if initErr := sessionStore.Init(); initErr != nil {
+				logger.Error("app: failed to init session store", "error", initErr)
+			} else {
+				deps.SessionMgr = session.NewManager(sessionStore, provider)
+			}
+		} else {
+			logger.Debug("app: no agent available for auto-resolve", "error", perr)
+		}
+	}
+
+	// Syncer with the same option wiring as the old cmd/serve.go setupSyncer.
+	// Note: desktop notifications are surfaced by the Electron layer, so we do
+	// NOT wire a Go-side notifier here (the scheduler receives nil).
+	var syncOpts []syncpkg.Option
+	if bus != nil {
+		syncOpts = append(syncOpts, syncpkg.WithEventBus(bus))
+	}
+	if deps.HistStore != nil {
+		syncOpts = append(syncOpts, syncpkg.WithHistoryStore(deps.HistStore))
+	}
+	if deps.SessionMgr != nil {
+		syncOpts = append(syncOpts, syncpkg.WithSessionManager(deps.SessionMgr))
+	}
+	deps.Syncer = syncpkg.NewSyncerFromConfig(cfgMgr, deps.Store, cfgMgr.ConfigDir(), syncOpts...)
+
+	// Resolver reuses the same gitOps/store/cfg/sessionMgr.
+	deps.Resolve = respkg.NewResolver(deps.GitOps, deps.Store, cfg, cfgMgr, deps.SessionMgr)
+
+	return deps, nil
+}
+
+// Close releases all long-lived resources. Safe to call once at shutdown.
+func (d *Deps) Close() {
+	if d.histCleanup != nil {
+		d.histCleanup()
+	}
+	if d.Bus != nil {
+		d.Bus.Close()
+	}
+}
+
+// RawStore returns the unwrapped repo store. The GET /status handler (and
+// now the Wails App.Status method) uses it to avoid feedback: every
+// store.Update inside a status refresh would fire a repos_changed event,
+// which triggers another status call on the frontend.
+func (d *Deps) RawStore() repo.Store { return d.rawStore }
+
+// ConfigDir returns the ForkSync config directory (~/.forksync).
+func (d *Deps) ConfigDir() string { return d.configDir }
+
+// SessionsDir returns the agent sessions directory under the config dir.
+func (d *Deps) SessionsDir() string {
+	return filepath.Join(d.configDir, "sessions")
+}
+
+// StartScheduler launches the background sync scheduler if sync_on_startup is
+// enabled in config. Returns a stop function (no-op if not started).
+func (d *Deps) StartScheduler(ctx context.Context) (stop func()) {
+	if d.Cfg == nil || !d.Cfg.Sync.SyncOnStartup {
+		return func() {}
+	}
+	scheduler := sched.NewScheduler(d.Syncer, nil, d.Cfg)
+	scheduler.Start(ctx)
+	logger.Info("app: scheduler started")
+	return func() { scheduler.Stop() }
+}
+
+// newGitOps creates a git.Operations instance with proxy support if configured.
+// Mirrors cmd/config_helper.go newGitOps.
+func newGitOps(cfg *config.Config) git.OperationsProvider {
+	if cfg != nil && cfg.Proxy.Enabled && cfg.Proxy.URL != "" {
+		return git.NewOperationsWithProxy(cfg.Proxy.URL)
+	}
+	return git.NewOperations()
+}
+
+// updateRepoWithLog updates the repo in the store and logs any error.
+// Mirrors cmd/config_helper.go updateRepoWithLog.
+func updateRepoWithLog(r types.Repo, store repo.Store, action string) {
+	if updateErr := store.Update(r); updateErr != nil {
+		logger.Error("failed to update repo", "repo", r.Name, "action", action, "error", updateErr)
+	}
+}

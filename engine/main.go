@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/loongxjin/forksync/engine/internal/app"
+	"github.com/loongxjin/forksync/engine/core/app"
 )
 
 func main() {
