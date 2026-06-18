@@ -10,6 +10,8 @@ import { RepoDetailPanel } from '@/components/RepoDetailPanel'
 import { WorkflowSteps } from '@/components/WorkflowSteps'
 import { AgentTerminalDrawer } from '@/components/AgentTerminalDrawer'
 import { DiffDrawer } from '@/components/DiffDrawer'
+import { EmptyState } from '@/components/EmptyState'
+import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -244,15 +246,13 @@ export function HomePage(): JSX.Element {
         </div>
 
         {/* Repo rows */}
-        {loading && repos.length === 0 && (
-          <div className="py-8 text-center text-sm text-muted-foreground">{t('repos.loading')}</div>
-        )}
+        {loading && repos.length === 0 && <LoadingSpinner />}
 
         {!loading && repos.length === 0 && (
-          <div className="py-8 text-center">
-            <p className="text-sm text-muted-foreground">{t('repos.emptyTitle')}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{t('repos.emptyHint')}</p>
-          </div>
+          <EmptyState
+            title={t('repos.emptyTitle')}
+            description={t('repos.emptyHint')}
+          />
         )}
 
         <div className="space-y-2">
