@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Engine crash supervision**: the embedded Go engine is respawned with exponential backoff (500ms→5s, up to 5 attempts) if it crashes after a healthy start. Lifecycle status (starting/ready/reconnecting/down) is broadcast to the renderer via the `engine:status` IPC channel for a reconnect banner.
+- **Local auth token**: the engine generates a random 32-byte (256-bit) bearer token at startup and announces it via `FORKSYNC_TOKEN=` on stdout. The Electron parent injects `Authorization: Bearer <token>` on every request and `?token=` on the resolve-stream WebSocket. `/healthz` and `/version` stay unauthenticated for the startup readiness probe.
+
+### Changed
+- **CSP hardened**: production `connect-src` restricted to `'self'` (the renderer never talks to the engine directly — all traffic is via main IPC), closing a localhost exfiltration channel. `default-src` drops `'unsafe-inline'`. Dev keeps localhost wildcards for Vite HMR.
+
 ## [v0.4.0]
 
 ### Added
