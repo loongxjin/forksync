@@ -987,8 +987,20 @@ func (a *App) Summarize(repoName string, req SummarizeReq) (SummarizeResult, err
 			Summary: record.Summary, SummaryStatus: record.SummaryStatus,
 		}, nil
 	}
-	summary, err := app.GenerateSummary(a.ctx, a.deps.Cfg, a.deps.HistStore, a.deps.Bus, record, r2)
+
+	// Load fresh config so summarization sees the latest settings.
+	cfg := a.deps.Cfg
+	if c, loadErr := a.deps.CfgMgr.Load(); loadErr == nil && c != nil {
+		cfg = c
+	}
+
+	summary, err := app.GenerateSummary(a.ctx, cfg, a.deps.HistStore, a.deps.Bus, record, r2)
 	if err != nil {
+		// If GenerateSummary didn't already set failed status, do it now so the
+		// frontend polling (summaryStatus='generating'|'pending') stops.
+		if record.SummaryStatus != string(types.SummaryStatusFailed) {
+			_ = a.deps.HistStore.UpdateSummary(record.ID, "", string(types.SummaryStatusFailed))
+		}
 		return SummarizeResult{}, err
 	}
 	return SummarizeResult{
