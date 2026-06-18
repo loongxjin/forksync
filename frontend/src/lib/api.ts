@@ -1,13 +1,12 @@
 /**
  * Renderer-side API wrapper — Wails edition.
  *
- * Previously communicated via Electron contextBridge (window.api). Now all Go
- * engine methods are imported from the auto-generated Wails bindings in
+ * All Go engine methods are bound via auto-generated Wails bindings in
  * wailsjs/go/main/App. Streaming (resolve, events) is bridged via
- * Wails Events (EventsOn/EventsEmit) from wailsjs/runtime/runtime.
+ * Wails Events (EventsOn/EventsEmit).
  *
- * The exported engineApi object preserves the same interface so existing
- * components and hooks work without changes.
+ * Wails bindings return plain data (throw on error). We wrap them in
+ * the ApiResponse<T> shape the rest of the app expects.
  */
 
 import type {
@@ -33,7 +32,21 @@ import type {
 } from '../shared/types/engine'
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '../shared/types/ide'
 import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime'
-import { Status as wailsStatus, Greet } from '../wailsjs/go/main/App'
+import {
+  Status as wailsStatus,
+  SyncAll as wailsSyncAll,
+  SyncRepo as wailsSyncRepo,
+  Scan as wailsScan,
+  AddRepo as wailsAddRepo,
+  RemoveRepo as wailsRemoveRepo,
+  Resolve as wailsResolve,
+  RepoDiff as wailsRepoDiff,
+  AgentList as wailsAgentList,
+  History as wailsHistory,
+  ConfigGet as wailsConfigGet,
+  ConfigSet as wailsConfigSet,
+  ReadAgentLog as wailsReadAgentLog,
+} from '../wailsjs/go/main/App'
 
 export interface EngineAPI {
   status(exclude?: string[]): Promise<ApiResponse<StatusData>>
@@ -81,39 +94,63 @@ export interface EngineAPI {
   onEventsTick(callback: (type: string) => void): () => void
 }
 
-// -- Wails-native engine API ------------------------------------------------
+function ok<T>(data: T): ApiResponse<T> {
+  return { success: true, data, error: '' }
+}
+
+function fail<T>(err: unknown): ApiResponse<T> {
+  return { success: false, data: null as unknown as T, error: String(err) }
+}
 
 const engineApi: EngineAPI = {
-  // === Synced methods (implemented as Go bound methods) ===
-
-  async status(exclude?: string[]) {
-    try {
-      const data = await wailsStatus(exclude ?? [])
-      return { success: true, data, error: '' }
-    } catch (err) {
-      return { success: false, data: null as unknown as StatusData, error: String(err) }
-    }
+  async status(exclude) {
+    try { return ok(await wailsStatus(exclude ?? [])) } catch (e) { return fail(e) }
   },
-
-  // === Window controls (Wails runtime) ===
-
-  async syncAll() { return notYet() },
-  async syncRepo(_n: string) { return notYet() },
-  async scan(_d: string) { return notYet() },
-  async add(_p: string) { return notYet() },
-  async remove(_n: string) { return notYet() },
-  async resolve(_n: string) { return notYet() },
-  async resolvePrepare(_n: string) { return notYet() },
-  async resolveAccept(_n: string) { return notYet() },
-  async resolveReject(_n: string) { return notYet() },
-  async agentList() { return notYet() },
-  async agentSessions() { return notYet() },
-  async agentCleanup() { return notYet() },
-  async agentReset(_n: string) { return notYet() },
-  async history() { return notYet() },
-  async historyCleanup() { return notYet() },
+  async syncAll() {
+    try { return ok(await wailsSyncAll()) } catch (e) { return fail(e) }
+  },
+  async syncRepo(name) {
+    try { return ok(await wailsSyncRepo(name)) } catch (e) { return fail(e) }
+  },
+  async scan(dir) {
+    try { return ok(await wailsScan(dir)) } catch (e) { return fail(e) }
+  },
+  async add(path, upstream, branchMapping) {
+    try { return ok(await wailsAddRepo({ path, upstream, branchMapping })) } catch (e) { return fail(e) }
+  },
+  async remove(name) {
+    try { return ok(await wailsRemoveRepo(name)) } catch (e) { return fail(e) }
+  },
+  async resolve(name, opts) {
+    try { return ok(await wailsResolve(name, {
+      mode: opts?.prepare ? 'prepare' : 'agent',
+      agent: opts?.agent ?? '',
+      noConfirm: opts?.noConfirm ?? false,
+      manual: opts?.manual ?? false,
+      retry: opts?.retry ?? false,
+    })) } catch (e) { return fail(e) }
+  },
+  async resolvePrepare(name) {
+    try { return ok(await wailsResolve(name, { mode: 'prepare', agent: '', noConfirm: false, manual: false, retry: false })) } catch (e) { return fail(e) }
+  },
+  async resolveAccept(name) {
+    try { return ok(await wailsResolve(name, { mode: 'accept', agent: '', noConfirm: false, manual: false, retry: false })) } catch (e) { return fail(e) }
+  },
+  async resolveReject(name) {
+    try { return ok(await wailsResolve(name, { mode: 'reject', agent: '', noConfirm: false, manual: false, retry: false })) } catch (e) { return fail(e) }
+  },
+  async agentList() {
+    try { return ok(await wailsAgentList()) } catch (e) { return fail(e) }
+  },
+  async agentSessions() { return fail('not yet migrated') },
+  async agentCleanup() { return fail('not yet migrated') },
+  async agentReset() { return fail('not yet migrated') },
+  async history(repoName, limit) {
+    try { return ok(await wailsHistory(repoName ?? '', limit ?? 20)) } catch (e) { return fail(e) }
+  },
+  async historyCleanup() { return fail('not yet migrated') },
   async openDirectory() { return { canceled: true, error: 'not yet migrated' } },
-  async isGitRepo(_d: string) { return false },
+  async isGitRepo() { return false },
   async setLocale() { return { success: true } },
   async ideDetect() { return [] },
   async ideOpen() { return { success: false, error: 'not yet migrated' } },
@@ -121,36 +158,41 @@ const engineApi: EngineAPI = {
   async ideSetDefault() { return { success: true } },
   async ideAddCustom() { return { success: false, error: 'not yet migrated' } },
   async ideRemoveCustom() { return { success: true } },
-  async configGet() { return notYet() },
-  async configSet() { return notYet() },
-  async postSyncList() { return notYet() },
-  async postSyncAdd() { return notYet() },
-  async postSyncRemove() { return notYet() },
-  async summarize() { return notYet() },
-  async summarizeRetry() { return notYet() },
+  async configGet() {
+    try { return ok(await wailsConfigGet()) } catch (e) { return fail(e) }
+  },
+  async configSet(key, value) {
+    try { return ok(await wailsConfigSet(key, value)) } catch (e) { return fail(e) }
+  },
+  async postSyncList() { return fail('not yet migrated') },
+  async postSyncAdd() { return fail('not yet migrated') },
+  async postSyncRemove() { return fail('not yet migrated') },
+  async summarize() { return fail('not yet migrated') },
+  async summarizeRetry() { return fail('not yet migrated') },
   async setAutoLaunch() { return { success: true } },
-  async repoDiff() { return { success: false, error: 'not yet migrated' } },
-
-  // == Streaming (to be implemented via Wails Events in Stage 3) ==
-
-  resolveStreamStart(_n: string) { /* noop until Stage 3 */ },
+  async repoDiff(name) {
+    try {
+      const result = await wailsRepoDiff(name)
+      return { success: result.Success, diff: result.Diff, error: result.Error }
+    } catch (e) { return { success: false, error: String(e) } }
+  },
+  // Streaming — to be migrated in Stage 3
+  resolveStreamStart() {},
   onResolveStreamTick() { return () => {} },
   onResolveStreamDone() { return () => {} },
   onResolveStreamError() { return () => {} },
-  async readAgentLog() { return { events: [], isRunning: false } },
-  eventsStart() { /* noop — event bridge runs automatically */ },
+  async readAgentLog(repoName, sessionId) {
+    try {
+      const result = await wailsReadAgentLog(repoName, sessionId ?? '')
+      return { events: result.Events, isRunning: result.IsRunning }
+    } catch (e) { return { events: [], isRunning: false } }
+  },
+  eventsStart() {},
   eventsStop() {},
   onEventsTick(callback: (type: string) => void) {
     return EventsOn('engine:event', (type) => callback(type))
   },
 }
 
-/** Stub for methods not yet migrated to Wails bindings. */
-function notYet(): any {
-  return { success: false, data: null, error: 'not yet migrated to Wails' }
-}
-
 export { engineApi }
-
-// Also export window controls for components that use them directly.
 export { WindowMinimise, WindowToggleMaximise, Quit }
