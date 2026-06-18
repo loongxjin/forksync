@@ -122,16 +122,19 @@ func BuildDeps() (*Deps, error) {
 	// Note: desktop notifications are surfaced by the Electron layer, so we do
 	// NOT wire a Go-side notifier here (the scheduler receives nil).
 	var syncOpts []syncpkg.Option
+	if bus != nil {
+		syncOpts = append(syncOpts, syncpkg.WithEventBus(bus))
+	}
 	if deps.HistStore != nil {
 		syncOpts = append(syncOpts, syncpkg.WithHistoryStore(deps.HistStore))
 	}
 	if deps.SessionMgr != nil {
 		syncOpts = append(syncOpts, syncpkg.WithSessionManager(deps.SessionMgr))
 	}
-		deps.Syncer = syncpkg.NewSyncerFromConfig(cfgMgr, deps.Store, cfgMgr.ConfigDir(), syncOpts...)
+	deps.Syncer = syncpkg.NewSyncerFromConfig(cfgMgr, deps.Store, cfgMgr.ConfigDir(), syncOpts...)
 
-		// Resolver reuses the same gitOps/store/cfg/sessionMgr.
-		deps.Resolve = respkg.NewResolver(deps.GitOps, deps.Store, cfg, cfgMgr, deps.SessionMgr)
+	// Resolver reuses the same gitOps/store/cfg/sessionMgr.
+	deps.Resolve = respkg.NewResolver(deps.GitOps, deps.Store, cfg, cfgMgr, deps.SessionMgr)
 
 	return deps, nil
 }
