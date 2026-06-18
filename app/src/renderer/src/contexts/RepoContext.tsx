@@ -207,7 +207,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     } finally {
       syncingAllRef.current = false
     }
-  }, [state, refresh, engineConfig, showToast, startSyncPoll, stopSyncPoll])
+  }, [state, refresh, engineConfig, showToast])
 
   // Track syncing repos to prevent duplicate sync requests
   const syncingReposRef = useRef<Set<string>>(new Set())
