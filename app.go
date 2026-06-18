@@ -463,16 +463,16 @@ func resolveAgentProvider(cfg *config.Config, requested string) (agent.AgentProv
 
 // ResolveStreamStart kicks off the agent resolve for a repo in a background
 // goroutine, emitting Wails Events as the agent produces output:
-//   - "resolve:tick:<name>" — agent is alive, frontend should re-read disk log
-//   - "resolve:done:<name>" — resolve finished (carries ResolveData payload)
-//   - "resolve:error:<name>" — resolve failed (carries error string)
+//   - "resolve:tick" — agent alive (name as payload), frontend re-reads disk log
+//   - "resolve:done" — resolve finished (name + ResolveData as payload)
+//   - "resolve:error" — resolve failed (name + error string as payload)
 //
 // The disk NDJSON log remains the single source of truth for event content;
 // the Wails Events are push notifications that trigger the frontend to
 // re-read the disk log (same architecture as the old WebSocket path).
 func (a *App) ResolveStreamStart(name string, agentName string, noConfirm bool) {
 	if a.deps == nil {
-		runtime.EventsEmit(a.ctx, "resolve:error:"+name, "engine not ready")
+		runtime.EventsEmit(a.ctx, "resolve:error", name, "engine not ready")
 		return
 	}
 	go a.runResolveStream(name, agentName, noConfirm)
@@ -481,23 +481,23 @@ func (a *App) ResolveStreamStart(name string, agentName string, noConfirm bool) 
 func (a *App) runResolveStream(name, agentName string, noConfirm bool) {
 	r2, ok := a.deps.Store.GetByName(name)
 	if !ok {
-		runtime.EventsEmit(a.ctx, "resolve:error:"+name, fmt.Sprintf("repository %q not found", name))
+		runtime.EventsEmit(a.ctx, "resolve:error", name, fmt.Sprintf("repository %q not found", name))
 		return
 	}
 	if !isConflictRelated(r2.Status) {
-		runtime.EventsEmit(a.ctx, "resolve:done:"+name, types.ResolveData{RepoID: r2.ID})
+		runtime.EventsEmit(a.ctx, "resolve:done", name, types.ResolveData{RepoID: r2.ID})
 		return
 	}
 	paths := a.deps.GitOps.DetectConflicts(a.ctx, r2.Path)
 	if len(paths) == 0 {
-		runtime.EventsEmit(a.ctx, "resolve:done:"+name, types.ResolveData{RepoID: r2.ID})
+		runtime.EventsEmit(a.ctx, "resolve:done", name, types.ResolveData{RepoID: r2.ID})
 		return
 	}
 
 	cfg := a.deps.Cfg
 	provider, err := resolveAgentProvider(cfg, agentName)
 	if err != nil {
-		runtime.EventsEmit(a.ctx, "resolve:error:"+name, err.Error())
+		runtime.EventsEmit(a.ctx, "resolve:error", name, err.Error())
 		return
 	}
 	sessStore := session.NewSessionStore(a.cfgMgr.ConfigDir() + "/sessions")
@@ -508,7 +508,7 @@ func (a *App) runResolveStream(name, agentName string, noConfirm bool) {
 
 	// Emit tick on every agent event so the frontend re-reads the disk log.
 	tickSink := func(_ agent.StreamEvent) {
-		runtime.EventsEmit(a.ctx, "resolve:tick:"+name, name)
+		runtime.EventsEmit(a.ctx, "resolve:tick", name)
 	}
 
 	// Build stream writer that fans out to disk log + tick sink.
@@ -536,7 +536,7 @@ func (a *App) runResolveStream(name, agentName string, noConfirm bool) {
 				Timestamp: time.Now().UTC(), Success: false,
 			})
 		}
-		runtime.EventsEmit(a.ctx, "resolve:error:"+name, err.Error())
+		runtime.EventsEmit(a.ctx, "resolve:error", name, err.Error())
 		return
 	}
 
@@ -556,7 +556,7 @@ func (a *App) runResolveStream(name, agentName string, noConfirm bool) {
 				Success: false, Timestamp: time.Now().UTC(),
 			})
 		}
-		runtime.EventsEmit(a.ctx, "resolve:done:"+name, data)
+		runtime.EventsEmit(a.ctx, "resolve:done", name, data)
 		return
 	}
 
@@ -587,7 +587,7 @@ func (a *App) runResolveStream(name, agentName string, noConfirm bool) {
 		}
 	}
 
-	runtime.EventsEmit(a.ctx, "resolve:done:"+name, data)
+	runtime.EventsEmit(a.ctx, "resolve:done", name, data)
 }
 
 // findAgentResolveStep extracts the resolveSessionID from the workflow.
@@ -753,12 +753,22 @@ func (a *App) History(repoName string, limit int) (types.HistoryData, error) {
 	return types.HistoryData{Records: result}, nil
 }
 
-// ConfigResult mirrors the engine config for the frontend.
+// ConfigGet returns the current engine config, reading from disk each time
+// so that ConfigSet changes are immediately visible.
 func (a *App) ConfigGet() (config.Config, error) {
-	if a.deps == nil || a.deps.Cfg == nil {
+	if a.deps == nil {
+		return config.Config{}, fmt.Errorf("engine not ready")
+	}
+	cfg, err := a.deps.CfgMgr.Load()
+	if err != nil {
+		return config.Config{}, err
+	}
+	if cfg == nil {
 		return config.Config{}, nil
 	}
-	return *a.deps.Cfg, nil
+	// Update the in-memory cache for Sync/Resolve consumers.
+	a.deps.Cfg = cfg
+	return *cfg, nil
 }
 
 type ConfigSetReq struct {
