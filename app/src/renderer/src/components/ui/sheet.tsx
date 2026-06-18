@@ -79,6 +79,39 @@ export function SheetContent({
     }
   }, [open, onOpenChange])
 
+  // Focus trap — Tab cycles inside the sheet drawer, not into the background.
+  React.useEffect(() => {
+    if (!open || !contentRef.current) return
+    const el = contentRef.current
+    const prevFocus = document.activeElement as HTMLElement | null
+    const focusable = el.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+    focusable?.focus()
+
+    const trap = (e: KeyboardEvent): void => {
+      if (e.key !== 'Tab') return
+      const focusables = el.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+      if (focusables.length === 0) return
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', trap)
+    return () => {
+      document.removeEventListener('keydown', trap)
+      prevFocus?.focus()
+    }
+  }, [open])
+
   const sideClasses = {
     // left/right panels sit BELOW the title bar (logo + window controls),
     // so they no longer cover it when slid open. Height derives from
@@ -122,6 +155,8 @@ export function SheetContent({
       {/* Content */}
       <div
         ref={contentRef}
+        role="dialog"
+        aria-modal="true"
         data-state={open ? 'open' : 'closed'}
         className={cn(
           'fixed top-[var(--titlebar-height)] bottom-0 z-50 bg-card shadow-2xl border-border/50',
