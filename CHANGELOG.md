@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.6.0] — 2026-06-18
+
+### Changed
+- **Desktop framework: Electron → Wails v2** — single-binary, system webview, 84% smaller (112MB → 18MB)
+- Engine `internal/` → `core/` to allow cross-module Go imports from root
+- All 34 engine capabilities exposed as Wails bound methods (direct Go calls, no HTTP/IPC)
+- Resolve streaming: WebSocket → Wails Events (`resolve:tick`/`resolve:done`/`resolve:error`)
+- State push: `/stream/events` WebSocket → Wails Events (`engine:event`)
+- `window.confirm()` → custom `ConfirmDialog` component (WKWebView blocks native confirm)
+- Title bar drag: `-webkit-app-region` → `--wails-draggable` CSS property
+
+### Removed
+- Entire Electron app (`app/` directory: main process, preload, renderer, electron-builder)
+- `.goreleaser.yaml` (Go engine no longer independently released)
+- `build/build.sh` (replaced by `make wails` / `make wails-dmg`)
+- Top-level `node_modules/` and `package-lock.json` (Electron leftovers)
+
+### Added
+- `build/dmg.sh` — macOS DMG with drag-to-Applications layout
+- `build/windows/installer.nsi` — NSIS Windows installer script
+- `ide.go` — IDE detection, directory dialog, locale, auto-launch bound methods
+- Makefile targets: `wails`, `wails-dev`, `wails-dmg`, `wails-pkg`, `wails-nsis`
+
+### Fixed
+- Config changes not taking effect (ConfigGet returned stale cached config)
+- AI summarization stuck on "generating..." (nil config + silent error swallowing)
+- Agent session delete unresponsive (WKWebView blocks `window.confirm()`)
+- Property case mismatch in Wails model access (`result.Events` → `result.events`)
+
 ## [v0.5.0] — 2026-06-18
 
 ### Added
