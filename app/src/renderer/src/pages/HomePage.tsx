@@ -20,6 +20,7 @@ import { RepoSettingsDialog } from '@/components/RepoSettingsDialog'
 import { engineApi } from '@/lib/api'
 import { useAutoSummarize } from '@/hooks/useAutoSummarize'
 import { useDragDropAdd } from '@/hooks/useDragDropAdd'
+import { useStartupSync } from '@/hooks/useStartupSync'
 import { useSummaryPolling } from '@/hooks/useSummaryPolling'
 import { useLogger } from '@/hooks/useLogger'
 import { useToastContext } from '@/contexts/ToastContext'
@@ -32,8 +33,7 @@ export function HomePage(): JSX.Element {
   const logger = useLogger('HomePage')
   const {
     repos, scannedRepos, loading, initialized, error, refresh, syncAll, syncRepo,
-    scan, addRepo, removeRepo, updateRepoStatus, updateRepo,
-    startupSyncDone, markStartupSyncDone
+    scan, addRepo, removeRepo, updateRepoStatus, updateRepo
   } = useRepos()
   const { showToast } = useToastContext()
   const {
@@ -102,14 +102,8 @@ export function HomePage(): JSX.Element {
     if (!initialized) refresh()
   }, [initialized, refresh])
 
-  // Auto-sync on startup (once per app session)
-  useEffect(() => {
-    if (!initialized || repos.length === 0 || startupSyncDone) return
-    if (engineConfig?.Sync?.SyncOnStartup) {
-      markStartupSyncDone()
-      syncAll()
-    }
-  }, [initialized, repos.length, engineConfig, syncAll, startupSyncDone, markStartupSyncDone])
+  // Auto-sync on startup (extracted to useStartupSync).
+  useStartupSync()
 
   // Load history.
   //
