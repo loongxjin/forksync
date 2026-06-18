@@ -19,7 +19,7 @@ import { useHistory } from '@/contexts/HistoryContext'
  * (polling is gone but direct fetches on user action remain).
  */
 export function useEngineEvents(): void {
-  const { refresh } = useRepos()
+  const { refreshSilent } = useRepos()
   const { loadHistory } = useHistory()
 
   useEffect(() => {
@@ -28,7 +28,12 @@ export function useEngineEvents(): void {
 
     const off = engineApi.onEventsTick((type) => {
       if (type === 'ready' || type === 'repos_changed') {
-        refresh()
+        // refreshSilent (SET_REPOS_SILENT, no guard) instead of refresh
+        // (SET_REPOS, guarded by refreshingRef). During sync the engine
+        // publishes many repos_changed events in quick succession; refresh's
+        // guard would drop them while a slow GET /status is in flight, so
+        // workflow progress wouldn't show live.
+        refreshSilent()
       }
       if (type === 'ready' || type === 'history_changed') {
         loadHistory()
@@ -41,5 +46,5 @@ export function useEngineEvents(): void {
       // provider subtree remounts. The main process no-ops if already closed.
       engineApi.eventsStop()
     }
-  }, [refresh, loadHistory])
+  }, [refreshSilent, loadHistory])
 }

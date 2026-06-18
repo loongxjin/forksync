@@ -97,6 +97,7 @@ export function repoReducer(state: RepoState, action: RepoAction): RepoState {
 
 interface RepoContextValue extends RepoState {
   refresh: () => Promise<void>
+  refreshSilent: () => Promise<void>
   syncAll: () => Promise<void>
   syncRepo: (name: string) => Promise<void>
   scan: (dir: string) => Promise<void>
@@ -129,6 +130,24 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   // Status/conflict polling has been removed: the /stream/events push channel
   // (useEngineEvents) refreshes the repo list on every state change, so the
   // 3s status poll and 5s conflict poll are no longer needed.
+  //
+  // During active sync, the engine publishes repos_changed on every workflow
+  // step. useEngineEvents calls refresh() on each, but refresh() has a guard
+  // (refreshingRef) that drops concurrent calls while a GET /status is in
+  // flight. During sync (which can take minutes), the engine's GET /status is
+  // slow (git fetch + rev-list per repo), so events pile up and get dropped.
+  // refreshSilent() bypasses the guard to always update the repos array via
+  // SET_REPOS_SILENT, so workflow progress shows live.
+  const refreshSilent = useCallback(async () => {
+    try {
+      const res = await engineApi.status()
+      if (res.success) {
+        dispatch({ type: 'SET_REPOS_SILENT', repos: res.data.repos ?? [] })
+      }
+    } catch {
+      // silent — best-effort
+    }
+  }, [])
 
   const refresh = useCallback(async () => {
     if (refreshingRef.current) return
@@ -338,7 +357,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
 
   return (
     <RepoContext.Provider
-      value={{ ...state, refresh, syncAll, syncRepo, scan, addRepo, removeRepo, updateRepoStatus, updateRepo, startupSyncDone: startupSyncDoneRef.current, markStartupSyncDone }}
+      value={{ ...state, refresh, refreshSilent, syncAll, syncRepo, scan, addRepo, removeRepo, updateRepoStatus, updateRepo, startupSyncDone: startupSyncDoneRef.current, markStartupSyncDone }}
     >
       {children}
     </RepoContext.Provider>

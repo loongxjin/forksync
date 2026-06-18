@@ -215,6 +215,18 @@ func (sf *StatusRefresher) reconcileConflictStatus(ctx context.Context, r types.
 	}
 
 	// MERGE_HEAD exists but no unmerged files — user staged all resolutions
+	// MERGE_HEAD exists but no unmerged files — user/agent staged all resolutions.
+	// Before rebuilding the workflow, check if the existing one is already a valid
+	// resolved-state workflow (has agent_resolve completed or waiting). If so,
+	// preserve it to avoid losing the resolveSessionId stamped on the step.
+	if r.Workflow != nil && r.Workflow.Status == types.WorkflowWaiting {
+		step := workflow.FindStep(r.Workflow, types.StepAgentResolve)
+		if step != nil && (step.Status == types.StepStatusSuccess || step.Status == types.StepStatusWaiting) {
+			// Workflow is already in the correct resolved/waiting state with
+			// the resolveSessionId preserved. Don't rebuild.
+			return r
+		}
+	}
 	if len(unmergedFiles) == 0 {
 		r.Status = types.RepoStatusResolved
 		r.Workflow = workflow.RebuildWorkflow(r, workflow.RebuildFromAcceptChanges)
@@ -236,6 +248,18 @@ func (sf *StatusRefresher) reconcileConflictStatus(ctx context.Context, r types.
 	// preserve it rather than blindly rebuilding.
 	if r.Workflow != nil && r.Workflow.Status == types.WorkflowFailed {
 		return r
+	}
+
+	// If the existing workflow has an agent_resolve step that is currently
+	// running (auto-resolve within sync), preserve it. Rebuilding here would
+	// lose the resolveSessionId stamped by the syncer, and the follow-up
+	// store.Update would trigger an eventsStore→refreshSilent→status→here
+	// feedback loop via the /stream/events push channel.
+	if r.Workflow != nil {
+		step := workflow.FindStep(r.Workflow, types.StepAgentResolve)
+		if step != nil && step.Status == types.StepStatusRunning {
+			return r
+		}
 	}
 
 	// Still have unmerged files — conflict state
