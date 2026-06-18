@@ -82,12 +82,16 @@
 /* Title bar drag region (macOS / Windows with titleBarOverlay / Linux frameless) */
 .titlebar {
   -webkit-app-region: drag;
+  --wails-draggable: drag;
   user-select: none;
 }
 .titlebar button,
 .titlebar a,
-.titlebar input {
+.titlebar input,
+.titlebar svg,
+.titlebar [role="button"] {
   -webkit-app-region: no-drag;
+  --wails-draggable: no-drag;
 }
 
 /* Linux window control buttons */
