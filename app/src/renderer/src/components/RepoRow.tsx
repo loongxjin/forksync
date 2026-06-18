@@ -55,7 +55,16 @@ function RepoRowImpl({ repo, isExpanded, onToggle, onSync, onRemove, onSettings,
   const statusColor = getStatusColor(repo.status)
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
+      aria-expanded={isExpanded}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onToggle(repo.id)
+        }
+      }}
       className={cn(
         'group relative cursor-pointer rounded-lg border border-border bg-card shadow-card w-full text-left',
         'transition-all duration-200 hover:shadow-card-hover hover:-translate-y-px',
@@ -66,7 +75,6 @@ function RepoRowImpl({ repo, isExpanded, onToggle, onSync, onRemove, onSettings,
         if (target.closest('[data-action]')) return
         onToggle(repo.id)
       }}
-      aria-expanded={isExpanded}
     >
       {/* Left status indicator bar */}
       <div
@@ -155,7 +163,7 @@ function RepoRowImpl({ repo, isExpanded, onToggle, onSync, onRemove, onSettings,
           </div>
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 

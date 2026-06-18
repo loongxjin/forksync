@@ -80,6 +80,7 @@ function createWindow(): void {
         'Content-Security-Policy': [
           "default-src 'self'" +
             "; script-src 'self' 'unsafe-inline'" + (is.dev ? " 'unsafe-eval'" : "") +
+            "; style-src 'self' 'unsafe-inline'" +
             `; connect-src 'self'${devConnect}`
         ]
       }
