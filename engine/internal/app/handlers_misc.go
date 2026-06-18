@@ -89,6 +89,18 @@ func (s *Server) handleAgentSessions(w http.ResponseWriter, r *http.Request) {
 		writeErr[types.AgentSessionsData](w, fmt.Errorf("list sessions: %w", err))
 		return
 	}
+
+	// Enrich each session with its repository name so the UI can show
+	// "which repo" instead of an opaque repoId. Falls back to the repoId
+	// when the repo is no longer registered (e.g. removed but session kept).
+	for i := range infos {
+		if repo, ok := s.deps.Store.Get(infos[i].RepoID); ok {
+			infos[i].RepoName = repo.Name
+		} else {
+			infos[i].RepoName = infos[i].RepoID
+		}
+	}
+
 	writeOK(w, types.AgentSessionsData{Sessions: infos})
 }
 

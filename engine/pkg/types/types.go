@@ -259,6 +259,7 @@ type AgentInfo struct {
 type AgentSessionInfo struct {
 	ID         string    `json:"id"`
 	RepoID     string    `json:"repoId"`
+	RepoName   string    `json:"repoName"`
 	AgentName  string    `json:"agentName"`
 	Status     string    `json:"status"`
 	CreatedAt  time.Time `json:"createdAt"`
