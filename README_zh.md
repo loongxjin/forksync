@@ -7,7 +7,7 @@
 [English](./README.md) · **中文**
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
-[![Electron](https://img.shields.io/badge/Electron-31-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![Wails](https://img.shields.io/badge/Wails-2-DF0000?logo=wails&logoColor=white)](https://wails.io/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
@@ -67,9 +67,9 @@
 git clone https://github.com/loongxjin/forksync.git
 cd forksync
 
-# 完整构建（Go 引擎 + Electron 应用）
-make build
-# 产物：app/dist/
+# Wails 构建（单二进制文件, ~18MB）
+make wails
+# 输出: build/bin/
 ```
 
 ### 仅命令行
@@ -100,12 +100,14 @@ github:
 ### 2. 启动应用
 
 ```bash
-cd app && npm install && npm run dev
+# 开发模式（热重载）
+make wails-dev
+
+# 或构建后运行
+make wails && open build/bin/forksync.app
 ```
 
-Electron 应用启动时自动启动 Go 引擎 server（`127.0.0.1:<随机端口>`）。
-所有仓库操作（添加、扫描、同步、解决冲突）均通过 GUI 完成。
-如需 API 访问，见 `engine/README.md`。
+Wails 应用将 Go 引擎直接嵌入 — 无需独立 server 进程、无需 HTTP 桥接。所有引擎操作均为原生 Go 函数调用。
 
 ---
 
@@ -165,7 +167,7 @@ agent:
 
 ## 桌面应用
 
-基于 **Electron** + **React** + **TypeScript** + **Tailwind CSS** + **shadcn/ui** 构建。
+基于 **Wails v2** + **React** + **TypeScript** + **Tailwind CSS** + **shadcn/ui** 构建。
 
 | 区域 | 说明 |
 |------|------|
@@ -182,35 +184,27 @@ agent:
 
 ```
 ┌────────────────────────────────────────────┐
-│            Electron UI (React)              │
+│            Wails UI (React)                 │
 │  仪表盘 · 仓库 · 工作流                      │
 │  Agent 终端 · 历史 · 设置                   │
 └────────────────┬───────────────────────────┘
-                 │ IPC (contextBridge)
+                 │ Wails binding（直接 Go 调用）
 ┌────────────────▼───────────────────────────┐
-│          EngineClient (TypeScript)           │
-│  通过 HTTP + WebSocket 与本地引擎通信         │
-└────────────────┬───────────────────────────┘
-                 │ REST + WebSocket
-                 │ `127.0.0.1:<随机端口>`
-                 │ Bearer token 鉴权
-┌────────────────▼───────────────────────────┐
-│      Go Engine (net/http, 单一长进程)         │
-│  REST:  status · sync · resolve · config     │
-│  WS:    /stream/resolve · /stream/events     │
-│  内部:  scheduler · history · agent          │
-│         notify · summarizer · eventbus       │
+│      Go 引擎（同进程，无 IPC）                │
+│  App 结构体，33 个绑定方法                    │
+│  内部:  sync · resolve · agent               │
+│         history · scheduler · eventbus       │
+│         ide · config · summarize             │
 └────────────────────────────────────────────┘
 ```
 
-Electron 启动时 spawn 一个**单一长生命周期**的 Go 引擎进程，监听 `127.0.0.1:<随机端口>`。所有通信通过 HTTP + WebSocket 完成，并附带会话级 Bearer token 鉴权。引擎通过 stdout 宣告自己的地址和 token，Electron 主进程扮演反向代理角色 —— 渲染进程永远看不到 token。如果引擎崩溃，会自动按指数退避重启（最多 5 次，500ms → 1s → 2s → 5s 上限）。
+Go 引擎**不是独立的 HTTP server** — 全部 33 个方法都是 Go 结构体方法，通过 Wails 自动生成的 TypeScript 绑定暴露给前端。无需 bearer token、端口发现、进程管理。流式输出使用 Wails Events 替代 WebSocket。
 
 ---
 
 ## 引擎 API
 
-所有引擎操作均可通过本地 HTTP server 的 REST 端点访问。
-详见 `engine/README.md` 获取完整 API 参考和 JSON 契约。
+所有引擎操作均可通过 **Wails bindings**（React 前端直接 Go 调用）访问。同时提供独立 HTTP server 用于无头模式。详见 `engine/README.md` 获取 HTTP API 参考。
 
 | 操作 | HTTP 路由 |
 |---|---|

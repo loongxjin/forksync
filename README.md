@@ -7,7 +7,7 @@
 [English](./README.md) · [中文](./README_zh.md)
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
-[![Electron](https://img.shields.io/badge/Electron-31-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![Wails](https://img.shields.io/badge/Wails-2-DF0000?logo=wails&logoColor=white)](https://wails.io/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
@@ -67,9 +67,9 @@ Grab the latest release for your platform:
 git clone https://github.com/loongxjin/forksync.git
 cd forksync
 
-# Full build (Go engine + Electron app)
-make build
-# Output: app/dist/
+# Wails build (single binary, ~18MB)
+make wails
+# Output: build/bin/
 ```
 
 ### CLI Only
@@ -100,12 +100,14 @@ github:
 ### 2. Launch the App
 
 ```bash
-cd app && npm install && npm run dev
+# Dev mode (hot reload)
+make wails-dev
+
+# Or build and run
+make wails && open build/bin/forksync.app
 ```
 
-The Electron app auto-starts the Go engine server on `127.0.0.1:<random-port>`.
-All repository operations (add, scan, sync, resolve) are done through the GUI.
-For API access, see `engine/README.md`.
+The Wails app embeds the Go engine directly — no separate server process, no HTTP bridge. All engine operations are native Go function calls.
 
 ---
 
@@ -165,7 +167,7 @@ agent:
 
 ## Desktop App
 
-Built with **Electron** + **React** + **TypeScript** + **Tailwind CSS** + **shadcn/ui**.
+Built with **Wails v2** + **React** + **TypeScript** + **Tailwind CSS** + **shadcn/ui**.
 
 | Section | Description |
 |------|-------------|
@@ -182,35 +184,27 @@ Built with **Electron** + **React** + **TypeScript** + **Tailwind CSS** + **shad
 
 ```
 ┌────────────────────────────────────────────┐
-│            Electron UI (React)              │
+│            Wails UI (React)                 │
 │  Dashboard · Repos · Workflow               │
 │  Agent Terminal · History · Settings        │
 └────────────────┬───────────────────────────┘
-                 │ IPC (contextBridge)
+                 │ Wails binding (direct Go call)
 ┌────────────────▼───────────────────────────┐
-│          EngineClient (TypeScript)           │
-│  HTTP fetch + WebSocket to local engine      │
-└────────────────┬───────────────────────────┘
-                 │ REST + WebSocket
-                 │ `127.0.0.1:<random-port>`
-                 │ Bearer token auth
-┌────────────────▼───────────────────────────┐
-│      Go Engine (net/http, single process)    │
-│  REST:  status · sync · resolve · config     │
-│  WS:    /stream/resolve · /stream/events     │
-│  Internal: scheduler · history · agent       │
-│            notify · summarizer · eventbus    │
+│      Go Engine (same process, no IPC)        │
+│  App struct with 33 bound methods            │
+│  Internal: sync · resolve · agent            │
+│            history · scheduler · eventbus    │
+│            ide · config · summarize          │
 └────────────────────────────────────────────┘
 ```
 
-On startup, Electron spawns a **single long-lived** Go engine process bound to `127.0.0.1:<random-port>`. All communication goes through HTTP + WebSocket with per-session bearer token auth. The engine announces its address and token via stdout, then the Electron parent acts as a reverse proxy — the renderer never sees the token. If the engine crashes, it is automatically respawned with exponential backoff (5 attempts, 500ms → 1s → 2s → 5s cap).
+The Go engine is **not a separate HTTP server** — all 33 methods are Go struct methods bound to the frontend via Wails auto-generated TypeScript bindings. No bearer tokens, no port discovery, no process supervision. Streaming uses Wails Events instead of WebSocket.
 
 ---
 
 ## Engine API
 
-All engine operations are available as REST endpoints on the local HTTP server.
-See `engine/README.md` for the full API reference and JSON contract.
+All engine operations are available as **Wails bindings** (direct Go calls from the React frontend). A standalone HTTP server is also available for headless use. See `engine/README.md` for the HTTP API reference.
 
 | Operation | HTTP Route |
 |---|---|
