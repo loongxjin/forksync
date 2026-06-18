@@ -82,3 +82,5 @@ require (
 	modernc.org/memory v1.8.0 // indirect
 	modernc.org/sqlite v1.34.5 // indirect
 )
+
+replace github.com/loongxjin/forksync/engine => ./engine
