@@ -25,7 +25,7 @@ const resolveStrategyOptions = [
 ]
 
 export function AgentConfig(): JSX.Element {
-  const { agents, sessions, refreshAgents, refreshSessions, cleanup, resetSession } = useAgents()
+  const { agents, sessions, refreshAgents, refreshSessions, cleanup, resetSession, error } = useAgents()
   const { engineConfig, configLoading, updateConfig } = useSettings()
   const { t } = useTranslation()
 
@@ -48,6 +48,8 @@ export function AgentConfig(): JSX.Element {
     setCleaning(true)
     try {
       await cleanup()
+    } catch (err) {
+      console.error('[AgentConfig] cleanup failed:', err)
     } finally {
       setCleaning(false)
     }
@@ -58,6 +60,8 @@ export function AgentConfig(): JSX.Element {
     setResettingId(repoId)
     try {
       await resetSession(repoId)
+    } catch (err) {
+      console.error('[AgentConfig] reset session failed:', repoId, err)
     } finally {
       setResettingId(null)
     }
@@ -267,6 +271,9 @@ export function AgentConfig(): JSX.Element {
             {cleaning ? t('common.processing') : t('settings.agent.cleanupFailed')}
           </Button>
         </div>
+        {error && (
+          <p className="text-xs text-destructive">{error}</p>
+        )}
         {sessions.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('settings.agent.noSessions')}</p>
         ) : (
