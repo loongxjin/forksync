@@ -8,6 +8,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/eventbus"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
@@ -28,6 +29,11 @@ type Deps struct {
 	GitOps  git.OperationsProvider
 	Syncer  *syncpkg.Syncer
 	Resolve *respkg.Resolver
+
+	// Bus broadcasts repo/history state changes to /stream/events subscribers,
+	// letting the renderer stop polling. Published by the eventsStore wrapper
+	// (Store) and by the history store on insert/update/cleanup.
+	Bus *eventbus.Bus
 
 	// HistStore is the long-lived history DB handle. May be nil if init failed.
 	HistStore *history.Store
@@ -60,10 +66,15 @@ func BuildDeps() (*Deps, error) {
 		return nil, fmt.Errorf("load repo store: %w", err)
 	}
 
+	// Event bus: publishes repo/history changes to /stream/events. Created
+	// before the store wrapper so every mutation is observable.
+	bus := eventbus.New()
+
 	deps := &Deps{
 		Cfg:         cfg,
 		CfgMgr:      cfgMgr,
-		Store:       store,
+		Store:       wrapStoreWithEvents(store, bus),
+		Bus:         bus,
 		GitOps:      newGitOps(cfg),
 		configDir:   cfgMgr.ConfigDir(),
 		histCleanup: func() {},
@@ -122,6 +133,9 @@ func BuildDeps() (*Deps, error) {
 func (d *Deps) Close() {
 	if d.histCleanup != nil {
 		d.histCleanup()
+	}
+	if d.Bus != nil {
+		d.Bus.Close()
 	}
 }
 
