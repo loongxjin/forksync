@@ -10,6 +10,7 @@ import { Toggle } from '@/components/ui/toggle'
 import { Separator } from '@/components/ui/separator'
 import { useTranslation } from 'react-i18next'
 import { useDebouncedConfig } from '@/hooks/useDebouncedConfig'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 
 
@@ -36,6 +37,7 @@ export function AgentConfig(): JSX.Element {
 
   const [cleaning, setCleaning] = useState(false)
   const [resettingId, setResettingId] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null) // repoId to confirm
   const [configSaving, setConfigSaving] = useState(false)
   const configSavingRef = useRef(false)
 
@@ -56,7 +58,14 @@ export function AgentConfig(): JSX.Element {
   }
 
   const handleReset = async (repoId: string): Promise<void> => {
-    if (!confirm(t('settings.agent.resetConfirm', { repoId }))) return
+    // Show custom confirm dialog instead of window.confirm (blocked by WKWebView).
+    setConfirmDelete(repoId)
+  }
+
+  const doReset = async (): Promise<void> => {
+    const repoId = confirmDelete
+    if (!repoId) return
+    setConfirmDelete(null)
     setResettingId(repoId)
     try {
       await resetSession(repoId)
@@ -345,6 +354,15 @@ export function AgentConfig(): JSX.Element {
           </select>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title={t('settings.agent.resetSession')}
+        message={t('settings.agent.resetConfirm', { repoId: confirmDelete ?? '' })}
+        confirmLabel={t('common.delete')}
+        confirmVariant="destructive"
+        onConfirm={doReset}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   )
 }
