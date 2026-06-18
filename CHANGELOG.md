@@ -5,29 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v0.5.0] — 2026-06-18
 
 ### Added
-- **Engine crash supervision**: the embedded Go engine is respawned with exponential backoff (500ms→5s, up to 5 attempts) if it crashes after a healthy start. Lifecycle status (starting/ready/reconnecting/down) is broadcast to the renderer via the `engine:status` IPC channel for a reconnect banner.
-- **Local auth token**: the engine generates a random 32-byte (256-bit) bearer token at startup and announces it via `FORKSYNC_TOKEN=` on stdout. The Electron parent injects `Authorization: Bearer <token>` on every request and `?token=` on the WebSocket routes. `/healthz` and `/version` stay unauthenticated for the startup readiness probe.
-- **Push-based state updates**: a new in-process event bus + `/stream/events` WebSocket replaces the renderer's fixed-interval polling. The engine publishes `repos_changed` on any repo mutation and `history_changed` on summary/cleanup; the renderer opens one socket on launch and refreshes on push instead of polling `/status` (3s) and history (5s). Idle traffic drops to near zero.
+- Embedded HTTP/WebSocket engine server replacing Cobra CLI (bearer-token auth, crash supervision with exponential backoff)
+- Real-time push channel via `/stream/events` WebSocket + in-process event bus, replacing fixed-interval polling
+- Per-resolve session IDs, agent log files named by session ID
+- Standalone tabbed settings page (`/settings`) replacing settings drawer
+- Per-file diff viewer with retry and empty state
+- Markdown rendering for AI summaries
+- ConfirmDialog and ErrorBanner shared UI components
+- `state_persisted` stream event
 
 ### Changed
-- **CSP hardened**: production `connect-src` restricted to `'self'` (the renderer never talks to the engine directly — all traffic is via main IPC), closing a localhost exfiltration channel. `default-src` drops `'unsafe-inline'`. Dev keeps localhost wildcards for Vite HMR.
-- **HomePage decomposed**: the 700-line god-component is now ~415 lines. Seven concerns extracted into dedicated custom hooks (`useStartupSync`, `useHistorySync`, `useAgentLogAutoload`, `useSummaryPolling`, `useResolveActions`, `useDragDropAdd`, `useAutoExpandWorkflow`), each matching the existing named-object-return + useLogger + ref-held-timer pattern.
-- **Polling removed**: the 3s status poll and 5s conflict poll are gone, superseded by `/stream/events`. The 5s summary-generation poll is retained as a guard.
+- Engine architecture: Cobra CLI → long-running HTTP server; Electron side switched from `spawn` to `fetch` + `ws`
+- Resolve overhaul: disk log as single source of truth; Resolve → Commit contract separated; auto-resolve and manual resolve share same Resolver core
+- HomePage decomposed into 7 dedicated hooks (~700→415 lines)
+- RepoRow and HistoryRow memoized with `React.memo`
+- Auto-summary controls moved from General to Agent settings tab
+- Session expiration removed (TTL, expired status, cleanup)
+- Agent session list shows repo name instead of repoId
+- `engineApi` seam unifies all renderer→engine calls
+- CSP tightened for production builds
 
 ### Fixed
-- **List re-render storm**: `RepoRow` and `HistoryRow` are now `React.memo`-wrapped (HistoryRow with a custom comparator), so unchanged rows no longer re-render on every 3s/5s status poll. `RepoRow.onToggle` now takes `repoId` so the stable `toggleExpand` is passed instead of a per-render inline arrow.
-- **Hardcoded English**: six resolve-action error messages moved to i18next keys (toast namespace) with interpolation.
+- GET `/status` event feedback loop
+- Workflow rebuild loop dropping `resolveSessionId`
+- Tick storm and double `STREAM_DONE` dispatch in resolve stream
+- Double done frame suppressing resolve data
+- Agent event duplication from snapshot/delta overlap
+- 500-character summary truncation removed
+- SQLite `SQLITE_BUSY` errors (single-conn, WAL, `BEGIN IMMEDIATE`)
+- Stale workflows not cleared for settled repos
+- `MERGE_HEAD` fallback for merge state detection
+- Silent git ref resolution errors
+- Notification permission API in Electron main process
+- i18n locale propagation to main process and production packaging
+- History refresh after auto-summarize
+- Merge rollback on auto-resolve failure
+- Various app migration fixes (Node 20 `ws` library, body encoding, port retry, process tree kill on Windows)
 
 ### Accessibility
-- **Modal**: now has `role="dialog"`, `aria-modal`, Escape-to-close, body scroll lock, and a focus trap that cycles Tab inside the modal and returns focus to the trigger on close.
-- **Sheet/Drawer**: added `role="dialog"`, `aria-modal`, and focus trap (mirrors Modal; Escape and scroll lock already existed).
-- **Toast**: added `role="alert" aria-live="assertive"` so screen readers announce errors immediately.
-- **RepoRow**: expansion click-target changed from `<div>` to `<button>` with `aria-expanded` and `focus-visible` ring, making the accordion keyboard-operable.
-- **ErrorBanner**: shared component (`role="alert"`, optional retry/dismiss) replaces hand-rolled inline error divs.
-- **ConfirmDialog**: styled confirmation dialog replacing native `confirm()`/`alert()` — removes unstyled, non-localizable, main-thread-blocking browser dialogs.
+- Modal, Sheet/Drawer: `role="dialog"`, `aria-modal`, focus trap
+- Toast: `role="alert" aria-live="assertive"`
+- RepoRow: `<button>` with `aria-expanded`, keyboard-operable
+- ErrorBanner and ConfirmDialog replace hand-rolled inline errors and native `confirm()`/`alert()`
 
 ## [v0.4.0]
 
