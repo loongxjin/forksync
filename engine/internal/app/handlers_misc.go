@@ -11,6 +11,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/eventbus"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
 	"github.com/loongxjin/forksync/engine/internal/summarizer"
@@ -253,6 +254,11 @@ func (s *Server) handleHistoryCleanup(w http.ResponseWriter, r *http.Request) {
 		writeErr[historyCleanupResult](w, fmt.Errorf("cleanup failed: %w", err))
 		return
 	}
+	// History changed — notify /stream/events subscribers so the renderer can
+	// refresh its history view without polling.
+	if s.deps.Bus != nil {
+		s.deps.Bus.Publish(eventbus.Event{Type: eventbus.EventHistoryChanged})
+	}
 	writeOK(w, historyCleanupResult{Message: msg})
 }
 
@@ -454,7 +460,7 @@ func (s *Server) handleSummarize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	summary, err := generateSummary(r.Context(), s.deps.Cfg, hStore, record, r2)
+	summary, err := generateSummary(r.Context(), s.deps.Cfg, hStore, s.deps.Bus, record, r2)
 	if err != nil {
 		writeErr[summarizeData](w, err)
 		return
@@ -468,7 +474,7 @@ func (s *Server) handleSummarize(w http.ResponseWriter, r *http.Request) {
 }
 
 // generateSummary mirrors cmd/summarize.go generateSummary verbatim.
-func generateSummary(ctx context.Context, cfg *config.Config, histStore *history.Store, record *history.Record, r types.Repo) (string, error) {
+func generateSummary(ctx context.Context, cfg *config.Config, histStore *history.Store, bus *eventbus.Bus, record *history.Record, r types.Repo) (string, error) {
 	agentName := ""
 	if cfg != nil {
 		agentName = cfg.Sync.SummaryAgent
@@ -528,6 +534,11 @@ func generateSummary(ctx context.Context, cfg *config.Config, histStore *history
 
 	if updateErr := histStore.UpdateSummary(record.ID, summary, string(types.SummaryStatusDone)); updateErr != nil {
 		logger.Error("summarize: failed to save summary result", "error", updateErr)
+	}
+	// History changed (summary complete) — notify subscribers so the renderer
+	// stops its summary-generation poll and shows the new summary.
+	if bus != nil {
+		bus.Publish(eventbus.Event{Type: eventbus.EventHistoryChanged})
 	}
 	return summary, nil
 }
