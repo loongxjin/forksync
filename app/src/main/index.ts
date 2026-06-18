@@ -104,6 +104,15 @@ app.whenReady().then(async () => {
     log.error('[main] engine server failed to start at boot:', (err as Error).message)
   }
 
+  // Broadcast engine lifecycle status (starting/ready/reconnecting/down) to the
+  // renderer so it can show a "reconnecting" banner when the engine crashes.
+  // The supervisor auto-restarts with backoff; this only drives the UI.
+  getEngineServer().onStatusChange((status) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('engine:status', status)
+    }
+  })
+
   // Register IPC handlers for engine communication
   registerIpcHandlers()
   registerIDEHandlers()
