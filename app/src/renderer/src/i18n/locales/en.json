@@ -288,7 +288,12 @@
     "syncFailed": "{{count}} repo(s) failed to sync",
     "loadConfigFailed": "Failed to load config",
     "updateConfigFailed": "Failed to update config",
-    "summaryRetryFailed": "Summary retry failed, please try again later"
+    "summaryRetryFailed": "Summary retry failed, please try again later",
+    "workflowContinueFailed": "Workflow continue failed",
+    "agentResolveFailed": "Agent resolve failed: {{message}}",
+    "retryCommitFailed": "Retry commit failed",
+    "acceptFailed": "Accept failed",
+    "rejectFailed": "Reject failed"
   },
   "notify": {
     "conflictsTitle": "Conflicts in {{count}} repo(s)",

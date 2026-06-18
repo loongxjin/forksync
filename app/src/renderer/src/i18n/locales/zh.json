@@ -288,7 +288,12 @@
     "syncFailed": "{{count}} 个仓库同步失败",
     "loadConfigFailed": "加载配置失败",
     "updateConfigFailed": "更新配置失败",
-    "summaryRetryFailed": "总结重试失败，请稍后再试"
+    "summaryRetryFailed": "总结重试失败，请稍后再试",
+    "workflowContinueFailed": "工作流继续失败",
+    "agentResolveFailed": "Agent 解析失败: {{message}}",
+    "retryCommitFailed": "重试提交失败",
+    "acceptFailed": "接受失败",
+    "rejectFailed": "拒绝失败"
   },
   "notify": {
     "conflictsTitle": "{{count}} 个仓库存在冲突",

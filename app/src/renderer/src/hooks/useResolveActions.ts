@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { engineApi } from '@/lib/api'
 import { useRepos } from '@/contexts/RepoContext'
 import { useAgents } from '@/contexts/AgentContext'
@@ -44,6 +45,7 @@ export function useResolveActions(
 } {
   const { startResolve, clearResult, streamResults } = stream
   const logger = useLogger('useResolveActions')
+  const { t } = useTranslation()
   const { updateRepo, refresh } = useRepos()
   const { preferred } = useAgents()
   const { engineConfig } = useSettings()
@@ -68,7 +70,7 @@ export function useResolveActions(
 
         const wfRes = await engineApi.resolvePrepare(repo.name)
         if (!wfRes.success) {
-          showToast?.(wfRes.error ?? 'Workflow continue failed', 'error')
+          showToast?.(wfRes.error ?? t('toast.workflowContinueFailed'), 'error')
           return
         }
         if (wfRes.data?.workflow) {
@@ -92,7 +94,7 @@ export function useResolveActions(
         onOpenTerminal(repo.name)
       } catch (err) {
         await refresh().catch(() => {})
-        showToast?.(`Agent resolve failed: ${(err as Error).message}`, 'error')
+        showToast?.(t('toast.agentResolveFailed', { message: (err as Error).message }), 'error')
       } finally {
         setLocalLoading((prev) => ({ ...prev, [repo.name]: false }))
       }
@@ -143,14 +145,14 @@ export function useResolveActions(
         // instead of retrying the commit.
         const res = await engineApi.resolveAccept(repoName)
         if (!res.success) {
-          showToast?.(res.error ?? 'Retry commit failed', 'error')
+          showToast?.(res.error ?? t('toast.retryCommitFailed'), 'error')
         } else {
           clearResult(repoName)
         }
         await refresh()
         loadHistory()
       } catch (err) {
-        showToast?.(`Retry commit failed: ${(err as Error).message}`, 'error')
+        showToast?.(t('toast.retryCommitFailed', { message: (err as Error).message }), 'error')
         await refresh()
       } finally {
         setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
@@ -165,7 +167,7 @@ export function useResolveActions(
       try {
         const res = await engineApi.resolveAccept(repoName)
         if (!res.success) {
-          showToast?.(res.error ?? 'Accept failed', 'error')
+          showToast?.(res.error ?? t('toast.acceptFailed'), 'error')
         } else {
           clearResult(repoName)
           triggerSummarize(repoName)
@@ -173,7 +175,7 @@ export function useResolveActions(
         await refresh()
         loadHistory()
       } catch (err) {
-        showToast?.(`Accept failed: ${(err as Error).message}`, 'error')
+        showToast?.(t('toast.acceptFailed', { message: (err as Error).message }), 'error')
         await refresh()
       } finally {
         setLocalLoading((prev) => ({ ...prev, [repoName]: false }))
@@ -189,7 +191,7 @@ export function useResolveActions(
       try {
         const res = await engineApi.resolveReject(repoName)
         if (!res.success) {
-          showToast?.(res.error ?? 'Reject failed', 'error')
+          showToast?.(res.error ?? t('toast.rejectFailed'), 'error')
         }
         await refresh()
       } catch (err) {
