@@ -20,6 +20,7 @@ import { RepoSettingsDialog } from '@/components/RepoSettingsDialog'
 import { engineApi } from '@/lib/api'
 import { useAutoSummarize } from '@/hooks/useAutoSummarize'
 import { useDragDropAdd } from '@/hooks/useDragDropAdd'
+import { useSummaryPolling } from '@/hooks/useSummaryPolling'
 import { useLogger } from '@/hooks/useLogger'
 import { useToastContext } from '@/contexts/ToastContext'
 import { HistoryRow } from '@/components/HistoryRow'
@@ -50,7 +51,6 @@ export function HomePage(): JSX.Element {
   } = useHistory()
 
   const hasSyncing = useMemo(() => repos.some((r) => r.status === 'syncing'), [repos])
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const HISTORY_CACHE_MS = 30000
 
   // Filter state
@@ -176,24 +176,8 @@ export function HomePage(): JSX.Element {
     }
   }, [initialized, repos, loadAgentLog])
 
-  // Poll for generating summaries
-  useEffect(() => {
-    const hasGenerating = history.some((r) => r.summaryStatus === 'generating' || r.summaryStatus === 'pending')
-    if (hasGenerating) {
-      if (!pollTimerRef.current) pollTimerRef.current = setInterval(loadHistory, 5000)
-    } else {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current)
-        pollTimerRef.current = null
-      }
-    }
-    return () => {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current)
-        pollTimerRef.current = null
-      }
-    }
-  }, [history, loadHistory])
+  // Poll for generating summaries (extracted to useSummaryPolling).
+  useSummaryPolling(history)
 
   // Status counts
   const statusCounts = repos.reduce<Record<string, number>>((acc, repo) => {
