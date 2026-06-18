@@ -5,7 +5,14 @@ node_modules/
 out/
 dist/
 build/forksync
+build/bin/
+build/darwin/
+build/windows/
+build/appicon.png
 engine/bins/
+forksync
+forksync.exe
+frontend/package.json.md5
 
 # IDE
 .vscode/

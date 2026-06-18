@@ -5,15 +5,22 @@ LDFLAGS := -X github.com/loongxjin/forksync/engine/pkg/version.Version=$(VERSION
            -X github.com/loongxjin/forksync/engine/pkg/version.Commit=$(COMMIT) \
            -X github.com/loongxjin/forksync/engine/pkg/version.BuildDate=$(BUILD_DATE)
 
-.PHONY: help build engine app release clean tag
+.PHONY: help build engine app release clean tag wails wails-dev
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-build: ## Build Go engine + Electron app (full desktop build)
-	@echo "=== Building ForkSync v$(VERSION) ==="
+build: ## Build Electron app (legacy). Use 'make wails' for Wails build.
+	@echo "=== Building ForkSync v$(VERSION) (Electron) ==="
 	@$(MAKE) engine
 	@$(MAKE) app
+
+wails: ## Build Wails app (current recommended)
+	@echo "=== Building ForkSync v$(VERSION) (Wails) ==="
+	wails build
+
+wails-dev: ## Run Wails dev server
+	wails dev
 
 engine: ## Build Go engine only
 	@echo "Building Go engine v$(VERSION)..."
