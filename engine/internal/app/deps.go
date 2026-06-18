@@ -35,6 +35,12 @@ type Deps struct {
 	// (Store) and by the history store on insert/update/cleanup.
 	Bus *eventbus.Bus
 
+	// rawStore is the unwrapped repo store. The GET /status handler uses it
+	// for internal housekeeping (CleanupStaleWorkflows, reconcileConflictStatus)
+	// to avoid feedback: every store.Update inside /status would fire a
+	// repos_changed event, which triggers another /status call on the renderer.
+	rawStore repo.Store
+
 	// HistStore is the long-lived history DB handle. May be nil if init failed.
 	HistStore *history.Store
 	// AgentRegistry is configured with the user's preferred agent.
@@ -61,8 +67,8 @@ func BuildDeps() (*Deps, error) {
 		logger.Warn("app: config load skipped", "error", err)
 	}
 
-	store := repo.NewJSONStore(cfgMgr.ConfigDir())
-	if err := store.Load(); err != nil {
+	rawStore := repo.NewJSONStore(cfgMgr.ConfigDir())
+	if err := rawStore.Load(); err != nil {
 		return nil, fmt.Errorf("load repo store: %w", err)
 	}
 
@@ -73,8 +79,9 @@ func BuildDeps() (*Deps, error) {
 	deps := &Deps{
 		Cfg:         cfg,
 		CfgMgr:      cfgMgr,
-		Store:       wrapStoreWithEvents(store, bus),
+		Store:       wrapStoreWithEvents(rawStore, bus),
 		Bus:         bus,
+		rawStore:    rawStore,
 		GitOps:      newGitOps(cfg),
 		configDir:   cfgMgr.ConfigDir(),
 		histCleanup: func() {},
@@ -121,10 +128,10 @@ func BuildDeps() (*Deps, error) {
 	if deps.SessionMgr != nil {
 		syncOpts = append(syncOpts, syncpkg.WithSessionManager(deps.SessionMgr))
 	}
-	deps.Syncer = syncpkg.NewSyncerFromConfig(cfgMgr, store, cfgMgr.ConfigDir(), syncOpts...)
+		deps.Syncer = syncpkg.NewSyncerFromConfig(cfgMgr, deps.Store, cfgMgr.ConfigDir(), syncOpts...)
 
-	// Resolver reuses the same gitOps/store/cfg/sessionMgr.
-	deps.Resolve = respkg.NewResolver(deps.GitOps, store, cfg, cfgMgr, deps.SessionMgr)
+		// Resolver reuses the same gitOps/store/cfg/sessionMgr.
+		deps.Resolve = respkg.NewResolver(deps.GitOps, deps.Store, cfg, cfgMgr, deps.SessionMgr)
 
 	return deps, nil
 }

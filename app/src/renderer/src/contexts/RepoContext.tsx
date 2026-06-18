@@ -138,7 +138,19 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   // slow (git fetch + rev-list per repo), so events pile up and get dropped.
   // refreshSilent() bypasses the guard to always update the repos array via
   // SET_REPOS_SILENT, so workflow progress shows live.
+  // refreshSilent coalesces rapid repos_changed events into a single in-flight
+  // GET /status at a time. If a request is already running, a "pending" flag
+  // is set so one more refresh fires when it completes. This prevents the death
+  // spiral where every store.Update inside GET /status (e.g. CleanupStaleWorkflows)
+  // triggers another repos_changed → another refreshSilent → another GET /status.
+  const refreshSilentPending = useRef(false)
+
   const refreshSilent = useCallback(async () => {
+    if (refreshSilentPending.current) {
+      // One is already in flight; coalesce this call into the pending flag.
+      return
+    }
+    refreshSilentPending.current = true
     try {
       const res = await engineApi.status()
       if (res.success) {
@@ -146,6 +158,8 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       }
     } catch {
       // silent — best-effort
+    } finally {
+      refreshSilentPending.current = false
     }
   }, [])
 
