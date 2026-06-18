@@ -20,6 +20,7 @@ import { RepoSettingsDialog } from '@/components/RepoSettingsDialog'
 import { engineApi } from '@/lib/api'
 import { useAutoSummarize } from '@/hooks/useAutoSummarize'
 import { useAgentLogAutoload } from '@/hooks/useAgentLogAutoload'
+import { useAutoExpandWorkflow } from '@/hooks/useAutoExpandWorkflow'
 import { useDragDropAdd } from '@/hooks/useDragDropAdd'
 import { useHistorySync } from '@/hooks/useHistorySync'
 import { useStartupSync } from '@/hooks/useStartupSync'
@@ -57,8 +58,9 @@ export function HomePage(): JSX.Element {
   // Filter state
   const [filterStatus, setFilterStatus] = useState<FilterStatus>(null)
 
-  // Accordion state — supports multiple expanded repos (for SyncAll)
-  const [expandedRepoIds, setExpandedRepoIds] = useState<Set<string>>(new Set())
+  // Accordion expand state (extracted to useAutoExpandWorkflow: owns the set,
+  // the toggle, and the auto-expand/collapse-on-workflow-finish side effect).
+  const { expandedRepoIds, toggleExpand } = useAutoExpandWorkflow(repos)
 
   // Local loading state for resolve/accept/reject operations
   const [localLoading, setLocalLoading] = useState<Record<string, boolean>>({})
@@ -133,53 +135,6 @@ export function HomePage(): JSX.Element {
     }
     return repos.filter((r) => r.status === filterStatus)
   }, [repos, filterStatus])
-
-  // Toggle expand for a single repo
-  const toggleExpand = useCallback((repoId: string) => {
-    setExpandedRepoIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(repoId)) {
-        next.delete(repoId)
-      } else {
-        next.add(repoId)
-      }
-      return next
-    })
-  }, [])
-
-  // Auto-expand repos with active (running/waiting) workflows during SyncAll.
-  // Only adds to the set — never collapses a repo the user manually expanded.
-  // Collapsed repos are cleaned up when their workflow finishes.
-  useEffect(() => {
-    setExpandedRepoIds((prev) => {
-      const next = new Set(prev)
-      let changed = false
-      for (const repo of repos) {
-        const wf = repo.workflow
-        if (!wf) {
-          // No active workflow — remove from auto-expand if it was there
-          if (next.has(repo.id)) {
-            next.delete(repo.id)
-            changed = true
-          }
-          continue
-        }
-        if (wf.status === 'running' || wf.status === 'waiting') {
-          if (!next.has(repo.id)) {
-            next.add(repo.id)
-            changed = true
-          }
-        } else if (wf.status === 'success' || wf.status === 'failed') {
-          // Workflow finished — remove from auto-expand
-          if (next.has(repo.id)) {
-            next.delete(repo.id)
-            changed = true
-          }
-        }
-      }
-      return changed ? next : prev
-    })
-  }, [repos])
 
   // Track which repos are being resolved with auto-confirm so the streamResults
   // effect knows to trigger summarization (only for auto-confirm, not pending confirm).
