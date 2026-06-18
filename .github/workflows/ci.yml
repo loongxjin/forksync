@@ -33,7 +33,7 @@ jobs:
         run: go test -race -v ./...
 
   lint-frontend:
-    name: Lint & Build Frontend
+    name: Lint Frontend
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -46,7 +46,9 @@ jobs:
           node-version: 20
 
       - run: rm -f package-lock.json && npm install --no-fund
-      - run: npx vite build
+      # frontend build is verified by the build-wails job below (it needs
+      # wails-generated bindings in src/wailsjs/ which only exist after
+      # `wails generate` or `wails build`)
 
   build-wails:
     name: Build Wails (${{ matrix.os }})
