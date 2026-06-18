@@ -18,6 +18,8 @@ import { Separator } from '@/components/ui/separator'
 import { AddRepoDialog } from '@/components/AddRepoDialog'
 import { ScanDialog } from '@/components/ScanDialog'
 import { RepoSettingsDialog } from '@/components/RepoSettingsDialog'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { ErrorBanner } from '@/components/ErrorBanner'
 import { engineApi } from '@/lib/api'
 import { useAgentLogAutoload } from '@/hooks/useAgentLogAutoload'
 import { useAutoExpandWorkflow } from '@/hooks/useAutoExpandWorkflow'
@@ -41,7 +43,7 @@ export function HomePage(): JSX.Element {
   } = useRepos()
   const { showToast } = useToastContext()
   const {
-    loading: agentLoading, error: agentError
+    loading: agentLoading, error: agentError, refreshAgents
   } = useAgents()
   const {
     resolveResults, isStreamLive: getIsStreamLive, getStreamEvents,
@@ -67,6 +69,10 @@ export function HomePage(): JSX.Element {
   // Dialog states
   const [showAdd, setShowAdd] = useState(false)
   const [showScan, setShowScan] = useState(false)
+  // Confirm dialog state — replaces native confirm()/alert() with a styled,
+  // keyboard-accessible dialog that can be unit-tested. Type is the action to
+  // perform on confirm.
+  const [confirmAction, setConfirmAction] = useState<'remove' | 'clearHistory' | null>(null)
   const [settingsRepo, setSettingsRepo] = useState<string | null>(null)
   const [scanInitialDir, setScanInitialDir] = useState('')
 
@@ -156,20 +162,59 @@ export function HomePage(): JSX.Element {
   // Repo actions
   const removingRef = useRef<string | null>(null)
   const [removingRepo, setRemovingRepo] = useState<string | null>(null)
+  // Store the pending remove target name so the ConfirmDialog onConfirm can
+  // proceed with the actual removal.
+  const pendingRemoveRef = useRef<string | null>(null)
 
-  const handleRemove = useCallback(async (name: string) => {
-    if (removingRef.current) return
-    if (confirm(t('repos.removeConfirm', { name }))) {
-      removingRef.current = name
-      setRemovingRepo(name)
-      try {
-        await removeRepo(name)
-      } finally {
-        removingRef.current = null
-        setRemovingRepo(null)
-      }
+  const handleRemove = useCallback((name: string) => {
+    pendingRemoveRef.current = name
+    setConfirmAction('remove')
+  }, [])
+
+  const doRemove = useCallback(async () => {
+    const name = pendingRemoveRef.current
+    if (!name || removingRef.current) return
+    removingRef.current = name
+    setRemovingRepo(name)
+    try {
+      await removeRepo(name)
+    } finally {
+      removingRef.current = null
+      setRemovingRepo(null)
     }
-  }, [removeRepo, t])
+  }, [removeRepo])
+
+  // Clear history with toast (replaces alert())
+  const handleClearHistory = useCallback(() => {
+    setConfirmAction('clearHistory')
+  }, [])
+
+  const doClearHistory = useCallback(async () => {
+    try {
+      const res = await engineApi.historyCleanup()
+      if (res.success) {
+        clearHistory()
+        showToast?.(t('dashboard.clearSuccess'), 'success')
+      } else {
+        showToast?.(res.error || t('dashboard.clearFailed'), 'error')
+      }
+    } catch (err) {
+      showToast?.(t('dashboard.clearFailed'), 'error')
+    }
+  }, [clearHistory, showToast, t])
+
+  const handleConfirmClose = useCallback(() => {
+    setConfirmAction(null)
+  }, [])
+
+  const handleConfirm = useCallback(() => {
+    if (confirmAction === 'remove') {
+      doRemove()
+    } else if (confirmAction === 'clearHistory') {
+      doClearHistory()
+    }
+    setConfirmAction(null)
+  }, [confirmAction, doRemove, doClearHistory])
 
   // Drag-drop add: folders dropped onto the repo list become repos (git) or
   // open the scan dialog seeded with the directory (non-git).
@@ -189,9 +234,7 @@ export function HomePage(): JSX.Element {
     <div className="space-y-5">
       {/* Error */}
       {error && (
-        <div className="rounded-lg border border-error/30 bg-error-muted p-3 text-sm text-error animate-fade-in">
-          {error}
-        </div>
+        <ErrorBanner message={error} onRetry={refresh} />
       )}
 
       {/* Status Overview */}
@@ -307,9 +350,7 @@ export function HomePage(): JSX.Element {
 
       {/* Agent error */}
       {agentError && (
-        <div className="rounded-lg border border-error/30 bg-error-muted p-3 animate-fade-in">
-          <p className="text-sm text-error">{agentError}</p>
-        </div>
+        <ErrorBanner message={agentError} onRetry={refreshAgents} />
       )}
 
       <Separator />
@@ -339,13 +380,9 @@ export function HomePage(): JSX.Element {
               size="sm"
               className="text-xs h-7"
               disabled={historyLoading}
-              onClick={async (e) => {
+              onClick={(e) => {
                 e.stopPropagation()
-                if (confirm(t('dashboard.clearHistoryConfirm'))) {
-                  const res = await engineApi.historyCleanup()
-                  if (res.success) clearHistory()
-                  else alert(res.error || t('dashboard.clearFailed'))
-                }
+                handleClearHistory()
               }}
             >
               {t('dashboard.clear')}
@@ -409,6 +446,19 @@ export function HomePage(): JSX.Element {
           if (!open) setDiffDrawerRepo(null)
         }}
         repoName={diffDrawerRepo ?? ''}
+      />
+
+      {/* Confirm Dialog — replaces native confirm()/alert() */}
+      <ConfirmDialog
+        open={confirmAction !== null}
+        title={confirmAction === 'remove' ? t('repos.removeTitle') : t('dashboard.clearHistoryTitle')}
+        message={confirmAction === 'remove'
+          ? t('repos.removeConfirm', { name: pendingRemoveRef.current ?? '' })
+          : t('dashboard.clearHistoryConfirm')}
+        confirmLabel={t('common.confirm')}
+        confirmVariant={confirmAction === 'remove' ? 'destructive' : 'default'}
+        onConfirm={handleConfirm}
+        onCancel={handleConfirmClose}
       />
     </div>
   )
