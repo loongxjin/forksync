@@ -359,6 +359,7 @@ export function AgentConfig(): JSX.Element {
         title={t('settings.agent.resetSession')}
         message={t('settings.agent.resetConfirm', { repoId: confirmDelete ?? '' })}
         confirmLabel={t('common.delete')}
+        cancelLabel={t('common.cancel')}
         confirmVariant="destructive"
         onConfirm={doReset}
         onCancel={() => setConfirmDelete(null)}

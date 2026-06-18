@@ -239,13 +239,12 @@ const engineApi: EngineAPI = {
   },
   // Streaming via Wails Events
   resolveStreamStart(name, opts) {
-    // ResolveStreamStart is fire-and-forget on the Go side; it runs the agent
-    // in a goroutine and emits "resolve:tick:<name>" / "resolve:done:<name>"
-    // / "resolve:error:<name>" Wails Events as it progresses.
     wailsResolveStreamStart(name, opts?.agent ?? '', opts?.noConfirm ?? false)
   },
   onResolveStreamTick(callback) {
-    return EventsOn('resolve:tick', (repoName: string) => callback(repoName))
+    return EventsOn('resolve:tick', (repoName: string) => {
+      callback(repoName)
+    })
   },
   onResolveStreamDone(callback) {
     return EventsOn('resolve:done', (repoName: string, result: any) => {
@@ -253,13 +252,17 @@ const engineApi: EngineAPI = {
     })
   },
   onResolveStreamError(callback) {
-    return EventsOn('resolve:error', (repoName: string, error: string) => callback(repoName, error))
+    return EventsOn('resolve:error', (repoName: string, error: string) => {
+      callback(repoName, error)
+    })
   },
   async readAgentLog(repoName, sessionId) {
     try {
       const result = await wailsReadAgentLog(repoName, sessionId ?? '')
-	      return { events: result.events, isRunning: result.isRunning }
-    } catch (e) { return { events: [], isRunning: false } }
+      return { events: result.events, isRunning: result.isRunning }
+    } catch (e) {
+      return { events: [], isRunning: false }
+    }
   },
   eventsStart() {},
   eventsStop() {},

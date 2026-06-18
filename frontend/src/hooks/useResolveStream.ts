@@ -226,8 +226,8 @@ export function useResolveStream(): ResolveStreamHook {
     if (ipcSetupRef.current) return
     ipcSetupRef.current = true
 
-	    const unsubTick = engineApi.onResolveStreamTick((repoName) => {
-	      logger.log('tick received', repoName)
+		    const unsubTick = engineApi.onResolveStreamTick((repoName) => {
+		      logger.log('tick received', repoName)
 	      // Tick means the agent is alive — ensure polling is active. Do NOT
 	      // call readDiskLog here directly; when the agent produces a burst of
 	      // output (e.g. tool stdout), ticks flood in and each one would
@@ -238,8 +238,8 @@ export function useResolveStream(): ResolveStreamHook {
 	      }
 	    })
 
-	    const unsubDone = engineApi.onResolveStreamDone((repoName, apiRes) => {
-	      logger.log('stream done received', repoName, apiRes.success)
+		    const unsubDone = engineApi.onResolveStreamDone((repoName, apiRes) => {
+		      logger.log('stream done received', repoName, apiRes.success)
 	      // Final disk read to capture the done frame — readDiskLog will
 	      // dispatch STREAM_DONE when it sees !isRunning with events. Do not
 	      // dispatch here to avoid double-firing.

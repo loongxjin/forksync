@@ -485,12 +485,12 @@ func (a *App) runResolveStream(name, agentName string, noConfirm bool) {
 		return
 	}
 	if !isConflictRelated(r2.Status) {
-		runtime.EventsEmit(a.ctx, "resolve:done", name, types.ResolveData{RepoID: r2.ID})
-		return
-	}
-	paths := a.deps.GitOps.DetectConflicts(a.ctx, r2.Path)
-	if len(paths) == 0 {
-		runtime.EventsEmit(a.ctx, "resolve:done", name, types.ResolveData{RepoID: r2.ID})
+			runtime.EventsEmit(a.ctx, "resolve:done", name, types.ResolveData{RepoID: r2.ID})
+			return
+		}
+		paths := a.deps.GitOps.DetectConflicts(a.ctx, r2.Path)
+		if len(paths) == 0 {
+			runtime.EventsEmit(a.ctx, "resolve:done", name, types.ResolveData{RepoID: r2.ID})
 		return
 	}
 
