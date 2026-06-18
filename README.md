@@ -37,7 +37,7 @@ Maintaining forked repositories is tedious. Upstream authors keep shipping chang
 | **AI Conflict Resolution** | Delegates merge conflicts to AI agents with git-aware prompts |
 | **Workflow-guided UI** | Step-by-step workflow: fetch → merge → detect conflicts → agent resolve → review → commit |
 | **Live Agent Terminal** | Real-time streaming view of agent output (stdout, tool calls, errors) during resolution |
-| **Desktop App** | Polished Electron GUI — dashboard, workflow steps, settings |
+| **Desktop App** | Polished Wails GUI — dashboard, workflow steps, settings |
 | **HTTP API** | REST + WebSocket server for programmatic access |
 | **Directory Scanner** | Recursively scans any directory to discover and batch-add fork repos |
 | **Sync History** | SQLite-backed history with filters, AI-generated summaries, and cleanup |
@@ -196,14 +196,14 @@ Built with **Wails v2** + **React** + **TypeScript** + **Tailwind CSS** + **shad
                  │ Wails binding (direct Go call)
 ┌────────────────▼───────────────────────────┐
 │      Go Engine (same process, no IPC)        │
-│  App struct with 33 bound methods            │
+│  App struct with 34 bound methods            │
 │  Internal: sync · resolve · agent            │
 │            history · scheduler · eventbus    │
 │            ide · config · summarize          │
 └────────────────────────────────────────────┘
 ```
 
-In the Wails desktop app, the engine runs **in-process** — all 33 methods are Go struct methods bound to the frontend via Wails auto-generated TypeScript bindings, with no HTTP/IPC between them. Streaming uses Wails Events instead of WebSocket.
+In the Wails desktop app, the engine runs **in-process** — all 34 methods are Go struct methods bound to the frontend via Wails auto-generated TypeScript bindings, with no HTTP/IPC between them. Streaming uses Wails Events instead of WebSocket.
 
 The same engine can also run as a **standalone HTTP server** for headless or programmatic access (`cd engine && go build`). See [Standalone HTTP Server](#standalone-http-server) above.
 

@@ -37,7 +37,7 @@
 | **AI 冲突解决** | 将合并冲突委托给 AI Agent，通过 git 历史感知的 prompt 做智能合并 |
 | **工作流引导** | 步骤式工作流：fetch → merge → 检测冲突 → agent 解决 → 审核 → 提交 |
 | **实时终端** | agent 运行过程中实时查看 stdout、工具调用和错误输出 |
-| **桌面应用** | 精致的 Electron GUI — 仪表盘、工作流步骤、设置页 |
+| **桌面应用** | 精致的 Wails GUI — 仪表盘、工作流步骤、设置页 |
 | **HTTP API** | REST + WebSocket 服务，适合程序化访问 |
 | **目录扫描** | 递归扫描任意目录，自动发现并批量添加 Fork 仓库 |
 | **同步历史** | 基于 SQLite 的历史记录，支持筛选、AI 摘要和清理 |
@@ -196,14 +196,14 @@ agent:
                  │ Wails binding（直接 Go 调用）
 ┌────────────────▼───────────────────────────┐
 │      Go 引擎（同进程，无 IPC）                │
-│  App 结构体，33 个绑定方法                    │
+│  App 结构体，34 个绑定方法                    │
 │  内部:  sync · resolve · agent               │
 │         history · scheduler · eventbus       │
 │         ide · config · summarize             │
 └────────────────────────────────────────────┘
 ```
 
-在 Wails 桌面应用中，引擎**内嵌在同一进程**运行 — 全部 33 个方法都是 Go 结构体方法，通过 Wails 自动生成的 TypeScript 绑定暴露给前端，引擎与 UI 之间无需 HTTP/IPC。流式输出使用 Wails Events 替代 WebSocket。
+在 Wails 桌面应用中，引擎**内嵌在同一进程**运行 — 全部 34 个方法都是 Go 结构体方法，通过 Wails 自动生成的 TypeScript 绑定暴露给前端，引擎与 UI 之间无需 HTTP/IPC。流式输出使用 Wails Events 替代 WebSocket。
 
 同一套引擎代码也可作为**独立 HTTP server** 以无头或编程方式运行（`cd engine && go build`）。见上方的[独立 HTTP Server](#独立-http-server)。
 
