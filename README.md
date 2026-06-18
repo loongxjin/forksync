@@ -203,7 +203,9 @@ Built with **Wails v2** + **React** + **TypeScript** + **Tailwind CSS** + **shad
 └────────────────────────────────────────────┘
 ```
 
-The Go engine is **not a separate HTTP server** — all 33 methods are Go struct methods bound to the frontend via Wails auto-generated TypeScript bindings. No bearer tokens, no port discovery, no process supervision. Streaming uses Wails Events instead of WebSocket.
+In the Wails desktop app, the engine runs **in-process** — all 33 methods are Go struct methods bound to the frontend via Wails auto-generated TypeScript bindings, with no HTTP/IPC between them. Streaming uses Wails Events instead of WebSocket.
+
+The same engine can also run as a **standalone HTTP server** for headless or programmatic access (`cd engine && go build`). See [Standalone HTTP Server](#standalone-http-server) above.
 
 ---
 

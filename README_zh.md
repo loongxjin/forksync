@@ -203,7 +203,9 @@ agent:
 └────────────────────────────────────────────┘
 ```
 
-Go 引擎**不是独立的 HTTP server** — 全部 33 个方法都是 Go 结构体方法，通过 Wails 自动生成的 TypeScript 绑定暴露给前端。无需 bearer token、端口发现、进程管理。流式输出使用 Wails Events 替代 WebSocket。
+在 Wails 桌面应用中，引擎**内嵌在同一进程**运行 — 全部 33 个方法都是 Go 结构体方法，通过 Wails 自动生成的 TypeScript 绑定暴露给前端，引擎与 UI 之间无需 HTTP/IPC。流式输出使用 Wails Events 替代 WebSocket。
+
+同一套引擎代码也可作为**独立 HTTP server** 以无头或编程方式运行（`cd engine && go build`）。见上方的[独立 HTTP Server](#独立-http-server)。
 
 ---
 
