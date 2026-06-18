@@ -17,9 +17,10 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(_ *http.Request) bool { return true },
 }
 
-// registerStreamRoutes wires the WebSocket resolve-stream endpoint.
+// registerStreamRoutes wires the WebSocket endpoints.
 func (s *Server) registerStreamRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/stream/resolve/{name}", s.handleResolveStream)
+	mux.HandleFunc("/stream/events", s.handleEventsStream)
 }
 
 // handleResolveStream upgrades to WebSocket and streams agent resolve events.
@@ -86,5 +87,74 @@ func (s *Server) handleResolveStream(w http.ResponseWriter, r *http.Request) {
 			Type: agent.StreamEventError,
 			Data: runErr.Error(),
 		})
+	}
+}
+
+// eventsMessage is the envelope pushed to /stream/events subscribers. Each
+// message tells the client which slice of state changed so it can re-fetch
+// just that slice (repos or history).
+type eventsMessage struct {
+	Type string `json:"type"` // "repos_changed" | "history_changed" | "ready"
+}
+
+// handleEventsStream upgrades to WebSocket and pushes a message every time the
+// engine's state changes (repo add/update/remove, history insert/summary/clear).
+// This replaces the renderer's fixed-interval status/history polling: the
+// client opens one WS on launch and reacts to push events instead of polling.
+//
+// On connect it sends {"type":"ready"} so the client knows the channel is live
+// (and can do an initial full fetch). The auth token is read from ?token=
+// by the authToken middleware before this handler runs.
+func (s *Server) handleEventsStream(w http.ResponseWriter, r *http.Request) {
+	if s.deps.Bus == nil {
+		http.Error(w, "event bus unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		logger.Warn("app: events ws upgrade failed", "error", err)
+		return
+	}
+	defer conn.Close()
+
+	// Signal readiness so the client does its initial fetch.
+	if werr := conn.WriteJSON(eventsMessage{Type: "ready"}); werr != nil {
+		logger.Debug("app: events ws initial write failed", "error", werr)
+		return
+	}
+
+	ch, cancel := s.deps.Bus.Subscribe()
+	defer cancel()
+
+	// Pump: forward bus events to the WS. A nil channel means the bus was
+	// closed (server shutdown) — end the loop.
+	ctx, cancelCtx := context.WithCancel(r.Context())
+	defer cancelCtx()
+	go func() {
+		// Read loop: a read error (client disconnect) cancels the context so the
+		// select below unblocks and we unsubscribe.
+		defer cancelCtx()
+		for {
+			if _, _, rerr := conn.ReadMessage(); rerr != nil {
+				return
+			}
+		}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev, ok := <-ch:
+			if !ok {
+				// Bus closed (server shutdown). Best-effort close frame.
+				return
+			}
+			if werr := conn.WriteJSON(eventsMessage{Type: string(ev.Type)}); werr != nil {
+				logger.Debug("app: events ws write failed", "type", ev.Type, "error", werr)
+				return
+			}
+		}
 	}
 }
