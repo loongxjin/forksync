@@ -72,10 +72,15 @@ make wails
 # Output: build/bin/
 ```
 
-### CLI Only
+### Standalone HTTP Server
+
+The engine can also run as a headless HTTP server for programmatic access:
 
 ```bash
-cd engine && go build -o forksync . && ./forksync --help
+cd engine && go build -o forksync .
+./forksync -addr 127.0.0.1:8080
+# Prints FORKSYNC_HTTP_ADDR=127.0.0.1:8080 at startup
+# Then all engine ops are available via REST — see engine/README.md
 ```
 
 ---

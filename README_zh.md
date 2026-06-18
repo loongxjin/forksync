@@ -72,10 +72,15 @@ make wails
 # 输出: build/bin/
 ```
 
-### 仅命令行
+### 独立 HTTP Server
+
+引擎也可作为无头 HTTP server 运行，供编程调用：
 
 ```bash
-cd engine && go build -o forksync . && ./forksync --help
+cd engine && go build -o forksync .
+./forksync -addr 127.0.0.1:8080
+# 启动时打印 FORKSYNC_HTTP_ADDR=127.0.0.1:8080
+# 所有引擎操作通过 REST 接口访问 — 详见 engine/README.md
 ```
 
 ---
