@@ -1,0 +1,295 @@
+import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import type { ScannedRepo, BranchMapping } from '@shared/types/engine'
+import { Modal } from '@/components/ui/modal'
+import { BranchMappingInput } from '@/components/BranchMappingInput'
+import { engineApi } from '@/lib/api'
+
+interface ScanDialogProps {
+  open: boolean
+  onClose: () => void
+  onScan: (dir: string) => Promise<void>
+  onAdd: (path: string, upstream?: string, branchMapping?: BranchMapping) => Promise<void>
+  scannedRepos: ScannedRepo[]
+  loading: boolean
+  initialDir?: string
+}
+
+interface RepoBranchConfig {
+  [repoPath: string]: {
+    enabled: boolean
+    mapping?: BranchMapping
+  }
+}
+
+export function ScanDialog({
+  open,
+  onClose,
+  onScan,
+  onAdd,
+  scannedRepos,
+  loading,
+  initialDir
+}: ScanDialogProps): JSX.Element | null {
+  const { t } = useTranslation()
+  const [dir, setDir] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [adding, setAdding] = useState(false)
+  const [expandedRepo, setExpandedRepo] = useState<string | null>(null)
+  const [repoBranchConfigs, setRepoBranchConfigs] = useState<RepoBranchConfig>({})
+
+  // Auto-fill initialDir and trigger scan when provided (drag-drop flow)
+  useEffect(() => {
+    if (open && initialDir) {
+      setDir(initialDir)
+      setSelected(new Set())
+      setRepoBranchConfigs({})
+      setExpandedRepo(null)
+      // Auto-trigger scan after a tick so dir state is set
+      const timer = setTimeout(() => {
+        onScan(initialDir)
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [open, initialDir, onScan])
+
+  const handleSelectDirectory = async (): Promise<void> => {
+    try {
+      const result = await engineApi.openDirectory()
+      if (!result.canceled && result.filePaths && result.filePaths.length > 0) {
+        setDir(result.filePaths[0])
+      }
+    } catch (err) {
+      console.error('Failed to open directory picker:', err)
+    }
+  }
+
+  const handleScan = async (): Promise<void> => {
+    if (!dir.trim()) return
+    setSelected(new Set())
+    setRepoBranchConfigs({})
+    setExpandedRepo(null)
+    await onScan(dir.trim())
+  }
+
+  const toggleSelect = (path: string): void => {
+    const next = new Set(selected)
+    if (next.has(path)) {
+      next.delete(path)
+    } else {
+      next.add(path)
+    }
+    setSelected(next)
+  }
+
+  const toggleExpand = (path: string): void => {
+    setExpandedRepo(expandedRepo === path ? null : path)
+  }
+
+  const toggleMappingEnabled = (repoPath: string): void => {
+    setRepoBranchConfigs(prev => ({
+      ...prev,
+      [repoPath]: {
+        ...prev[repoPath],
+        enabled: !(prev[repoPath]?.enabled ?? false)
+      }
+    }))
+  }
+
+  const updateRepoBranchMapping = (repoPath: string, mapping: BranchMapping): void => {
+    setRepoBranchConfigs(prev => ({
+      ...prev,
+      [repoPath]: {
+        ...prev[repoPath],
+        mapping
+      }
+    }))
+  }
+
+  const handleAddSelected = async (): Promise<void> => {
+    setAdding(true)
+    try {
+      for (const path of Array.from(selected)) {
+        const repo = scannedRepos.find((r) => r.path === path)
+        const config = repoBranchConfigs[path]
+        const branchMapping = config?.enabled && config?.mapping?.localBranch && config?.mapping?.remoteBranch
+          ? config.mapping
+          : undefined
+        await onAdd(path, repo?.suggestedUpstream, branchMapping)
+      }
+      setSelected(new Set())
+      setRepoBranchConfigs({})
+      onClose()
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const handleClose = (): void => {
+    setDir('')
+    setSelected(new Set())
+    setRepoBranchConfigs({})
+    setExpandedRepo(null)
+    onClose()
+  }
+
+  const selectAll = (): void => {
+    if (selected.size === scannedRepos.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(scannedRepos.map(r => r.path)))
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={handleClose} maxWidth="max-w-2xl" scrollable>
+        <h3 className="text-lg font-semibold">{t('scanRepo.title')}</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {t('scanRepo.description')}
+        </p>
+
+        <div className="mt-4 space-y-2">
+          <Label>{t('scanRepo.directoryToScan')}</Label>
+          <div className="flex gap-2">
+            <div 
+              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+            >
+              {dir || t('scanRepo.noDirectorySelected')}
+            </div>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={handleSelectDirectory}
+            >
+              {t('common.selectDirectory')}
+            </Button>
+          </div>
+          <Button 
+            className="w-full" 
+            onClick={handleScan} 
+            disabled={!dir || loading}
+          >
+            {loading ? t('scanRepo.scanning') : t('scanRepo.scan')}
+          </Button>
+        </div>
+
+        {scannedRepos.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">
+                {t('scanRepo.reposFound', { count: scannedRepos.length })}
+              </Label>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={selectAll}
+                className="h-6 text-xs"
+              >
+                {selected.size === scannedRepos.length ? t('scanRepo.deselectAll') : t('scanRepo.selectAll')}
+              </Button>
+            </div>
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {scannedRepos.map((repo) => {
+                const isExpanded = expandedRepo === repo.path
+                const config = repoBranchConfigs[repo.path] || { enabled: false }
+                const hasMapping = config.enabled && config.mapping?.localBranch && config.mapping?.remoteBranch
+                
+                return (
+                  <div 
+                    key={repo.path} 
+                    className={`rounded-md border transition-colors ${
+                      selected.has(repo.path) ? 'border-primary/50 bg-accent/30' : 'border-border'
+                    }`}
+                  >
+                    <label className="flex cursor-pointer items-start gap-2 p-2">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(repo.path)}
+                        onChange={() => toggleSelect(repo.path)}
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{repo.name}</span>
+                          {repo.isFork && <Badge variant="info">{t('scanRepo.fork')}</Badge>}
+                          {hasMapping && <Badge variant="secondary">{t('scanRepo.mapped')}</Badge>}
+                        </div>
+                        <p className="truncate text-xs text-muted-foreground">{repo.path}</p>
+                        {repo.suggestedUpstream && (
+                          <p className="truncate text-xs text-blue-400">
+                            ↑ {repo.suggestedUpstream}
+                          </p>
+                        )}
+                      </div>
+                      {selected.has(repo.path) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleExpand(repo.path)
+                          }}
+                          className="h-6 text-xs"
+                        >
+                          {isExpanded ? t('scanRepo.hide') : t('scanRepo.map')}
+                        </Button>
+                      )}
+                    </label>
+                    
+                    {/* Branch mapping config panel */}
+                    {isExpanded && selected.has(repo.path) && (
+                      <div className="border-t border-border bg-background/50 p-3 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`enable-mapping-${repo.path}`}
+                            checked={config.enabled}
+                            onChange={() => toggleMappingEnabled(repo.path)}
+                            className="rounded border-input"
+                          />
+                          <Label htmlFor={`enable-mapping-${repo.path}`} className="text-xs cursor-pointer">
+                            {t('addRepo.branchMapping')}
+                          </Label>
+                        </div>
+                        
+                        {!config.enabled && (
+                          <p className="text-xs text-muted-foreground">
+                            {t('scanRepo.defaultSyncSameName')}
+                          </p>
+                        )}
+                        
+                        {config.enabled && (
+                          <BranchMappingInput
+                            value={config.mapping}
+                            onChange={(mapping) => updateRepoBranchMapping(repo.path, mapping)}
+                            localBranches={repo.localBranches}
+                            remoteBranches={repo.remoteBranches}
+                            compact
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={handleClose}>
+            {t('common.cancel')}
+          </Button>
+          {selected.size > 0 && (
+            <Button onClick={handleAddSelected} disabled={adding}>
+              {adding ? t('scanRepo.adding', { count: selected.size }) : t('scanRepo.addRepos', { count: selected.size })}
+            </Button>
+          )}
+        </div>
+      </Modal>
+  )
+}
