@@ -10,6 +10,30 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { Layout } from './components/Layout'
 import { HomePage } from './pages/HomePage'
 import { SettingsPage } from './pages/SettingsPage'
+import { useEngineEvents } from './hooks/useEngineEvents'
+
+/**
+ * AppContent lives inside all providers so it can call useRepos / useHistory.
+ * It opens the single /stream/events WebSocket that drives push-based
+ * refreshes (replacing the renderer's status/history polling).
+ */
+function AppContent(): JSX.Element {
+  useEngineEvents()
+  return (
+    <HashRouter>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={
+            <ErrorBoundary>
+              <HomePage />
+            </ErrorBoundary>
+          } />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Route>
+      </Routes>
+    </HashRouter>
+  )
+}
 
 function App(): JSX.Element {
   return (
@@ -19,18 +43,7 @@ function App(): JSX.Element {
           <HistoryProvider>
           <RepoProvider>
           <AgentProvider>
-                <HashRouter>
-                  <Routes>
-                    <Route element={<Layout />}>
-                      <Route path="/" element={
-                        <ErrorBoundary>
-                          <HomePage />
-                        </ErrorBoundary>
-                      } />
-                      <Route path="/settings" element={<SettingsPage />} />
-                    </Route>
-                  </Routes>
-                </HashRouter>
+                <AppContent />
           </AgentProvider>
           </RepoProvider>
           </HistoryProvider>

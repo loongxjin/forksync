@@ -302,6 +302,64 @@ export class EngineClient {
     }
   }
 
+  /**
+   * eventsStreamStart opens the long-lived /stream/events WebSocket and pushes
+   * every state-change message (repos_changed | history_changed | ready) to
+   * the onMessage callback. The renderer opens this once on launch and reacts
+   * to push events instead of polling /status and /history on fixed intervals.
+   *
+   * Returns { onMessage, kill }: onMessage registers the handler, kill closes
+   * the socket. Mirrors resolveStream's emitter shape.
+   */
+  eventsStreamStart(): {
+    onMessage: (cb: (type: string) => void) => void
+    kill: () => void
+  } {
+    const messageCbs: Array<(type: string) => void> = []
+    let ws: WebSocket | null = null
+
+    const notify = (type: string): void => {
+      for (const cb of messageCbs) cb(type)
+    }
+
+    const params = new URLSearchParams()
+    const tok = getEngineServer().getToken()
+    if (tok) params.set('token', tok)
+    const qs = params.toString() ? `?${params.toString()}` : ''
+
+    getEngineServer()
+      .getWsUrl(`/stream/events${qs}`)
+      .then((url) => {
+        ws = new WebSocket(url)
+        ws.on('message', (data: { toString: () => string }) => {
+          const text = data.toString()
+          if (!text) return
+          try {
+            const parsed = JSON.parse(text) as { type?: string }
+            if (parsed.type) notify(parsed.type)
+          } catch {
+            // Ignore unparseable frames.
+          }
+        })
+        ws.on('error', (err: Error) => {
+          log.warn('[engine:eventsStream] error', err.message)
+        })
+        ws.on('close', () => {
+          log.info('[engine:eventsStream] closed')
+        })
+      })
+      .catch((err: Error) => {
+        log.error('[engine:eventsStream] failed to open', err.message)
+      })
+
+    return {
+      onMessage: (cb) => messageCbs.push(cb),
+      kill: () => {
+        try { ws?.close() } catch {}
+      }
+    }
+  }
+
   /** Read agent log for a repo. When sessionId is provided the exact session's
    *  log is read (by session name); otherwise the newest log is returned (backward
    *  compatibility with older agent logs that don't carry a session id). */
