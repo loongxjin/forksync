@@ -7,7 +7,7 @@
 [English](./README.md) · **中文**
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
-[![Electron](https://img.shields.io/badge/Electron-31-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![Wails](https://img.shields.io/badge/Wails-2-DF0000?logo=wails&logoColor=white)](https://wails.io/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
@@ -37,7 +37,7 @@
 | **AI 冲突解决** | 将合并冲突委托给 AI Agent，通过 git 历史感知的 prompt 做智能合并 |
 | **工作流引导** | 步骤式工作流：fetch → merge → 检测冲突 → agent 解决 → 审核 → 提交 |
 | **实时终端** | agent 运行过程中实时查看 stdout、工具调用和错误输出 |
-| **桌面应用** | 精致的 Electron GUI — 仪表盘、工作流步骤、设置页 |
+| **桌面应用** | 精致的 Wails GUI — 仪表盘、工作流步骤、设置页 |
 | **HTTP API** | REST + WebSocket 服务，适合程序化访问 |
 | **目录扫描** | 递归扫描任意目录，自动发现并批量添加 Fork 仓库 |
 | **同步历史** | 基于 SQLite 的历史记录，支持筛选、AI 摘要和清理 |
@@ -67,15 +67,20 @@
 git clone https://github.com/loongxjin/forksync.git
 cd forksync
 
-# 完整构建（Go 引擎 + Electron 应用）
-make build
-# 产物：app/dist/
+# Wails 构建（单二进制文件, ~18MB）
+make wails
+# 输出: build/bin/
 ```
 
-### 仅命令行
+### 独立 HTTP Server
+
+引擎也可作为无头 HTTP server 运行，供编程调用：
 
 ```bash
-cd engine && go build -o forksync . && ./forksync --help
+cd engine && go build -o forksync .
+./forksync -addr 127.0.0.1:8080
+# 启动时打印 FORKSYNC_HTTP_ADDR=127.0.0.1:8080
+# 所有引擎操作通过 REST 接口访问 — 详见 engine/README.md
 ```
 
 ---
@@ -100,12 +105,14 @@ github:
 ### 2. 启动应用
 
 ```bash
-cd app && npm install && npm run dev
+# 开发模式（热重载）
+make wails-dev
+
+# 或构建后运行
+make wails && open build/bin/forksync.app
 ```
 
-Electron 应用启动时自动启动 Go 引擎 server（`127.0.0.1:<随机端口>`）。
-所有仓库操作（添加、扫描、同步、解决冲突）均通过 GUI 完成。
-如需 API 访问，见 `engine/README.md`。
+Wails 应用将 Go 引擎直接嵌入 — 无需独立 server 进程、无需 HTTP 桥接。所有引擎操作均为原生 Go 函数调用。
 
 ---
 
@@ -165,7 +172,7 @@ agent:
 
 ## 桌面应用
 
-基于 **Electron** + **React** + **TypeScript** + **Tailwind CSS** + **shadcn/ui** 构建。
+基于 **Wails v2** + **React** + **TypeScript** + **Tailwind CSS** + **shadcn/ui** 构建。
 
 | 区域 | 说明 |
 |------|------|
@@ -182,35 +189,29 @@ agent:
 
 ```
 ┌────────────────────────────────────────────┐
-│            Electron UI (React)              │
+│            Wails UI (React)                 │
 │  仪表盘 · 仓库 · 工作流                      │
 │  Agent 终端 · 历史 · 设置                   │
 └────────────────┬───────────────────────────┘
-                 │ IPC (contextBridge)
+                 │ Wails binding（直接 Go 调用）
 ┌────────────────▼───────────────────────────┐
-│          EngineClient (TypeScript)           │
-│  通过 HTTP + WebSocket 与本地引擎通信         │
-└────────────────┬───────────────────────────┘
-                 │ REST + WebSocket
-                 │ `127.0.0.1:<随机端口>`
-                 │ Bearer token 鉴权
-┌────────────────▼───────────────────────────┐
-│      Go Engine (net/http, 单一长进程)         │
-│  REST:  status · sync · resolve · config     │
-│  WS:    /stream/resolve · /stream/events     │
-│  内部:  scheduler · history · agent          │
-│         notify · summarizer · eventbus       │
+│      Go 引擎（同进程，无 IPC）                │
+│  App 结构体，34 个绑定方法                    │
+│  内部:  sync · resolve · agent               │
+│         history · scheduler · eventbus       │
+│         ide · config · summarize             │
 └────────────────────────────────────────────┘
 ```
 
-Electron 启动时 spawn 一个**单一长生命周期**的 Go 引擎进程，监听 `127.0.0.1:<随机端口>`。所有通信通过 HTTP + WebSocket 完成，并附带会话级 Bearer token 鉴权。引擎通过 stdout 宣告自己的地址和 token，Electron 主进程扮演反向代理角色 —— 渲染进程永远看不到 token。如果引擎崩溃，会自动按指数退避重启（最多 5 次，500ms → 1s → 2s → 5s 上限）。
+在 Wails 桌面应用中，引擎**内嵌在同一进程**运行 — 全部 34 个方法都是 Go 结构体方法，通过 Wails 自动生成的 TypeScript 绑定暴露给前端，引擎与 UI 之间无需 HTTP/IPC。流式输出使用 Wails Events 替代 WebSocket。
+
+同一套引擎代码也可作为**独立 HTTP server** 以无头或编程方式运行（`cd engine && go build`）。见上方的[独立 HTTP Server](#独立-http-server)。
 
 ---
 
 ## 引擎 API
 
-所有引擎操作均可通过本地 HTTP server 的 REST 端点访问。
-详见 `engine/README.md` 获取完整 API 参考和 JSON 契约。
+所有引擎操作均可通过 **Wails bindings**（React 前端直接 Go 调用）访问。同时提供独立 HTTP server 用于无头模式。详见 `engine/README.md` 获取 HTTP API 参考。
 
 | 操作 | HTTP 路由 |
 |---|---|

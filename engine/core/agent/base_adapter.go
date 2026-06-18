@@ -1,0 +1,225 @@
+package agent
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"os/exec"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/loongxjin/forksync/engine/core/logger"
+)
+
+// baseAdapter provides shared logic for simple CLI-based agent adapters
+// (OpenCode, Codex) that follow the same pattern:
+//   - build CLI args with optional session ID
+//   - exec the binary and capture combined output
+//   - extract session ID from text output
+//
+// ClaudeAdapter is NOT based on this because it uses JSON structured output.
+//
+// Each adapter embeds baseAdapter and sets buildArgs in the constructor to
+// provide agent-specific CLI arguments. The sessionID parameter is used
+// to decide whether to include session resumption flags.
+type baseAdapter struct {
+	binary    string
+	name      string
+	buildArgs func(sessionID, prompt string) []string
+}
+
+func (a *baseAdapter) Name() string { return a.name }
+
+func (a *baseAdapter) IsAvailable() bool {
+	_, err := exec.LookPath(a.binary)
+	return err == nil
+}
+
+func (a *baseAdapter) StartSession(ctx context.Context, opts SessionOptions) (*Session, error) {
+	args := a.buildArgs("", "ok")
+	output, err := a.execCLI(ctx, opts.RepoPath, args)
+	if err != nil {
+		return nil, fmt.Errorf("%s start session: %w", a.name, err)
+	}
+
+	return &Session{
+		ID:        extractSessionID(output),
+		Provider:  a.name,
+		RepoPath:  opts.RepoPath,
+		StartedAt: time.Now(),
+		IsNew:     true,
+	}, nil
+}
+
+func (a *baseAdapter) ResolveConflicts(ctx context.Context, session *Session, prompt string) (*AgentResult, error) {
+	args := a.buildArgs(session.ID, prompt)
+	output, err := a.execCLI(ctx, session.RepoPath, args)
+	if err != nil {
+		return &AgentResult{
+			Success:   false,
+			SessionID: session.ID,
+			Summary:   fmt.Sprintf("%s error: %v", a.name, err),
+		}, fmt.Errorf("%s resolve: %w", a.name, err)
+	}
+
+	sessionID := extractSessionID(output)
+	if sessionID == "" {
+		sessionID = session.ID
+	}
+
+	return &AgentResult{
+		Success:   true,
+		SessionID: sessionID,
+		Summary:   extractSummary(output, maxSummaryLength),
+	}, nil
+}
+
+// ResolveConflictsWithStream runs the agent with real-time streaming output.
+// This is NOT part of the AgentProvider interface; it is called by session.Manager
+// when a StreamWriter is provided.
+func (a *baseAdapter) ResolveConflictsWithStream(ctx context.Context, session *Session, prompt string, sw *StreamWriter) (*AgentResult, error) {
+	args := a.buildArgs(session.ID, prompt)
+	logger.Debug("[TRACE] baseAdapter: ResolveConflictsWithStream START", "agent", a.name, "repo", session.RepoPath, "session", session.ID, "args", args)
+
+	cmd := exec.CommandContext(ctx, a.binary, args...)
+	cmd.Dir = session.RepoPath
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("%s stdout pipe: %w", a.name, err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("%s stderr pipe: %w", a.name, err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		logger.Error("[TRACE] baseAdapter: cmd.Start FAILED", "agent", a.name, "error", err)
+		_ = sw.WriteEvent(StreamEvent{
+			Type:      StreamEventError,
+			Data:      fmt.Sprintf("failed to start %s: %v", a.name, err),
+			Timestamp: time.Now().UTC(),
+			Success:   false,
+		})
+		return nil, fmt.Errorf("%s start: %w", a.name, err)
+	}
+	logger.Debug("[TRACE] baseAdapter: process started OK", "agent", a.name, "pid", cmd.Process.Pid)
+
+	var outputBuilder strings.Builder
+	var wg sync.WaitGroup
+
+	// NOTE: start event is already emitted by session.Manager.resolveWithOptionalStream,
+	// so we do NOT emit a duplicate start here.
+
+	// Scan stdout
+	stdoutLineCount := 0
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		scanner := bufio.NewScanner(stdoutPipe)
+		for scanner.Scan() {
+			line := scanner.Text()
+			// Strip ANSI escape sequences (some agents like OpenCode use them).
+			clean := StripANSI(line)
+			stdoutLineCount++
+			logger.Debug("[TRACE] baseAdapter: stdout line", "agent", a.name, "lineNum", stdoutLineCount, "len", len(line), "preview", truncateForLog(line, 120))
+			outputBuilder.WriteString(clean)
+			outputBuilder.WriteByte('\n')
+			_ = sw.WriteEvent(StreamEvent{
+				Type:      StreamEventStdout,
+				Data:      clean,
+				Timestamp: time.Now().UTC(),
+			})
+		}
+		if err := scanner.Err(); err != nil {
+			logger.Warn("[TRACE] baseAdapter: stdout scanner error", "agent", a.name, "error", err)
+		}
+		logger.Debug("[TRACE] baseAdapter: stdout scanner DONE", "agent", a.name, "totalLines", stdoutLineCount)
+	}()
+
+	// Scan stderr
+	stderrLineCount := 0
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		scanner := bufio.NewScanner(stderrPipe)
+		for scanner.Scan() {
+			line := scanner.Text()
+			clean := StripANSI(line)
+			stderrLineCount++
+			logger.Debug("[TRACE] baseAdapter: stderr line", "agent", a.name, "lineNum", stderrLineCount, "preview", truncateForLog(line, 120))
+			outputBuilder.WriteString(clean)
+			outputBuilder.WriteByte('\n')
+			_ = sw.WriteEvent(StreamEvent{
+				Type:      StreamEventStderr,
+				Data:      clean,
+				Timestamp: time.Now().UTC(),
+			})
+		}
+		if err := scanner.Err(); err != nil {
+			logger.Warn("[TRACE] baseAdapter: stderr scanner error", "agent", a.name, "error", err)
+		}
+		logger.Debug("[TRACE] baseAdapter: stderr scanner DONE", "agent", a.name, "totalLines", stderrLineCount)
+	}()
+
+	// Wait for process and scanners
+	waitErr := cmd.Wait()
+	wg.Wait()
+
+	output := outputBuilder.String()
+	logger.Debug("[TRACE] baseAdapter: process finished", "agent", a.name, "waitErr", waitErr, "outputLen", len(output), "stdoutLines", stdoutLineCount, "stderrLines", stderrLineCount)
+
+	if waitErr != nil {
+		logger.Error("baseAdapter: agent process exited with error", "agent", a.name, "error", waitErr)
+		_ = sw.WriteEvent(StreamEvent{
+			Type:      StreamEventError,
+			Data:      fmt.Sprintf("%s CLI: %s: %v", a.name, output, waitErr),
+			Timestamp: time.Now().UTC(),
+			Success:   false,
+		})
+		return &AgentResult{
+			Success:   false,
+			SessionID: session.ID,
+			Summary:   fmt.Sprintf("%s error: %v", a.name, waitErr),
+		}, fmt.Errorf("%s resolve: %w", a.name, waitErr)
+	}
+
+	sessionID := extractSessionID(output)
+	if sessionID == "" {
+		sessionID = session.ID
+	}
+
+	summary := extractSummary(output, maxSummaryLength)
+	logger.Debug("[TRACE] baseAdapter: agent process completed", "agent", a.name, "sessionID", sessionID)
+	// NOTE: do NOT send a terminal 'done' event here — see claude.go fix.
+	_ = sw.WriteEvent(StreamEvent{
+		Type:      StreamEventStatePersisted,
+		Timestamp: time.Now().UTC(),
+		Success:   true,
+		Summary:   StripANSI(summary),
+		SessionID: sessionID,
+	})
+
+	return &AgentResult{
+		Success:   true,
+		SessionID: sessionID,
+		Summary:   summary,
+	}, nil
+}
+
+func (a *baseAdapter) EndSession(_ context.Context, _ string) error {
+	return nil
+}
+
+// execCLI runs the agent binary with the given args in the specified directory.
+func (a *baseAdapter) execCLI(ctx context.Context, repoPath string, args []string) (string, error) {
+	cmd := exec.CommandContext(ctx, a.binary, args...)
+	cmd.Dir = repoPath
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s CLI: %s: %w", a.name, string(output), err)
+	}
+	return string(output), nil
+}

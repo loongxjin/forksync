@@ -1,10 +1,10 @@
-// Command forksync runs the embedded HTTP server that the Electron main
-// process spawns. It replaces the old Cobra CLI: there are no subcommands —
-// every engine capability is exposed over REST (+ one WebSocket for streaming
-// agent resolve output) on 127.0.0.1:<port>.
+// Command forksync runs the embedded HTTP server for headless / programmatic
+// access. The primary desktop UI is built with Wails (see root main.go). This
+// binary exposes all engine capabilities over REST (+ WebSocket for streaming
+// agent output) on 127.0.0.1:<port>.
 //
-// The server prints a single FORKSYNC_HTTP_ADDR=127.0.0.1:<port> line to
-// stdout once it is listening, so the Electron parent can discover the port.
+// The server prints a FORKSYNC_HTTP_ADDR=127.0.0.1:<port> line to stdout once
+// it is listening, so callers can discover the bound port.
 package main
 
 import (
@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/loongxjin/forksync/engine/internal/app"
+	"github.com/loongxjin/forksync/engine/core/app"
 )
 
 func main() {

@@ -1,7 +1,10 @@
 # ADR 0001: Replace CLI subprocess with embedded HTTP server
 
 ## Status
-Accepted (2026-06-16)
+**Superseded** (2026-06-18) — The HTTP server layer was replaced by Wails
+v2 bound methods. The engine now runs in-process with the desktop UI;
+the standalone HTTP server (`engine/main.go`) remains only for headless use.
+This ADR is retained as a historical record of the CLI → HTTP transition.
 
 ## Context
 Before this ADR, the Electron main process communicated with the Go engine

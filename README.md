@@ -7,7 +7,7 @@
 [English](./README.md) · [中文](./README_zh.md)
 
 [![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
-[![Electron](https://img.shields.io/badge/Electron-31-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![Wails](https://img.shields.io/badge/Wails-2-DF0000?logo=wails&logoColor=white)](https://wails.io/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
@@ -37,7 +37,7 @@ Maintaining forked repositories is tedious. Upstream authors keep shipping chang
 | **AI Conflict Resolution** | Delegates merge conflicts to AI agents with git-aware prompts |
 | **Workflow-guided UI** | Step-by-step workflow: fetch → merge → detect conflicts → agent resolve → review → commit |
 | **Live Agent Terminal** | Real-time streaming view of agent output (stdout, tool calls, errors) during resolution |
-| **Desktop App** | Polished Electron GUI — dashboard, workflow steps, settings |
+| **Desktop App** | Polished Wails GUI — dashboard, workflow steps, settings |
 | **HTTP API** | REST + WebSocket server for programmatic access |
 | **Directory Scanner** | Recursively scans any directory to discover and batch-add fork repos |
 | **Sync History** | SQLite-backed history with filters, AI-generated summaries, and cleanup |
@@ -67,15 +67,20 @@ Grab the latest release for your platform:
 git clone https://github.com/loongxjin/forksync.git
 cd forksync
 
-# Full build (Go engine + Electron app)
-make build
-# Output: app/dist/
+# Wails build (single binary, ~18MB)
+make wails
+# Output: build/bin/
 ```
 
-### CLI Only
+### Standalone HTTP Server
+
+The engine can also run as a headless HTTP server for programmatic access:
 
 ```bash
-cd engine && go build -o forksync . && ./forksync --help
+cd engine && go build -o forksync .
+./forksync -addr 127.0.0.1:8080
+# Prints FORKSYNC_HTTP_ADDR=127.0.0.1:8080 at startup
+# Then all engine ops are available via REST — see engine/README.md
 ```
 
 ---
@@ -100,12 +105,14 @@ github:
 ### 2. Launch the App
 
 ```bash
-cd app && npm install && npm run dev
+# Dev mode (hot reload)
+make wails-dev
+
+# Or build and run
+make wails && open build/bin/forksync.app
 ```
 
-The Electron app auto-starts the Go engine server on `127.0.0.1:<random-port>`.
-All repository operations (add, scan, sync, resolve) are done through the GUI.
-For API access, see `engine/README.md`.
+The Wails app embeds the Go engine directly — no separate server process, no HTTP bridge. All engine operations are native Go function calls.
 
 ---
 
@@ -165,7 +172,7 @@ agent:
 
 ## Desktop App
 
-Built with **Electron** + **React** + **TypeScript** + **Tailwind CSS** + **shadcn/ui**.
+Built with **Wails v2** + **React** + **TypeScript** + **Tailwind CSS** + **shadcn/ui**.
 
 | Section | Description |
 |------|-------------|
@@ -182,35 +189,29 @@ Built with **Electron** + **React** + **TypeScript** + **Tailwind CSS** + **shad
 
 ```
 ┌────────────────────────────────────────────┐
-│            Electron UI (React)              │
+│            Wails UI (React)                 │
 │  Dashboard · Repos · Workflow               │
 │  Agent Terminal · History · Settings        │
 └────────────────┬───────────────────────────┘
-                 │ IPC (contextBridge)
+                 │ Wails binding (direct Go call)
 ┌────────────────▼───────────────────────────┐
-│          EngineClient (TypeScript)           │
-│  HTTP fetch + WebSocket to local engine      │
-└────────────────┬───────────────────────────┘
-                 │ REST + WebSocket
-                 │ `127.0.0.1:<random-port>`
-                 │ Bearer token auth
-┌────────────────▼───────────────────────────┐
-│      Go Engine (net/http, single process)    │
-│  REST:  status · sync · resolve · config     │
-│  WS:    /stream/resolve · /stream/events     │
-│  Internal: scheduler · history · agent       │
-│            notify · summarizer · eventbus    │
+│      Go Engine (same process, no IPC)        │
+│  App struct with 34 bound methods            │
+│  Internal: sync · resolve · agent            │
+│            history · scheduler · eventbus    │
+│            ide · config · summarize          │
 └────────────────────────────────────────────┘
 ```
 
-On startup, Electron spawns a **single long-lived** Go engine process bound to `127.0.0.1:<random-port>`. All communication goes through HTTP + WebSocket with per-session bearer token auth. The engine announces its address and token via stdout, then the Electron parent acts as a reverse proxy — the renderer never sees the token. If the engine crashes, it is automatically respawned with exponential backoff (5 attempts, 500ms → 1s → 2s → 5s cap).
+In the Wails desktop app, the engine runs **in-process** — all 34 methods are Go struct methods bound to the frontend via Wails auto-generated TypeScript bindings, with no HTTP/IPC between them. Streaming uses Wails Events instead of WebSocket.
+
+The same engine can also run as a **standalone HTTP server** for headless or programmatic access (`cd engine && go build`). See [Standalone HTTP Server](#standalone-http-server) above.
 
 ---
 
 ## Engine API
 
-All engine operations are available as REST endpoints on the local HTTP server.
-See `engine/README.md` for the full API reference and JSON contract.
+All engine operations are available as **Wails bindings** (direct Go calls from the React frontend). A standalone HTTP server is also available for headless use. See `engine/README.md` for the HTTP API reference.
 
 | Operation | HTTP Route |
 |---|---|

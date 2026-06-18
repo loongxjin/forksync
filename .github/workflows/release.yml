@@ -9,12 +9,20 @@ permissions:
   contents: write
 
 jobs:
-  release-engine:
-    name: Release Go Engine
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: engine
+  release:
+    name: Release (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,79 +32,71 @@ jobs:
         with:
           go-version: "1.22"
 
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          workdir: engine
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  release-desktop:
-    name: Release Desktop App
-    needs: release-engine
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-          - os: ubuntu-latest
-          - os: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
+      # Install Wails CLI
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
-      # Sync package.json version from git tag (v1.2.3 → 1.2.3)
+      # Linux: install webkit2gtk system dependency
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      # Sync version from git tag (v0.6.0 → 0.6.0) into frontend/package.json
       - name: Sync version from git tag
-        working-directory: app
         shell: bash
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
+          cd frontend
           npm version "$TAG_VERSION" --no-git-tag-version --allow-same-version
 
-      - name: Build Go engine
-        env:
-          CGO_ENABLED: 0
-        run: |
-          cd engine
-          go build -ldflags "-s -w -X github.com/loongxjin/forksync/engine/pkg/version.Version=${{ github.ref_name }}" -o ../build/forksync .
+      # Build frontend + Go binary via Wails
+      - name: Build Wails app
+        run: wails build -clean
 
-      - name: Install Electron dependencies
-        run: cd app && npm ci
-
-      - name: Build Electron app
-        run: cd app && npm run build
-
-      - name: Package (macOS)
+      # macOS: package as DMG with drag-to-Applications layout
+      - name: Package DMG (macOS)
         if: matrix.os == 'macos-latest'
-        run: cd app && npx electron-builder --mac --publish never
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          chmod +x build/dmg.sh
+          bash build/dmg.sh "$TAG_VERSION"
 
-      - name: Package (Linux)
+      # Linux: build AppImage via wails builtin -package flag
+      - name: Package AppImage (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: cd app && npx electron-builder --linux --publish never
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          wails build -platform linux/amd64 -webview2 embed -clean
+          # Rename to include version
+          cp build/bin/forksync "build/bin/ForkSync-${TAG_VERSION}"
 
-      - name: Package (Windows)
+      # Windows: build NSIS installer
+      - name: Package NSIS (Windows)
         if: matrix.os == 'windows-latest'
-        run: cd app && npx electron-builder --win --publish never
+        shell: bash
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          # NSIS may not be pre-installed on windows-latest; use chocolatey
+          choco install nsis -y --no-progress 2>/dev/null || true
+          makensis -DVERSION="${TAG_VERSION}" build/windows/installer.nsi
 
+      # Upload artifacts to GitHub Release
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            app/dist/*.dmg
-            app/dist/*.zip
-            app/dist/*.AppImage
-            app/dist/*.deb
-            app/dist/*.exe
+            build/bin/*.dmg
+            build/bin/*.AppImage
+            build/bin/*.deb
+            build/bin/*.exe
+            build/bin/*.msi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
