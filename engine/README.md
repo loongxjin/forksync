@@ -2,7 +2,7 @@
 
 Go 核心引擎 for ForkSync — 自动同步 fork 仓库的 macOS 桌面应用。
 
-Electron UI 在启动时 spawn 此二进制文件作为一个长驻的本地 HTTP server
+ForkSync 桌面应用（Wails）或外部调用方可 spawn 此二进制文件作为一个本地 HTTP server
 （`127.0.0.1:<随机端口>`），通过 REST + WebSocket 通信。
 
 ## 构建
@@ -20,7 +20,7 @@ CGO_ENABLED=0 go build -ldflags "-s -w" -o ../build/forksync .
 ```bash
 ./forksync -addr 127.0.0.1:0
 # 启动后 stdout 打印一行 FORKSYNC_HTTP_ADDR=127.0.0.1:<port>
-# Electron 读取该行获取端口，然后轮询 GET /healthz 直到就绪
+# 调用方读取该行获取端口，然后轮询 GET /healthz 直到就绪
 ```
 
 收到 SIGINT/SIGTERM 优雅退出（停止 scheduler，关闭 HTTP server）。
@@ -107,7 +107,7 @@ proxy:
 ```
 engine/
 ├── main.go                  # HTTP server 入口
-├── internal/
+├── core/
 │   ├── app/                 # HTTP handlers（替代旧 cmd/ Cobra 命令）
 │   │   ├── server.go        #   Server 骨架 + 路由注册 + SIGTERM 优雅关闭
 │   │   ├── deps.go          #   依赖装配（config/store/syncer/resolver）
@@ -150,7 +150,7 @@ ForkSync 自动检测 PATH 中已安装的 agent，按配置的优先级选择�
 
 ```bash
 go test ./...              # 运行所有测试
-go test ./internal/app/ -v # HTTP handler 测试
+go test ./core/app/ -v # HTTP handler 测试
 ```
 
 ## 依赖
