@@ -9,12 +9,18 @@ permissions:
   contents: write
 
 jobs:
-  release-engine:
-    name: Release Go Engine
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: engine
+  release-wails:
+    name: Release Desktop App (Wails)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            artifact: "*.dmg"
+          - os: ubuntu-latest
+            artifact: "*.AppImage,*.deb"
+          - os: windows-latest
+            artifact: "*.exe,*.msi"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,79 +30,26 @@ jobs:
         with:
           go-version: "1.22"
 
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          workdir: engine
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  release-desktop:
-    name: Release Desktop App
-    needs: release-engine
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-          - os: ubuntu-latest
-          - os: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: app/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-
-      # Sync package.json version from git tag (v1.2.3 → 1.2.3)
-      - name: Sync version from git tag
-        working-directory: app
-        shell: bash
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          npm version "$TAG_VERSION" --no-git-tag-version --allow-same-version
-
-      - name: Build Go engine
-        env:
-          CGO_ENABLED: 0
-        run: |
-          cd engine
-          go build -ldflags "-s -w -X github.com/loongxjin/forksync/engine/pkg/version.Version=${{ github.ref_name }}" -o ../build/forksync .
-
-      - name: Install Electron dependencies
-        run: cd app && npm ci
-
-      - name: Build Electron app
-        run: cd app && npm run build
-
-      - name: Package (macOS)
-        if: matrix.os == 'macos-latest'
-        run: cd app && npx electron-builder --mac --publish never
-
-      - name: Package (Linux)
+      # Install system deps for Wails on Linux
+      - name: Install Linux dependencies
         if: matrix.os == 'ubuntu-latest'
-        run: cd app && npx electron-builder --linux --publish never
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
-      - name: Package (Windows)
-        if: matrix.os == 'windows-latest'
-        run: cd app && npx electron-builder --win --publish never
+      - name: Build Wails app
+        uses: dAppServer/wails-build-action@v2
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            app/dist/*.dmg
-            app/dist/*.zip
-            app/dist/*.AppImage
-            app/dist/*.deb
-            app/dist/*.exe
+          files: build/bin/${{ matrix.artifact }}
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
