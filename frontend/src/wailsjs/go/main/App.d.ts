@@ -6,7 +6,13 @@ import {config} from '../models';
 
 export function AddRepo(arg1:main.AddRepoParams):Promise<types.AddData>;
 
+export function AgentCleanup():Promise<main.AgentCleanupResult>;
+
 export function AgentList():Promise<types.AgentListData>;
+
+export function AgentReset(arg1:string):Promise<types.AgentResetData>;
+
+export function AgentSessions():Promise<types.AgentSessionsData>;
 
 export function ConfigGet():Promise<config.Config>;
 
@@ -15,6 +21,14 @@ export function ConfigSet(arg1:string,arg2:string):Promise<Record<string, any>>;
 export function Greet(arg1:string):Promise<string>;
 
 export function History(arg1:string,arg2:number):Promise<types.HistoryData>;
+
+export function HistoryCleanup(arg1:main.HistoryCleanupReq):Promise<main.HistoryCleanupResult>;
+
+export function PostSyncAdd(arg1:string,arg2:main.PostSyncAddReq):Promise<types.PostSyncCommandsData>;
+
+export function PostSyncList(arg1:string):Promise<types.PostSyncCommandsData>;
+
+export function PostSyncRemove(arg1:string,arg2:main.PostSyncRemoveReq):Promise<types.PostSyncCommandsData>;
 
 export function ReadAgentLog(arg1:string,arg2:string):Promise<main.AgentLogResult>;
 
@@ -29,6 +43,10 @@ export function ResolveStreamStart(arg1:string,arg2:string,arg3:boolean):Promise
 export function Scan(arg1:string):Promise<types.ScanData>;
 
 export function Status(arg1:Array<string>):Promise<types.StatusData>;
+
+export function Summarize(arg1:string,arg2:main.SummarizeReq):Promise<main.SummarizeResult>;
+
+export function SummarizeRetry(arg1:string):Promise<main.SummarizeResult>;
 
 export function SyncAll():Promise<types.SyncData>;
 

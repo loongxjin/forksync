@@ -12,6 +12,7 @@ import (
 	"github.com/loongxjin/forksync/engine/core/agent/session"
 	"github.com/loongxjin/forksync/engine/core/app"
 	"github.com/loongxjin/forksync/engine/core/config"
+	"github.com/loongxjin/forksync/engine/core/eventbus"
 	"github.com/loongxjin/forksync/engine/core/git"
 	"github.com/loongxjin/forksync/engine/core/github"
 	"github.com/loongxjin/forksync/engine/core/history"
@@ -777,4 +778,227 @@ func (a *App) ConfigSet(key string, value string) (map[string]interface{}, error
 		return nil, err
 	}
 	return map[string]interface{}{"key": key, "value": v}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Agent sessions / cleanup / reset
+// ---------------------------------------------------------------------------
+
+func (a *App) AgentSessions() (types.AgentSessionsData, error) {
+	if a.deps == nil {
+		return types.AgentSessionsData{}, nil
+	}
+	store := session.NewSessionStore(a.deps.SessionsDir())
+	mgr := session.NewManager(store, nil)
+	infos, err := mgr.ListSessionsAsInfo()
+	if err != nil {
+		return types.AgentSessionsData{}, fmt.Errorf("list sessions: %w", err)
+	}
+	for i := range infos {
+		if repo, ok := a.deps.Store.Get(infos[i].RepoID); ok {
+			infos[i].RepoName = repo.Name
+		} else {
+			infos[i].RepoName = infos[i].RepoID
+		}
+	}
+	return types.AgentSessionsData{Sessions: infos}, nil
+}
+
+type AgentCleanupResult struct {
+	Removed int `json:"removed"`
+}
+
+func (a *App) AgentCleanup() (AgentCleanupResult, error) {
+	if a.deps == nil {
+		return AgentCleanupResult{}, nil
+	}
+	store := session.NewSessionStore(a.deps.SessionsDir())
+	mgr := session.NewManager(store, nil)
+	count, err := mgr.CleanupFailed()
+	if err != nil {
+		return AgentCleanupResult{}, fmt.Errorf("cleanup sessions: %w", err)
+	}
+	return AgentCleanupResult{Removed: count}, nil
+}
+
+func (a *App) AgentReset(repoID string) (types.AgentResetData, error) {
+	if a.deps == nil {
+		return types.AgentResetData{}, nil
+	}
+	store := session.NewSessionStore(a.deps.SessionsDir())
+	mgr := session.NewManager(store, nil)
+	cleared, err := mgr.ResetSession(a.ctx, repoID)
+	if err != nil {
+		return types.AgentResetData{}, fmt.Errorf("reset session: %w", err)
+	}
+	return types.AgentResetData{RepoID: repoID, Cleared: cleared}, nil
+}
+
+// ---------------------------------------------------------------------------
+// History cleanup
+// ---------------------------------------------------------------------------
+
+type HistoryCleanupReq struct {
+	Repo     string `json:"repo,omitempty"`
+	KeepDays int    `json:"keepDays,omitempty"`
+}
+
+type HistoryCleanupResult struct {
+	Message string `json:"message"`
+}
+
+func (a *App) HistoryCleanup(req HistoryCleanupReq) (HistoryCleanupResult, error) {
+	if a.deps == nil || a.deps.HistStore == nil {
+		return HistoryCleanupResult{}, fmt.Errorf("history store unavailable")
+	}
+	h := a.deps.HistStore
+	var n int64
+	var err error
+	var msg string
+	if req.Repo != "" {
+		r2, ok := a.deps.Store.GetByName(req.Repo)
+		if !ok {
+			return HistoryCleanupResult{}, fmt.Errorf("repository %q not found", req.Repo)
+		}
+		n, err = h.ClearByRepo(r2.ID)
+		msg = fmt.Sprintf("Cleared %d history record(s) for repository %q", n, req.Repo)
+	} else if req.KeepDays > 0 {
+		n, err = h.ClearBefore(time.Now().AddDate(0, 0, -req.KeepDays))
+		msg = fmt.Sprintf("Cleared %d history record(s) older than %d days", n, req.KeepDays)
+	} else {
+		n, err = h.ClearAll()
+		msg = fmt.Sprintf("Cleared %d history record(s)", n)
+	}
+	if err != nil {
+		return HistoryCleanupResult{}, fmt.Errorf("cleanup failed: %w", err)
+	}
+	if a.deps.Bus != nil {
+		a.deps.Bus.Publish(eventbus.Event{Type: eventbus.EventHistoryChanged})
+	}
+	return HistoryCleanupResult{Message: msg}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Post-sync commands
+// ---------------------------------------------------------------------------
+
+type PostSyncAddReq struct {
+	Name string `json:"name"`
+	Cmd  string `json:"cmd"`
+}
+
+type PostSyncRemoveReq struct {
+	ID string `json:"id"`
+}
+
+func (a *App) PostSyncList(repoName string) (types.PostSyncCommandsData, error) {
+	if a.deps == nil {
+		return types.PostSyncCommandsData{Commands: []types.PostSyncCommand{}}, nil
+	}
+	r2, ok := a.deps.Store.GetByName(repoName)
+	if !ok {
+		return types.PostSyncCommandsData{}, fmt.Errorf("repo %q not found", repoName)
+	}
+	cmds := r2.PostSyncCommands
+	if cmds == nil {
+		cmds = []types.PostSyncCommand{}
+	}
+	return types.PostSyncCommandsData{Commands: cmds}, nil
+}
+
+func (a *App) PostSyncAdd(repoName string, req PostSyncAddReq) (types.PostSyncCommandsData, error) {
+	if a.deps == nil {
+		return types.PostSyncCommandsData{}, fmt.Errorf("engine not ready")
+	}
+	r2, ok := a.deps.Store.GetByName(repoName)
+	if !ok {
+		return types.PostSyncCommandsData{}, fmt.Errorf("repo %q not found", repoName)
+	}
+	r2.PostSyncCommands = append(r2.PostSyncCommands, types.PostSyncCommand{
+		ID: uuid(), Name: req.Name, Cmd: req.Cmd,
+	})
+	if err := a.deps.Store.Update(r2); err != nil {
+		return types.PostSyncCommandsData{}, err
+	}
+	return types.PostSyncCommandsData{Commands: r2.PostSyncCommands}, nil
+}
+
+func (a *App) PostSyncRemove(repoName string, req PostSyncRemoveReq) (types.PostSyncCommandsData, error) {
+	if a.deps == nil {
+		return types.PostSyncCommandsData{}, nil
+	}
+	r2, ok := a.deps.Store.GetByName(repoName)
+	if !ok {
+		return types.PostSyncCommandsData{}, fmt.Errorf("repo %q not found", repoName)
+	}
+	filtered := make([]types.PostSyncCommand, 0, len(r2.PostSyncCommands))
+	for _, c := range r2.PostSyncCommands {
+		if c.ID != req.ID {
+			filtered = append(filtered, c)
+		}
+	}
+	r2.PostSyncCommands = filtered
+	if err := a.deps.Store.Update(r2); err != nil {
+		return types.PostSyncCommandsData{}, err
+	}
+	return types.PostSyncCommandsData{Commands: filtered}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Summarize
+// ---------------------------------------------------------------------------
+
+type SummarizeReq struct {
+	Retry bool `json:"retry,omitempty"`
+}
+
+type SummarizeResult struct {
+	HistoryID     int64  `json:"historyId"`
+	RepoName      string `json:"repoName"`
+	Summary       string `json:"summary"`
+	SummaryStatus string `json:"summaryStatus"`
+}
+
+func (a *App) Summarize(repoName string, req SummarizeReq) (SummarizeResult, error) {
+	if a.deps == nil || a.deps.HistStore == nil {
+		return SummarizeResult{}, fmt.Errorf("history store unavailable")
+	}
+	r2, ok := a.deps.Store.GetByName(repoName)
+	if !ok {
+		return SummarizeResult{}, fmt.Errorf("repository %q not found", repoName)
+	}
+	record, err := a.deps.HistStore.LatestByRepo(r2.ID)
+	if err != nil {
+		return SummarizeResult{}, fmt.Errorf("no sync history found for %q", repoName)
+	}
+	if !req.Retry && record.SummaryStatus == string(types.SummaryStatusDone) {
+		return SummarizeResult{
+			HistoryID: record.ID, RepoName: record.RepoName,
+			Summary: record.Summary, SummaryStatus: record.SummaryStatus,
+		}, nil
+	}
+	summary, err := app.GenerateSummary(a.ctx, a.deps.Cfg, a.deps.HistStore, a.deps.Bus, record, r2)
+	if err != nil {
+		return SummarizeResult{}, err
+	}
+	return SummarizeResult{
+		HistoryID: record.ID, RepoName: record.RepoName,
+		Summary: summary, SummaryStatus: string(types.SummaryStatusDone),
+	}, nil
+}
+
+func (a *App) SummarizeRetry(repoName string) (SummarizeResult, error) {
+	return a.Summarize(repoName, SummarizeReq{Retry: true})
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+func uuid() string {
+	b := make([]byte, 16)
+	for i := range b {
+		b[i] = byte(time.Now().UnixNano() >> uint(i*8))
+	}
+	return fmt.Sprintf("%x", b)
 }

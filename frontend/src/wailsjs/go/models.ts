@@ -224,6 +224,18 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class AgentCleanupResult {
+	    removed: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentCleanupResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.removed = source["removed"];
+	    }
+	}
 	export class AgentLogResult {
 	    events: agent.StreamEvent[];
 	    isRunning: boolean;
@@ -272,6 +284,58 @@ export namespace main {
 	        this.error = source["error"];
 	    }
 	}
+	export class HistoryCleanupReq {
+	    repo?: string;
+	    keepDays?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryCleanupReq(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.repo = source["repo"];
+	        this.keepDays = source["keepDays"];
+	    }
+	}
+	export class HistoryCleanupResult {
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryCleanupResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.message = source["message"];
+	    }
+	}
+	export class PostSyncAddReq {
+	    name: string;
+	    cmd: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PostSyncAddReq(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.cmd = source["cmd"];
+	    }
+	}
+	export class PostSyncRemoveReq {
+	    id: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PostSyncRemoveReq(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	    }
+	}
 	export class RemoveResult {
 	    removed: string;
 	
@@ -302,6 +366,36 @@ export namespace main {
 	        this.noConfirm = source["noConfirm"];
 	        this.manual = source["manual"];
 	        this.retry = source["retry"];
+	    }
+	}
+	export class SummarizeReq {
+	    retry?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SummarizeReq(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.retry = source["retry"];
+	    }
+	}
+	export class SummarizeResult {
+	    historyId: number;
+	    repoName: string;
+	    summary: string;
+	    summaryStatus: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SummarizeResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.historyId = source["historyId"];
+	        this.repoName = source["repoName"];
+	        this.summary = source["summary"];
+	        this.summaryStatus = source["summaryStatus"];
 	    }
 	}
 
@@ -579,6 +673,20 @@ export namespace types {
 		    return a;
 		}
 	}
+	export class AgentResetData {
+	    repoId: string;
+	    cleared: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentResetData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.repoId = source["repoId"];
+	        this.cleared = source["cleared"];
+	    }
+	}
 	export class AgentResolveResult {
 	    success: boolean;
 	    resolvedFiles: string[];
@@ -600,6 +708,80 @@ export namespace types {
 	        this.sessionId = source["sessionId"];
 	        this.agentName = source["agentName"];
 	    }
+	}
+	export class AgentSessionInfo {
+	    id: string;
+	    repoId: string;
+	    repoName: string;
+	    agentName: string;
+	    status: string;
+	    // Go type: time
+	    createdAt: any;
+	    // Go type: time
+	    lastUsedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentSessionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.repoId = source["repoId"];
+	        this.repoName = source["repoName"];
+	        this.agentName = source["agentName"];
+	        this.status = source["status"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.lastUsedAt = this.convertValues(source["lastUsedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AgentSessionsData {
+	    sessions: AgentSessionInfo[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentSessionsData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessions = this.convertValues(source["sessions"], AgentSessionInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	
 	export class ConflictFile {
@@ -681,6 +863,36 @@ export namespace types {
 		}
 	}
 	
+	export class PostSyncCommandsData {
+	    commands: PostSyncCommand[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PostSyncCommandsData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.commands = this.convertValues(source["commands"], PostSyncCommand);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class PostSyncResult {
 	    name: string;
 	    cmd: string;

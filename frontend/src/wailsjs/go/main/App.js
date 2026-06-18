@@ -6,8 +6,20 @@ export function AddRepo(arg1) {
   return window['go']['main']['App']['AddRepo'](arg1);
 }
 
+export function AgentCleanup() {
+  return window['go']['main']['App']['AgentCleanup']();
+}
+
 export function AgentList() {
   return window['go']['main']['App']['AgentList']();
+}
+
+export function AgentReset(arg1) {
+  return window['go']['main']['App']['AgentReset'](arg1);
+}
+
+export function AgentSessions() {
+  return window['go']['main']['App']['AgentSessions']();
 }
 
 export function ConfigGet() {
@@ -24,6 +36,22 @@ export function Greet(arg1) {
 
 export function History(arg1, arg2) {
   return window['go']['main']['App']['History'](arg1, arg2);
+}
+
+export function HistoryCleanup(arg1) {
+  return window['go']['main']['App']['HistoryCleanup'](arg1);
+}
+
+export function PostSyncAdd(arg1, arg2) {
+  return window['go']['main']['App']['PostSyncAdd'](arg1, arg2);
+}
+
+export function PostSyncList(arg1) {
+  return window['go']['main']['App']['PostSyncList'](arg1);
+}
+
+export function PostSyncRemove(arg1, arg2) {
+  return window['go']['main']['App']['PostSyncRemove'](arg1, arg2);
 }
 
 export function ReadAgentLog(arg1, arg2) {
@@ -52,6 +80,14 @@ export function Scan(arg1) {
 
 export function Status(arg1) {
   return window['go']['main']['App']['Status'](arg1);
+}
+
+export function Summarize(arg1, arg2) {
+  return window['go']['main']['App']['Summarize'](arg1, arg2);
+}
+
+export function SummarizeRetry(arg1) {
+  return window['go']['main']['App']['SummarizeRetry'](arg1);
 }
 
 export function SyncAll() {

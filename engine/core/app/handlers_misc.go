@@ -473,6 +473,11 @@ func (s *Server) handleSummarize(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GenerateSummary is the exported wrapper for the Wails App layer.
+func GenerateSummary(ctx context.Context, cfg *config.Config, histStore *history.Store, bus *eventbus.Bus, record *history.Record, r types.Repo) (string, error) {
+	return generateSummary(ctx, cfg, histStore, bus, record, r)
+}
+
 // generateSummary mirrors cmd/summarize.go generateSummary verbatim.
 func generateSummary(ctx context.Context, cfg *config.Config, histStore *history.Store, bus *eventbus.Bus, record *history.Record, r types.Repo) (string, error) {
 	agentName := ""

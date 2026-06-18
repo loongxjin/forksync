@@ -43,10 +43,19 @@ import {
   ResolveStreamStart as wailsResolveStreamStart,
   RepoDiff as wailsRepoDiff,
   AgentList as wailsAgentList,
+  AgentSessions as wailsAgentSessions,
+  AgentCleanup as wailsAgentCleanup,
+  AgentReset as wailsAgentReset,
   History as wailsHistory,
+  HistoryCleanup as wailsHistoryCleanup,
   ConfigGet as wailsConfigGet,
   ConfigSet as wailsConfigSet,
   ReadAgentLog as wailsReadAgentLog,
+  PostSyncList as wailsPostSyncList,
+  PostSyncAdd as wailsPostSyncAdd,
+  PostSyncRemove as wailsPostSyncRemove,
+  Summarize as wailsSummarize,
+  SummarizeRetry as wailsSummarizeRetry,
 } from '../wailsjs/go/main/App'
 
 export interface EngineAPI {
@@ -143,13 +152,21 @@ const engineApi: EngineAPI = {
   async agentList() {
     try { return ok(await wailsAgentList()) } catch (e) { return fail(e) }
   },
-  async agentSessions() { return fail('not yet migrated') },
-  async agentCleanup() { return fail('not yet migrated') },
-  async agentReset() { return fail('not yet migrated') },
+  async agentSessions() {
+    try { return ok(await wailsAgentSessions()) } catch (e) { return fail(e) }
+  },
+  async agentCleanup() {
+    try { return ok(await wailsAgentCleanup()) } catch (e) { return fail(e) }
+  },
+  async agentReset(name) {
+    try { return ok(await wailsAgentReset(name)) } catch (e) { return fail(e) }
+  },
   async history(repoName, limit) {
     try { return ok(await wailsHistory(repoName ?? '', limit ?? 20)) } catch (e) { return fail(e) }
   },
-  async historyCleanup() { return fail('not yet migrated') },
+  async historyCleanup(opts) {
+    try { return ok(await wailsHistoryCleanup({ repo: opts?.repoName ?? '', keepDays: opts?.keepDays ?? 0 })) } catch (e) { return fail(e) }
+  },
   async openDirectory() { return { canceled: true, error: 'not yet migrated' } },
   async isGitRepo() { return false },
   async setLocale() { return { success: true } },
@@ -165,11 +182,21 @@ const engineApi: EngineAPI = {
   async configSet(key, value) {
     try { return ok(await wailsConfigSet(key, value)) } catch (e) { return fail(e) }
   },
-  async postSyncList() { return fail('not yet migrated') },
-  async postSyncAdd() { return fail('not yet migrated') },
-  async postSyncRemove() { return fail('not yet migrated') },
-  async summarize() { return fail('not yet migrated') },
-  async summarizeRetry() { return fail('not yet migrated') },
+  async postSyncList(repoName) {
+    try { return ok(await wailsPostSyncList(repoName)) } catch (e) { return fail(e) }
+  },
+  async postSyncAdd(repoName, name, cmd) {
+    try { return ok(await wailsPostSyncAdd(repoName, { name, cmd })) } catch (e) { return fail(e) }
+  },
+  async postSyncRemove(repoName, cmdId) {
+    try { return ok(await wailsPostSyncRemove(repoName, { id: cmdId })) } catch (e) { return fail(e) }
+  },
+  async summarize(repoName) {
+    try { return ok(await wailsSummarize(repoName, { retry: false })) } catch (e) { return fail(e) }
+  },
+  async summarizeRetry(repoName) {
+    try { return ok(await wailsSummarizeRetry(repoName)) } catch (e) { return fail(e) }
+  },
   async setAutoLaunch() { return { success: true } },
   async repoDiff(name) {
     try {
