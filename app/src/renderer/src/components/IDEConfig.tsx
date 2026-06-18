@@ -78,7 +78,7 @@ export function IDEConfig(): JSX.Element {
     <div className="space-y-4">
       {/* Default IDE selector */}
       <div className="space-y-2">
-        <Label>{t('ide.defaultIde')}</Label>
+        <Label className="block">{t('ide.defaultIde')}</Label>
         <select
           value={ideConfig?.defaultIDE ?? ''}
           onChange={(e) => setDefaultIDE(e.target.value || null)}

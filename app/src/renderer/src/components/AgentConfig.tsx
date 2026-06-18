@@ -322,7 +322,7 @@ export function AgentConfig(): JSX.Element {
       {/* Summary Agent (shown when auto summary is enabled) */}
       {engineConfig?.Sync?.AutoSummary && (
         <div className="space-y-2">
-          <Label>{t('settings.general.summaryAgent')}</Label>
+          <Label className="block">{t('settings.general.summaryAgent')}</Label>
           <select
             className="rounded-md border border-input bg-background px-3 py-1.5 text-sm max-w-[200px]"
             value={engineConfig?.Sync?.SummaryAgent ?? ''}
