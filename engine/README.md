@@ -1,8 +1,9 @@
 # ForkSync Engine
 
-Go 核心引擎 for ForkSync — 自动同步 fork 仓库的 macOS 桌面应用。
+Go 核心引擎 for ForkSync — 跨平台桌面应用（Wails + React）。
 
-ForkSync 桌面应用（Wails）或外部调用方可 spawn 此二进制文件作为一个本地 HTTP server
+Wails 桌面应用将引擎代码作为 Go 包直接链接进同一进程，无需独立 HTTP server。
+此目录也可编译为独立二进制，供无头或编程方式调用，作为一个本地 HTTP server
 （`127.0.0.1:<随机端口>`），通过 REST + WebSocket 通信。
 
 ## 构建
@@ -99,7 +100,7 @@ proxy:
 
 ## JSON contract types
 
-所有数据结构定义在 `pkg/types/` 和 `app/src/shared/types/engine.ts` 中。
+所有数据结构定义在 `pkg/types/` 和 `frontend/src/shared/types/engine.ts` 中。
 前后端共享同一套结构体标签（`json:"camelCase"`）。
 
 ## 项目结构
