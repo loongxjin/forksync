@@ -42,6 +42,38 @@ export function HistoryCleanup(arg1) {
   return window['go']['main']['App']['HistoryCleanup'](arg1);
 }
 
+export function IDEAddCustom(arg1, arg2) {
+  return window['go']['main']['App']['IDEAddCustom'](arg1, arg2);
+}
+
+export function IDEDetect() {
+  return window['go']['main']['App']['IDEDetect']();
+}
+
+export function IDEGetConfig() {
+  return window['go']['main']['App']['IDEGetConfig']();
+}
+
+export function IDEOpen(arg1, arg2) {
+  return window['go']['main']['App']['IDEOpen'](arg1, arg2);
+}
+
+export function IDERemoveCustom(arg1) {
+  return window['go']['main']['App']['IDERemoveCustom'](arg1);
+}
+
+export function IDESetDefault(arg1) {
+  return window['go']['main']['App']['IDESetDefault'](arg1);
+}
+
+export function IsGitRepo(arg1) {
+  return window['go']['main']['App']['IsGitRepo'](arg1);
+}
+
+export function OpenDirectoryDialog() {
+  return window['go']['main']['App']['OpenDirectoryDialog']();
+}
+
 export function PostSyncAdd(arg1, arg2) {
   return window['go']['main']['App']['PostSyncAdd'](arg1, arg2);
 }
@@ -76,6 +108,10 @@ export function ResolveStreamStart(arg1, arg2, arg3) {
 
 export function Scan(arg1) {
   return window['go']['main']['App']['Scan'](arg1);
+}
+
+export function SetLocale(arg1) {
+  return window['go']['main']['App']['SetLocale'](arg1);
 }
 
 export function Status(arg1) {

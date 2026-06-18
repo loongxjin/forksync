@@ -56,6 +56,15 @@ import {
   PostSyncRemove as wailsPostSyncRemove,
   Summarize as wailsSummarize,
   SummarizeRetry as wailsSummarizeRetry,
+  IDEDetect as wailsIDEDetect,
+  IDEOpen as wailsIDEOpen,
+  IDEGetConfig as wailsIDEGetConfig,
+  IDESetDefault as wailsIDESetDefault,
+  IDEAddCustom as wailsIDEAddCustom,
+  IDERemoveCustom as wailsIDERemoveCustom,
+  OpenDirectoryDialog as wailsOpenDirectoryDialog,
+  IsGitRepo as wailsIsGitRepo,
+  SetLocale as wailsSetLocale,
 } from '../wailsjs/go/main/App'
 
 export interface EngineAPI {
@@ -167,15 +176,36 @@ const engineApi: EngineAPI = {
   async historyCleanup(opts) {
     try { return ok(await wailsHistoryCleanup({ repo: opts?.repoName ?? '', keepDays: opts?.keepDays ?? 0 })) } catch (e) { return fail(e) }
   },
-  async openDirectory() { return { canceled: true, error: 'not yet migrated' } },
-  async isGitRepo() { return false },
-  async setLocale() { return { success: true } },
-  async ideDetect() { return [] },
-  async ideOpen() { return { success: false, error: 'not yet migrated' } },
-  async ideGetConfig() { return { defaultIDE: null, detectedIDEs: [], customIDEs: [] } },
-  async ideSetDefault() { return { success: true } },
-  async ideAddCustom() { return { success: false, error: 'not yet migrated' } },
-  async ideRemoveCustom() { return { success: true } },
+  async openDirectory() {
+    try {
+      const result = await wailsOpenDirectoryDialog()
+      return result as { canceled: boolean; filePaths?: string[]; error?: string }
+    } catch (e) { return { canceled: true, error: String(e) } }
+  },
+  async isGitRepo(dirPath) {
+    try { return await wailsIsGitRepo(dirPath) } catch (e) { return false }
+  },
+  async setLocale(locale) {
+    try { return await wailsSetLocale(locale) as { success: boolean } } catch (e) { return { success: false } }
+  },
+  async ideDetect() {
+    try { return await wailsIDEDetect() } catch (e) { return [] }
+  },
+  async ideOpen(repoPath, ideId) {
+    try { return await wailsIDEOpen(repoPath, ideId) } catch (e) { return { success: false, error: String(e) } }
+  },
+  async ideGetConfig() {
+    try { return await wailsIDEGetConfig() } catch (e) { return { defaultIDE: null, detectedIDEs: [], customIDEs: [] } }
+  },
+  async ideSetDefault(ideId) {
+    try { return await wailsIDESetDefault(ideId ?? '') as { success: boolean } } catch (e) { return { success: false } }
+  },
+  async ideAddCustom(name, cliCommand) {
+    try { return await wailsIDEAddCustom(name, cliCommand) as { success: boolean; error?: string } } catch (e) { return { success: false, error: String(e) } }
+  },
+  async ideRemoveCustom(ideId) {
+    try { return await wailsIDERemoveCustom(ideId) as { success: boolean } } catch (e) { return { success: false } }
+  },
   async configGet() {
     try { return ok(await wailsConfigGet()) } catch (e) { return fail(e) }
   },

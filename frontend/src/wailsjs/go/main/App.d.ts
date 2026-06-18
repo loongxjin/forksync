@@ -24,6 +24,22 @@ export function History(arg1:string,arg2:number):Promise<types.HistoryData>;
 
 export function HistoryCleanup(arg1:main.HistoryCleanupReq):Promise<main.HistoryCleanupResult>;
 
+export function IDEAddCustom(arg1:string,arg2:string):Promise<Record<string, any>>;
+
+export function IDEDetect():Promise<Array<main.IDEInfo>>;
+
+export function IDEGetConfig():Promise<main.IDEConfig>;
+
+export function IDEOpen(arg1:string,arg2:string):Promise<main.IDEOpenResult>;
+
+export function IDERemoveCustom(arg1:string):Promise<Record<string, boolean>>;
+
+export function IDESetDefault(arg1:string):Promise<Record<string, boolean>>;
+
+export function IsGitRepo(arg1:string):Promise<boolean>;
+
+export function OpenDirectoryDialog():Promise<Record<string, any>>;
+
 export function PostSyncAdd(arg1:string,arg2:main.PostSyncAddReq):Promise<types.PostSyncCommandsData>;
 
 export function PostSyncList(arg1:string):Promise<types.PostSyncCommandsData>;
@@ -41,6 +57,8 @@ export function Resolve(arg1:string,arg2:main.ResolveRequest):Promise<types.Reso
 export function ResolveStreamStart(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
 export function Scan(arg1:string):Promise<types.ScanData>;
+
+export function SetLocale(arg1:string):Promise<Record<string, boolean>>;
 
 export function Status(arg1:Array<string>):Promise<types.StatusData>;
 
