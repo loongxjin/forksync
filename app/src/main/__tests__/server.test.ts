@@ -46,12 +46,14 @@ describe('EngineServer crash supervision', () => {
 
     const ready = server.getBaseUrl()
     fake.stdout.push('FORKSYNC_HTTP_ADDR=127.0.0.1:54321\n')
+    fake.stdout.push('FORKSYNC_TOKEN=abc123deadbeef\n')
     await vi.runAllTimersAsync()
     await ready
 
     expect(statuses).toContain('starting')
     expect(statuses).toContain('ready')
     expect(await server.getBaseUrl()).toBe('http://127.0.0.1:54321')
+    expect(server.getToken()).toBe('abc123deadbeef')
   })
 
   it('does NOT respawn when kill() was called (app quitting)', async () => {

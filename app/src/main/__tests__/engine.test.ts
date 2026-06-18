@@ -6,7 +6,8 @@ const mockFetch = vi.fn()
 vi.mock('../server', () => ({
   getEngineServer: () => ({
     getBaseUrl: async () => 'http://127.0.0.1:9999',
-    getWsUrl: async (path: string) => `ws://127.0.0.1:9999${path}`
+    getWsUrl: async (path: string) => `ws://127.0.0.1:9999${path}`,
+    getToken: () => 'test-token'
   })
 }))
 

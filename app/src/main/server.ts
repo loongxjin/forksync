@@ -23,6 +23,7 @@ import { createInterface } from 'readline'
 import log from './logger'
 
 const ADDR_PREFIX = 'FORKSYNC_HTTP_ADDR='
+const TOKEN_PREFIX = 'FORKSYNC_TOKEN='
 const STARTUP_TIMEOUT_MS = 30_000
 const HEALTH_POLL_INTERVAL_MS = 100
 
@@ -60,6 +61,10 @@ function killProcessTree(child: ChildProcess): void {
 export class EngineServer {
   private child: ChildProcess | null = null
   private baseUrl = ''
+  // Random bearer token announced by the engine via FORKSYNC_TOKEN=. Empty
+  // until the engine prints it; getToken() returns '' (requests then fail
+  // auth) if read before the announcement arrives.
+  private token = ''
   private startPromise: Promise<string> | null = null
 
   // Crash supervision state.
@@ -125,6 +130,15 @@ export class EngineServer {
     return http.replace(/^http/, 'ws') + path
   }
 
+  /**
+   * Returns the random bearer token the engine announced, or '' if the
+   * announcement has not yet been read (callers should treat '' as "no auth
+   * available" — requests will be rejected by the engine's auth middleware).
+   */
+  getToken(): string {
+    return this.token
+  }
+
   private resolveBinary(): { binary: string; args: string[]; cwd?: string } {
     if (app.isPackaged) {
       const ext = process.platform === 'win32' ? '.exe' : ''
@@ -168,19 +182,27 @@ export class EngineServer {
         else resolve(url)
       }
 
-      // Read stdout line-by-line for the FORKSYNC_HTTP_ADDR announcement.
+      // Read stdout line-by-line for the FORKSYNC_HTTP_ADDR + FORKSYNC_TOKEN
+      // announcements. The address line triggers the health wait + resolve;
+      // the token line is stashed for getToken() to hand to EngineClient.
       if (child.stdout) {
         const rl = createInterface({ input: child.stdout })
         rl.on('line', (line) => {
-          const idx = line.indexOf(ADDR_PREFIX)
-          if (idx >= 0) {
-            const addr = line.slice(idx + ADDR_PREFIX.length).trim()
+          const addrIdx = line.indexOf(ADDR_PREFIX)
+          if (addrIdx >= 0) {
+            const addr = line.slice(addrIdx + ADDR_PREFIX.length).trim()
             const url = `http://${addr}`
             log.info('[engine-server] announced', url)
             this.waitForHealth(url).then(() => finish(null, url), (e) => finish(e, ''))
-          } else {
-            log.debug('[engine-server] stdout:', line)
+            return
           }
+          const tokIdx = line.indexOf(TOKEN_PREFIX)
+          if (tokIdx >= 0) {
+            this.token = line.slice(tokIdx + TOKEN_PREFIX.length).trim()
+            log.debug('[engine-server] captured auth token')
+            return
+          }
+          log.debug('[engine-server] stdout:', line)
         })
       }
       if (child.stderr) {
@@ -295,6 +317,7 @@ export class EngineServer {
       killProcessTree(this.child)
       this.child = null
       this.baseUrl = ''
+      this.token = ''
       this.startPromise = null
       this.startedHealthy = false
     }
