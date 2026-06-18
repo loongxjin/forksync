@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **CSP hardened**: production `connect-src` restricted to `'self'` (the renderer never talks to the engine directly — all traffic is via main IPC), closing a localhost exfiltration channel. `default-src` drops `'unsafe-inline'`. Dev keeps localhost wildcards for Vite HMR.
+- **HomePage decomposed**: the 700-line god-component is now ~415 lines. Seven concerns extracted into dedicated custom hooks (`useStartupSync`, `useHistorySync`, `useAgentLogAutoload`, `useSummaryPolling`, `useResolveActions`, `useDragDropAdd`, `useAutoExpandWorkflow`), each matching the existing named-object-return + useLogger + ref-held-timer pattern.
+
+### Fixed
+- **List re-render storm**: `RepoRow` and `HistoryRow` are now `React.memo`-wrapped (HistoryRow with a custom comparator), so unchanged rows no longer re-render on every 3s/5s status poll. `RepoRow.onToggle` now takes `repoId` so the stable `toggleExpand` is passed instead of a per-render inline arrow.
 
 ## [v0.4.0]
 
