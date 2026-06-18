@@ -234,7 +234,7 @@ const engineApi: EngineAPI = {
   async repoDiff(name) {
     try {
       const result = await wailsRepoDiff(name)
-      return { success: result.Success, diff: result.Diff, error: result.Error }
+      return { success: result.success, diff: result.diff, error: result.error }
     } catch (e) { return { success: false, error: String(e) } }
   },
   // Streaming via Wails Events
@@ -258,7 +258,7 @@ const engineApi: EngineAPI = {
   async readAgentLog(repoName, sessionId) {
     try {
       const result = await wailsReadAgentLog(repoName, sessionId ?? '')
-      return { events: result.Events, isRunning: result.IsRunning }
+	      return { events: result.events, isRunning: result.isRunning }
     } catch (e) { return { events: [], isRunning: false } }
   },
   eventsStart() {},
