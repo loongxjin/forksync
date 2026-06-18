@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -453,6 +454,189 @@ func resolveAgentProvider(cfg *config.Config, requested string) (agent.AgentProv
 		preferred = cfg.Agent.Preferred
 	}
 	return agent.ResolveProvider(preferred, requested)
+}
+
+// ---------------------------------------------------------------------------
+// Resolve streaming via Wails Events
+// ---------------------------------------------------------------------------
+
+// ResolveStreamStart kicks off the agent resolve for a repo in a background
+// goroutine, emitting Wails Events as the agent produces output:
+//   - "resolve:tick:<name>" — agent is alive, frontend should re-read disk log
+//   - "resolve:done:<name>" — resolve finished (carries ResolveData payload)
+//   - "resolve:error:<name>" — resolve failed (carries error string)
+//
+// The disk NDJSON log remains the single source of truth for event content;
+// the Wails Events are push notifications that trigger the frontend to
+// re-read the disk log (same architecture as the old WebSocket path).
+func (a *App) ResolveStreamStart(name string, agentName string, noConfirm bool) {
+	if a.deps == nil {
+		runtime.EventsEmit(a.ctx, "resolve:error:"+name, "engine not ready")
+		return
+	}
+	go a.runResolveStream(name, agentName, noConfirm)
+}
+
+func (a *App) runResolveStream(name, agentName string, noConfirm bool) {
+	r2, ok := a.deps.Store.GetByName(name)
+	if !ok {
+		runtime.EventsEmit(a.ctx, "resolve:error:"+name, fmt.Sprintf("repository %q not found", name))
+		return
+	}
+	if !isConflictRelated(r2.Status) {
+		runtime.EventsEmit(a.ctx, "resolve:done:"+name, types.ResolveData{RepoID: r2.ID})
+		return
+	}
+	paths := a.deps.GitOps.DetectConflicts(a.ctx, r2.Path)
+	if len(paths) == 0 {
+		runtime.EventsEmit(a.ctx, "resolve:done:"+name, types.ResolveData{RepoID: r2.ID})
+		return
+	}
+
+	cfg := a.deps.Cfg
+	provider, err := resolveAgentProvider(cfg, agentName)
+	if err != nil {
+		runtime.EventsEmit(a.ctx, "resolve:error:"+name, err.Error())
+		return
+	}
+	sessStore := session.NewSessionStore(a.cfgMgr.ConfigDir() + "/sessions")
+	sessMgr := session.NewManager(sessStore, provider)
+	resolver := respkg.NewResolver(a.deps.GitOps, a.deps.Store, cfg, a.cfgMgr, sessMgr)
+	timeout := config.AgentTimeout(cfg)
+	strategy := config.ResolveStrategyOrDefault(cfg)
+
+	// Emit tick on every agent event so the frontend re-reads the disk log.
+	tickSink := func(_ agent.StreamEvent) {
+		runtime.EventsEmit(a.ctx, "resolve:tick:"+name, name)
+	}
+
+	// Build stream writer that fans out to disk log + tick sink.
+	resolveSessionID := ""
+	if step := findAgentResolveStep(r2); step != nil {
+		resolveSessionID = step.ResolveSessionID
+	}
+	streamWriter, closeLog := buildStreamEmitter(a.cfgMgr.ConfigDir(), name, resolveSessionID, tickSink)
+	defer closeLog()
+
+	// Set repo to resolving state.
+	r2.Status = types.RepoStatusResolving
+	if err := a.deps.Store.Update(r2); err != nil {
+		logger.Warn("resolve stream: failed to update repo", "repo", r2.Name, "error", err)
+	}
+
+	ctx, cancel := context.WithTimeout(a.ctx, timeout)
+	defer cancel()
+
+	res, err := resolver.ResolveWithAgent(ctx, r2, strategy, streamWriter)
+	if err != nil {
+		if streamWriter != nil {
+			_ = streamWriter.WriteEvent(agent.StreamEvent{
+				Type: agent.StreamEventError, Data: fmt.Sprintf("agent resolve failed: %v", err),
+				Timestamp: time.Now().UTC(), Success: false,
+			})
+		}
+		runtime.EventsEmit(a.ctx, "resolve:error:"+name, err.Error())
+		return
+	}
+
+	r2 = res.Repo
+	data := types.ResolveData{RepoID: r2.ID, AgentResult: agentResultToTypes(res.AgentResult)}
+
+	if len(res.Unresolved) > 0 {
+		cf := make([]types.ConflictFile, len(res.Unresolved))
+		for i, p := range res.Unresolved {
+			cf[i] = types.ConflictFile{Path: p}
+		}
+		data.Conflicts = cf
+		if streamWriter != nil {
+			_ = streamWriter.WriteEvent(agent.StreamEvent{
+				Type: agent.StreamEventDone,
+				Data: fmt.Sprintf("agent left %d unresolved conflicts", len(res.Unresolved)),
+				Success: false, Timestamp: time.Now().UTC(),
+			})
+		}
+		runtime.EventsEmit(a.ctx, "resolve:done:"+name, data)
+		return
+	}
+
+	if noConfirm || (cfg != nil && !cfg.Agent.ConfirmBeforeCommit) {
+		if _, err := workflow.FinalizeCommit(ctx, r2, a.deps.Store, a.deps.GitOps, cfg, a.cfgMgr.ConfigDir(), a.deps.HistStore, workflow.CommitParams{
+			CommitMsg: types.CommitMsgAgentResolved, RecordHistory: true, SilentOutput: true,
+		}); err != nil {
+			logger.Warn("resolve stream: auto-commit failed", "repo", r2.Name, "error", err)
+		}
+		if streamWriter != nil {
+			_ = streamWriter.WriteEvent(agent.StreamEvent{
+				Type: agent.StreamEventDone, Success: true, Timestamp: time.Now().UTC(),
+			})
+		}
+	} else {
+		// Wait-for-confirmation: transition to resolved/waiting.
+		if r2.Workflow == nil {
+			r2.Workflow = workflow.NewWorkflowFromRepo(r2)
+		}
+		workflow.TransitionAgentResolved(r2.Workflow, res.AgentResult.AgentName)
+		r2.Status = types.RepoStatusResolved
+		r2.ErrorMessage = ""
+		if err := a.deps.Store.Update(r2); err != nil {
+			logger.Error("resolve stream: failed to update repo after resolution", "repo", r2.Name, "error", err)
+		}
+		if streamWriter != nil {
+			_ = streamWriter.WriteEvent(agent.DoneEventFromResult(res.AgentResult))
+		}
+	}
+
+	runtime.EventsEmit(a.ctx, "resolve:done:"+name, data)
+}
+
+// findAgentResolveStep extracts the resolveSessionID from the workflow.
+func findAgentResolveStep(r types.Repo) *types.WorkflowStepRecord {
+	if r.Workflow == nil {
+		return nil
+	}
+	for i := range r.Workflow.Steps {
+		if r.Workflow.Steps[i].Step == types.StepAgentResolve {
+			return &r.Workflow.Steps[i]
+		}
+	}
+	return nil
+}
+
+// buildStreamEmitter constructs a stream writer that fans events to the disk
+// log and a live tick callback. Mirrors buildResolveStreamWriter from the old
+// handlers_resolve.go.
+func buildStreamEmitter(configDir, repoName, sessionID string, tick func(agent.StreamEvent)) (*agent.StreamWriter, func()) {
+	diskWriter, closeLog := agent.NewResolveLogWriter(configDir, repoName, sessionID)
+	if tick == nil {
+		return diskWriter, closeLog
+	}
+	writers := []*agent.StreamWriter{
+		agent.NewStreamWriter(&tickIoWriter{fn: tick}),
+		diskWriter,
+	}
+	msw := agent.NewMultiStreamWriter(writers...)
+	return msw.StreamWriter(), closeLog
+}
+
+// tickIoWriter forwards each encoded StreamEvent line to the tick callback.
+type tickIoWriter struct{ fn func(agent.StreamEvent) }
+
+func (t *tickIoWriter) Write(p []byte) (int, error) {
+	var ev agent.StreamEvent
+	if err := json.Unmarshal(p, &ev); err != nil {
+		t.fn(agent.StreamEvent{Type: agent.StreamEventStdout, Data: trimRight(p), Timestamp: time.Now().UTC()})
+		return len(p), nil
+	}
+	t.fn(ev)
+	return len(p), nil
+}
+
+func trimRight(p []byte) string {
+	s := string(p)
+	for len(s) > 0 && (s[len(s)-1] == '\n' || s[len(s)-1] == '\r') {
+		s = s[:len(s)-1]
+	}
+	return s
 }
 
 func agentResultToTypes(r *agent.AgentResult) *types.AgentResolveResult {

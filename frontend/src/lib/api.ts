@@ -40,6 +40,7 @@ import {
   AddRepo as wailsAddRepo,
   RemoveRepo as wailsRemoveRepo,
   Resolve as wailsResolve,
+  ResolveStreamStart as wailsResolveStreamStart,
   RepoDiff as wailsRepoDiff,
   AgentList as wailsAgentList,
   History as wailsHistory,
@@ -176,11 +177,24 @@ const engineApi: EngineAPI = {
       return { success: result.Success, diff: result.Diff, error: result.Error }
     } catch (e) { return { success: false, error: String(e) } }
   },
-  // Streaming — to be migrated in Stage 3
-  resolveStreamStart() {},
-  onResolveStreamTick() { return () => {} },
-  onResolveStreamDone() { return () => {} },
-  onResolveStreamError() { return () => {} },
+  // Streaming via Wails Events
+  resolveStreamStart(name, opts) {
+    // ResolveStreamStart is fire-and-forget on the Go side; it runs the agent
+    // in a goroutine and emits "resolve:tick:<name>" / "resolve:done:<name>"
+    // / "resolve:error:<name>" Wails Events as it progresses.
+    wailsResolveStreamStart(name, opts?.agent ?? '', opts?.noConfirm ?? false)
+  },
+  onResolveStreamTick(callback) {
+    return EventsOn('resolve:tick', (repoName: string) => callback(repoName))
+  },
+  onResolveStreamDone(callback) {
+    return EventsOn('resolve:done', (repoName: string, result: any) => {
+      callback(repoName, { success: true, data: result, error: '' })
+    })
+  },
+  onResolveStreamError(callback) {
+    return EventsOn('resolve:error', (repoName: string, error: string) => callback(repoName, error))
+  },
   async readAgentLog(repoName, sessionId) {
     try {
       const result = await wailsReadAgentLog(repoName, sessionId ?? '')

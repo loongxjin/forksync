@@ -42,6 +42,10 @@ export function Resolve(arg1, arg2) {
   return window['go']['main']['App']['Resolve'](arg1, arg2);
 }
 
+export function ResolveStreamStart(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResolveStreamStart'](arg1, arg2, arg3);
+}
+
 export function Scan(arg1) {
   return window['go']['main']['App']['Scan'](arg1);
 }

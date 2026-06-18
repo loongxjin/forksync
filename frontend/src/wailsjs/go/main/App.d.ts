@@ -24,6 +24,8 @@ export function RepoDiff(arg1:string):Promise<main.DiffResult>;
 
 export function Resolve(arg1:string,arg2:main.ResolveRequest):Promise<types.ResolveData>;
 
+export function ResolveStreamStart(arg1:string,arg2:string,arg3:boolean):Promise<void>;
+
 export function Scan(arg1:string):Promise<types.ScanData>;
 
 export function Status(arg1:Array<string>):Promise<types.StatusData>;
