@@ -264,7 +264,7 @@ export function HomePage(): JSX.Element {
                 <RepoRow
                   repo={repo}
                   isExpanded={isExpanded}
-                  onToggle={() => toggleExpand(repo.id)}
+                  onToggle={toggleExpand}
                   onSync={syncRepo}
                   onRemove={handleRemove}
                   onSettings={setSettingsRepo}
