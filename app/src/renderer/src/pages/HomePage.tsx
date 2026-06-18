@@ -21,6 +21,7 @@ import { engineApi } from '@/lib/api'
 import { useAutoSummarize } from '@/hooks/useAutoSummarize'
 import { useAgentLogAutoload } from '@/hooks/useAgentLogAutoload'
 import { useDragDropAdd } from '@/hooks/useDragDropAdd'
+import { useHistorySync } from '@/hooks/useHistorySync'
 import { useStartupSync } from '@/hooks/useStartupSync'
 import { useSummaryPolling } from '@/hooks/useSummaryPolling'
 import { useLogger } from '@/hooks/useLogger'
@@ -47,12 +48,11 @@ export function HomePage(): JSX.Element {
   const { engineConfig } = useSettings()
   const { triggerSummarize } = useAutoSummarize()
   const {
-    records: history, loading: historyLoading, initialized: historyInitialized,
-    lastLoadAt, loadHistory, clearHistory, updateRecord
+    records: history, loading: historyLoading,
+    loadHistory, clearHistory, updateRecord
   } = useHistory()
 
   const hasSyncing = useMemo(() => repos.some((r) => r.status === 'syncing'), [repos])
-  const HISTORY_CACHE_MS = 30000
 
   // Filter state
   const [filterStatus, setFilterStatus] = useState<FilterStatus>(null)
@@ -106,23 +106,9 @@ export function HomePage(): JSX.Element {
   // Auto-sync on startup (extracted to useStartupSync).
   useStartupSync()
 
-  // Load history.
-  //
-  // NOTE: lastLoadAt is intentionally read via a ref and NOT listed in the
-  // dependency array. lastLoadAt is updated BY loadHistory itself (HistoryContext
-  // sets it on every SET_RECORDS), so putting it in deps creates a tight feedback
-  // loop: loadHistory() → lastLoadAt changes → this effect re-runs → loadHistory()
-  // again. With the old CLI backend each call spawned a ~50ms process that hid the
-  // storm; the HTTP backend is ~5ms so the loop runs at ~80 req/s during sync
-  // (see system.log). The ref lets us apply the 30s cache without re-triggering.
-  const lastLoadAtRef = useRef(lastLoadAt)
-  lastLoadAtRef.current = lastLoadAt
-  useEffect(() => {
-    const now = Date.now()
-    const shouldSkip =
-      historyInitialized && !hasSyncing && now - lastLoadAtRef.current < HISTORY_CACHE_MS
-    if (!shouldSkip) loadHistory()
-  }, [loadHistory, historyInitialized, hasSyncing])
+  // Load history with a 30s cache (extracted to useHistorySync; the ref-not-
+  // in-deps invariant that prevents the ~80req/s feedback loop lives there).
+  useHistorySync(hasSyncing)
 
   // Auto-load agent logs for repos with active agent resolution
   // (extracted to useAgentLogAutoload). loadAgentLog is owned by useResolveStream
