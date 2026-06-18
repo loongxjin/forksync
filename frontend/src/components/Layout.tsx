@@ -6,10 +6,14 @@ import { useSettings } from '@/contexts/SettingsContext'
 import { useTranslation } from 'react-i18next'
 import i18n from 'i18next'
 import { Settings, Moon, Sun, Monitor, Languages } from 'lucide-react'
-import { engineApi } from '@/lib/api'
+import { engineApi, WindowMinimise, WindowToggleMaximise, Quit } from '@/lib/api'
 
-/** Platform detected from preload */
-const platform: string = window.platform || 'darwin'
+/** Platform from navigator (replaces Electron's window.platform from preload). */
+const platform: string = window.navigator.platform?.toLowerCase()?.includes('win')
+  ? 'win32'
+  : window.navigator.platform?.toLowerCase()?.includes('linux')
+    ? 'linux'
+    : 'darwin'
 
 function TitleBar(): JSX.Element {
   const { theme, setTheme } = useSettings()
@@ -102,36 +106,36 @@ function TitleBar(): JSX.Element {
   )
 }
 
-/** Minimal window control buttons for Linux (frameless window) */
-function LinuxWindowControls(): JSX.Element {
-  return (
-    <div className="window-controls flex items-center ml-2">
-      <button
-        className="window-control window-control-minimize"
-        onClick={() => window.ipcSend?.('window:minimize')}
-      >
-        <svg width="10" height="1" viewBox="0 0 10 1">
-          <rect width="10" height="1" fill="currentColor" rx="0.5"/>
-        </svg>
-      </button>
-      <button
-        className="window-control window-control-maximize"
-        onClick={() => window.ipcSend?.('window:maximize')}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" rx="1"/>
-        </svg>
-      </button>
-      <button
-        className="window-control window-control-close"
-        onClick={() => window.ipcSend?.('window:close')}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-        </svg>
-      </button>
-    </div>
-  )
+	/** Minimal window control buttons for Linux (frameless window) */
+	function LinuxWindowControls(): JSX.Element {
+	  return (
+	    <div className="window-controls flex items-center ml-2">
+	      <button
+	        className="window-control window-control-minimize"
+	        onClick={() => WindowMinimise()}
+	      >
+	        <svg width="10" height="1" viewBox="0 0 10 1">
+	          <rect width="10" height="1" fill="currentColor" rx="0.5"/>
+	        </svg>
+	      </button>
+	      <button
+	        className="window-control window-control-maximize"
+	        onClick={() => WindowToggleMaximise()}
+	      >
+	        <svg width="10" height="10" viewBox="0 0 10 10">
+	          <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" rx="1"/>
+	        </svg>
+	      </button>
+	      <button
+	        className="window-control window-control-close"
+	        onClick={() => Quit()}
+	      >
+	        <svg width="10" height="10" viewBox="0 0 10 10">
+	          <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+	        </svg>
+	      </button>
+	    </div>
+	  )
 }
 
 export function Layout(): JSX.Element {

@@ -1,9 +1,4 @@
-import type { EngineAPI } from './lib/api'
+/// <reference types="vite/client" />
 
-declare global {
-  interface Window {
-    api: EngineAPI
-    platform: string
-    ipcSend: (channel: 'window:minimize' | 'window:maximize' | 'window:close') => void
-  }
-}
+// No Electron preload — all API access is through direct imports from
+// lib/api.ts and wailsjs bindings.
