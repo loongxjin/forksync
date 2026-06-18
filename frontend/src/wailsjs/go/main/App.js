@@ -110,6 +110,10 @@ export function Scan(arg1) {
   return window['go']['main']['App']['Scan'](arg1);
 }
 
+export function SetAutoLaunch(arg1) {
+  return window['go']['main']['App']['SetAutoLaunch'](arg1);
+}
+
 export function SetLocale(arg1) {
   return window['go']['main']['App']['SetLocale'](arg1);
 }

@@ -65,6 +65,7 @@ import {
   OpenDirectoryDialog as wailsOpenDirectoryDialog,
   IsGitRepo as wailsIsGitRepo,
   SetLocale as wailsSetLocale,
+  SetAutoLaunch as wailsSetAutoLaunch,
 } from '../wailsjs/go/main/App'
 
 export interface EngineAPI {
@@ -227,7 +228,9 @@ const engineApi: EngineAPI = {
   async summarizeRetry(repoName) {
     try { return ok(await wailsSummarizeRetry(repoName)) } catch (e) { return fail(e) }
   },
-  async setAutoLaunch() { return { success: true } },
+  async setAutoLaunch(enabled) {
+    try { return await wailsSetAutoLaunch(enabled) as { success: boolean; error?: string } } catch (e) { return { success: false, error: String(e) } }
+  },
   async repoDiff(name) {
     try {
       const result = await wailsRepoDiff(name)

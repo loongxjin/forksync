@@ -58,6 +58,8 @@ export function ResolveStreamStart(arg1:string,arg2:string,arg3:boolean):Promise
 
 export function Scan(arg1:string):Promise<types.ScanData>;
 
+export function SetAutoLaunch(arg1:boolean):Promise<Record<string, any>>;
+
 export function SetLocale(arg1:string):Promise<Record<string, boolean>>;
 
 export function Status(arg1:Array<string>):Promise<types.StatusData>;

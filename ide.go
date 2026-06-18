@@ -306,3 +306,66 @@ func (a *App) SetLocale(locale string) (map[string]bool, error) {
 	}
 	return map[string]bool{"success": true}, nil
 }
+
+// SetAutoLaunch enables or disables launch on system startup.
+func (a *App) SetAutoLaunch(enabled bool) (map[string]interface{}, error) {
+	switch goruntime.GOOS {
+	case "linux":
+		return setAutoLaunchLinux(enabled)
+	case "darwin":
+		return setAutoLaunchDarwin(enabled)
+	default:
+		return map[string]interface{}{"success": true}, nil
+	}
+}
+
+func setAutoLaunchLinux(enabled bool) (map[string]interface{}, error) {
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		home, _ := os.UserHomeDir()
+		configHome = filepath.Join(home, ".config")
+	}
+	autoStartDir := filepath.Join(configHome, "autostart")
+	desktopFile := filepath.Join(autoStartDir, "forksync.desktop")
+	if enabled {
+		os.MkdirAll(autoStartDir, 0o755)
+		exe, _ := os.Executable()
+		content := fmt.Sprintf(`[Desktop Entry]
+Type=Application
+Name=ForkSync
+Comment=Fork Repository Sync Tool
+Exec=%s
+Icon=forksync
+Categories=Development;
+Terminal=false
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+`, exe)
+		os.WriteFile(desktopFile, []byte(content), 0o644)
+	} else {
+		os.Remove(desktopFile)
+	}
+	return map[string]interface{}{"success": true}, nil
+}
+
+func setAutoLaunchDarwin(enabled bool) (map[string]interface{}, error) {
+	home, _ := os.UserHomeDir()
+	launchDir := filepath.Join(home, "Library", "LaunchAgents")
+	plistFile := filepath.Join(launchDir, "com.forksync.app.plist")
+	if enabled {
+		os.MkdirAll(launchDir, 0o755)
+		exe, _ := os.Executable()
+		content := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>com.forksync.app</string>
+<key>ProgramArguments</key><array><string>%s</string></array>
+<key>RunAtLoad</key><true/>
+</dict></plist>`, exe)
+		os.WriteFile(plistFile, []byte(content), 0o644)
+	} else {
+		os.Remove(plistFile)
+	}
+	return map[string]interface{}{"success": true}, nil
+}
