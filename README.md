@@ -181,24 +181,29 @@ Built with **Electron** + **React** + **TypeScript** + **Tailwind CSS** + **shad
 **Architecture:**
 
 ```
-┌───────────────────────────────────┐
-│       Electron UI (React)          │
-│  Dashboard · Repos · Workflow      │
-│  Agent Terminal · History          │
-└───────────────┬───────────────────┘
-                │ IPC (contextBridge)
-┌───────────────▼───────────────────┐
-│     EngineClient (TypeScript)      │
-│  Spawns Go binary, parses JSON     │
-└───────────────┬───────────────────┘
-                │ --json / --stream flag
-┌───────────────▼───────────────────┐
-│        Go CLI Engine (Cobra)       │
-│  add · sync · resolve · serve      │
-│  agent · config · history          │
-│  workflow · post-sync · summarize  │
-└───────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│            Electron UI (React)              │
+│  Dashboard · Repos · Workflow               │
+│  Agent Terminal · History · Settings        │
+└────────────────┬───────────────────────────┘
+                 │ IPC (contextBridge)
+┌────────────────▼───────────────────────────┐
+│          EngineClient (TypeScript)           │
+│  HTTP fetch + WebSocket to local engine      │
+└────────────────┬───────────────────────────┘
+                 │ REST + WebSocket
+                 │ `127.0.0.1:<random-port>`
+                 │ Bearer token auth
+┌────────────────▼───────────────────────────┐
+│      Go Engine (net/http, single process)    │
+│  REST:  status · sync · resolve · config     │
+│  WS:    /stream/resolve · /stream/events     │
+│  Internal: scheduler · history · agent       │
+│            notify · summarizer · eventbus    │
+└────────────────────────────────────────────┘
 ```
+
+On startup, Electron spawns a **single long-lived** Go engine process bound to `127.0.0.1:<random-port>`. All communication goes through HTTP + WebSocket with per-session bearer token auth. The engine announces its address and token via stdout, then the Electron parent acts as a reverse proxy — the renderer never sees the token. If the engine crashes, it is automatically respawned with exponential backoff (5 attempts, 500ms → 1s → 2s → 5s cap).
 
 ---
 

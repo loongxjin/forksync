@@ -181,24 +181,29 @@ agent:
 **架构：**
 
 ```
-┌───────────────────────────────────┐
-│       Electron UI (React)          │
-│  仪表盘 · 仓库 · 工作流             │
-│  Agent 终端 · 历史                 │
-└───────────────┬───────────────────┘
-                │ IPC (contextBridge)
-┌───────────────▼───────────────────┐
-│     EngineClient (TypeScript)      │
-│  启动 Go 二进制文件，解析 JSON 输出  │
-└───────────────┬───────────────────┘
-                │ --json / --stream 参数
-┌───────────────▼───────────────────┐
-│        Go CLI 引擎 (Cobra)         │
-│  add · sync · resolve · serve      │
-│  agent · config · history          │
-│  workflow · post-sync · summarize  │
-└───────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│            Electron UI (React)              │
+│  仪表盘 · 仓库 · 工作流                      │
+│  Agent 终端 · 历史 · 设置                   │
+└────────────────┬───────────────────────────┘
+                 │ IPC (contextBridge)
+┌────────────────▼───────────────────────────┐
+│          EngineClient (TypeScript)           │
+│  通过 HTTP + WebSocket 与本地引擎通信         │
+└────────────────┬───────────────────────────┘
+                 │ REST + WebSocket
+                 │ `127.0.0.1:<随机端口>`
+                 │ Bearer token 鉴权
+┌────────────────▼───────────────────────────┐
+│      Go Engine (net/http, 单一长进程)         │
+│  REST:  status · sync · resolve · config     │
+│  WS:    /stream/resolve · /stream/events     │
+│  内部:  scheduler · history · agent          │
+│         notify · summarizer · eventbus       │
+└────────────────────────────────────────────┘
 ```
+
+Electron 启动时 spawn 一个**单一长生命周期**的 Go 引擎进程，监听 `127.0.0.1:<随机端口>`。所有通信通过 HTTP + WebSocket 完成，并附带会话级 Bearer token 鉴权。引擎通过 stdout 宣告自己的地址和 token，Electron 主进程扮演反向代理角色 —— 渲染进程永远看不到 token。如果引擎崩溃，会自动按指数退避重启（最多 5 次，500ms → 1s → 2s → 5s 上限）。
 
 ---
 
