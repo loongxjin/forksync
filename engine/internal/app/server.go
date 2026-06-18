@@ -8,6 +8,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -29,11 +31,26 @@ import (
 //	FORKSYNC_HTTP_ADDR=127.0.0.1:54321
 const addrReadyPrefix = "FORKSYNC_HTTP_ADDR="
 
+// tokenReadyPrefix is printed to stdout (single line) immediately after the
+// address, announcing the random bearer token the parent must send on every
+// authenticated request. The token lives only in process memory + the parent's
+// stdout read; it is never written to disk or config.
+const tokenReadyPrefix = "FORKSYNC_TOKEN="
+
+// tokenBytes is the length of the random auth token (32 bytes = 256 bits).
+const tokenBytes = 32
+
 // Server is the embedded HTTP server. It owns a *Deps and an *http.Server.
 type Server struct {
 	deps   *Deps
 	server *http.Server
 	ln     net.Listener
+	mux    *http.ServeMux // routes are registered here; rebuilt-chain reads it
+
+	// token is the random bearer token required on every state-changing
+	// request. It is generated at Start and announced to the parent process so
+	// the renderer never sees it (all traffic flows through the parent's IPC).
+	token string
 
 	stopScheduler func()
 	mu            sync.Mutex
@@ -55,12 +72,16 @@ func NewServer(addr string, deps *Deps) (*Server, error) {
 	s := &Server{
 		deps: deps,
 		ln:   ln,
+		mux:  mux,
 		server: &http.Server{
 			// maxBodyBytes caps request bodies for all routes. The engine only
 			// accepts small JSON payloads (paths, config values, post-sync
 			// commands) — 1 MiB is far beyond any legitimate request and stops
 			// a malicious/buggy client from streaming an unbounded body.
-			Handler:           limitBody(mux, maxBodyBytes),
+			//
+			// The chain built here uses the empty token placeholder (a
+			// pass-through); Start rebuilds it once s.token is generated.
+			Handler:           authToken(limitBody(mux, maxBodyBytes), ""),
 			ReadHeaderTimeout: 10 * time.Second,
 		},
 	}
@@ -83,6 +104,20 @@ func limitBody(h http.Handler, maxBytes int64) http.Handler {
 // Addr returns the actual address the server is listening on.
 func (s *Server) Addr() string { return s.ln.Addr().String() }
 
+// Token returns the random bearer token required on authenticated requests.
+// Empty when no token has been generated yet (e.g. before Start).
+func (s *Server) Token() string { return s.token }
+
+// generateToken returns a cryptographically random hex token, or panics if the
+// system entropy source is unavailable (a genuinely broken host).
+func generateToken() string {
+	b := make([]byte, tokenBytes)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("app: failed to read random bytes for token: %v", err))
+	}
+	return hex.EncodeToString(b)
+}
+
 // Start serves HTTP until ctx is done or Shutdown is called. It prints the
 // FORKSYNC_HTTP_ADDR line to stdout exactly once so the Electron parent can
 // discover the port.
@@ -98,8 +133,19 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.mu.Unlock()
 
-	// Announce the address to the parent process.
+	// Generate the per-session auth token and announce it to the parent process
+	// right after the address. The parent (Electron) reads both lines off stdout
+	// and injects the token into every engine request. The renderer never sees it.
+	s.token = generateToken()
+
+	// Rebuild the handler chain now that s.token is set. The chain built in
+	// NewServer used the empty placeholder; authToken with an empty token is a
+	// pass-through, so this swap is what actually enforces auth.
+	s.server.Handler = authToken(limitBody(s.mux, maxBodyBytes), s.token)
+
+	// Announce the address + token to the parent process.
 	fmt.Fprintf(os.Stdout, "%s%s\n", addrReadyPrefix, s.Addr())
+	fmt.Fprintf(os.Stdout, "%s%s\n", tokenReadyPrefix, s.token)
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- s.server.Serve(s.ln) }()

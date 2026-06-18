@@ -11,6 +11,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/eventbus"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
@@ -36,13 +37,19 @@ type Syncer struct {
 	notifier     *notify.Notifier
 	sessionMgr   *session.Manager
 	historyStore *history.Store
-	configDir    string // base config directory (e.g. ~/.forksync)
+	bus          *eventbus.Bus // publishes EventHistoryChanged after each repo sync
+	configDir    string        // base config directory (e.g. ~/.forksync)
 	mu           sync.Mutex
 	active       map[string]bool // tracks repos currently syncing
 }
 
 // Option configures a Syncer during construction.
 type Option func(*Syncer)
+
+// WithEventBus sets the bus for publishing repo/history change events.
+func WithEventBus(bus *eventbus.Bus) Option {
+	return func(s *Syncer) { s.bus = bus }
+}
 
 // WithNotifier sets the notification handler.
 func WithNotifier(n *notify.Notifier) Option {
@@ -869,4 +876,10 @@ func (s *Syncer) logResult(result *Result) {
 func (s *Syncer) finalizeResult(result *Result) {
 	s.recordHistory(result)
 	s.logResult(result)
+	// Notify the frontend that history has changed so the timeline can
+	// update incrementally — important for SyncAll where repos finish at
+	// different times and the user wants to see each result as it lands.
+	if s.bus != nil {
+		s.bus.Publish(eventbus.Event{Type: eventbus.EventHistoryChanged})
+	}
 }

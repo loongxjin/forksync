@@ -8,6 +8,7 @@ import (
 	"github.com/loongxjin/forksync/engine/internal/agent"
 	"github.com/loongxjin/forksync/engine/internal/agent/session"
 	"github.com/loongxjin/forksync/engine/internal/config"
+	"github.com/loongxjin/forksync/engine/internal/eventbus"
 	"github.com/loongxjin/forksync/engine/internal/git"
 	"github.com/loongxjin/forksync/engine/internal/history"
 	"github.com/loongxjin/forksync/engine/internal/logger"
@@ -28,6 +29,17 @@ type Deps struct {
 	GitOps  git.OperationsProvider
 	Syncer  *syncpkg.Syncer
 	Resolve *respkg.Resolver
+
+	// Bus broadcasts repo/history state changes to /stream/events subscribers,
+	// letting the renderer stop polling. Published by the eventsStore wrapper
+	// (Store) and by the history store on insert/update/cleanup.
+	Bus *eventbus.Bus
+
+	// rawStore is the unwrapped repo store. The GET /status handler uses it
+	// for internal housekeeping (CleanupStaleWorkflows, reconcileConflictStatus)
+	// to avoid feedback: every store.Update inside /status would fire a
+	// repos_changed event, which triggers another /status call on the renderer.
+	rawStore repo.Store
 
 	// HistStore is the long-lived history DB handle. May be nil if init failed.
 	HistStore *history.Store
@@ -55,15 +67,21 @@ func BuildDeps() (*Deps, error) {
 		logger.Warn("app: config load skipped", "error", err)
 	}
 
-	store := repo.NewJSONStore(cfgMgr.ConfigDir())
-	if err := store.Load(); err != nil {
+	rawStore := repo.NewJSONStore(cfgMgr.ConfigDir())
+	if err := rawStore.Load(); err != nil {
 		return nil, fmt.Errorf("load repo store: %w", err)
 	}
+
+	// Event bus: publishes repo/history changes to /stream/events. Created
+	// before the store wrapper so every mutation is observable.
+	bus := eventbus.New()
 
 	deps := &Deps{
 		Cfg:         cfg,
 		CfgMgr:      cfgMgr,
-		Store:       store,
+		Store:       wrapStoreWithEvents(rawStore, bus),
+		Bus:         bus,
+		rawStore:    rawStore,
 		GitOps:      newGitOps(cfg),
 		configDir:   cfgMgr.ConfigDir(),
 		histCleanup: func() {},
@@ -104,16 +122,19 @@ func BuildDeps() (*Deps, error) {
 	// Note: desktop notifications are surfaced by the Electron layer, so we do
 	// NOT wire a Go-side notifier here (the scheduler receives nil).
 	var syncOpts []syncpkg.Option
+	if bus != nil {
+		syncOpts = append(syncOpts, syncpkg.WithEventBus(bus))
+	}
 	if deps.HistStore != nil {
 		syncOpts = append(syncOpts, syncpkg.WithHistoryStore(deps.HistStore))
 	}
 	if deps.SessionMgr != nil {
 		syncOpts = append(syncOpts, syncpkg.WithSessionManager(deps.SessionMgr))
 	}
-	deps.Syncer = syncpkg.NewSyncerFromConfig(cfgMgr, store, cfgMgr.ConfigDir(), syncOpts...)
+	deps.Syncer = syncpkg.NewSyncerFromConfig(cfgMgr, deps.Store, cfgMgr.ConfigDir(), syncOpts...)
 
 	// Resolver reuses the same gitOps/store/cfg/sessionMgr.
-	deps.Resolve = respkg.NewResolver(deps.GitOps, store, cfg, cfgMgr, deps.SessionMgr)
+	deps.Resolve = respkg.NewResolver(deps.GitOps, deps.Store, cfg, cfgMgr, deps.SessionMgr)
 
 	return deps, nil
 }
@@ -122,6 +143,9 @@ func BuildDeps() (*Deps, error) {
 func (d *Deps) Close() {
 	if d.histCleanup != nil {
 		d.histCleanup()
+	}
+	if d.Bus != nil {
+		d.Bus.Close()
 	}
 }
 

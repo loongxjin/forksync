@@ -44,7 +44,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	refresher := syncpkg.NewStatusRefresher(s.deps.GitOps, s.deps.Store, s.deps.Cfg)
+	refresher := syncpkg.NewStatusRefresher(s.deps.GitOps, s.deps.rawStore, s.deps.Cfg)
 	repos, err = refresher.RefreshAll(ctx, repos, exclude)
 	if err != nil {
 		writeErr[types.StatusData](w, fmt.Errorf("refresh status: %w", err))

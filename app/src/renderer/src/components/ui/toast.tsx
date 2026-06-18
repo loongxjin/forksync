@@ -69,6 +69,8 @@ export function Toast({
 
   return (
     <div
+      role="alert"
+      aria-live="assertive"
       className={`fixed left-1/2 top-4 z-[60] -translate-x-1/2 transition-all duration-200 ${
         exiting ? 'opacity-0 -translate-y-1' : 'opacity-0 translate-y-[-8px]'
       }`}

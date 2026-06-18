@@ -58,18 +58,30 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  // Set Content-Security-Policy
+  // Set Content-Security-Policy.
+  //
+  // connect-src: in production the renderer NEVER talks to the engine directly
+  // — every request flows through the main process via IPC (api.ts → preload →
+  // ipc-engine.ts → engine.ts). So the renderer's connect-src only needs
+  // 'self' in production, denying a compromised renderer any outbound network
+  // exfiltration channel. In dev, Vite HMR needs ws connections to its dev
+  // server on 127.0.0.1/localhost, so we relax connect-src only there.
+  //
+  // script-src keeps 'unsafe-inline' for the synchronous theme-init script in
+  // index.html (FOUC prevention). Tightening that requires a per-request nonce
+  // + HTML rewrite, which is a follow-up.
+  const devConnect = is.dev
+    ? ' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*'
+    : ''
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          // The renderer talks to the embedded Go HTTP server (and its
-          // WebSocket) on 127.0.0.1:<random-port>; both dev and packaged
-          // builds must allow localhost connects.
-          "default-src 'self' 'unsafe-inline'" + (is.dev ? " 'unsafe-eval'" : "") +
+          "default-src 'self'" +
             "; script-src 'self' 'unsafe-inline'" + (is.dev ? " 'unsafe-eval'" : "") +
-            "; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:*"
+            "; style-src 'self' 'unsafe-inline'" +
+            `; connect-src 'self'${devConnect}`
         ]
       }
     })
@@ -103,6 +115,15 @@ app.whenReady().then(async () => {
   } catch (err) {
     log.error('[main] engine server failed to start at boot:', (err as Error).message)
   }
+
+  // Broadcast engine lifecycle status (starting/ready/reconnecting/down) to the
+  // renderer so it can show a "reconnecting" banner when the engine crashes.
+  // The supervisor auto-restarts with backoff; this only drives the UI.
+  getEngineServer().onStatusChange((status) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('engine:status', status)
+    }
+  })
 
   // Register IPC handlers for engine communication
   registerIpcHandlers()

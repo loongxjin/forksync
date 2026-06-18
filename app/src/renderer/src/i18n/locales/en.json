@@ -50,7 +50,9 @@
     "activeSessions": "{{count}} active session(s)",
     "syncHistory": "Sync History",
     "clearHistoryConfirm": "Clear all sync history?",
+    "clearHistoryTitle": "Clear History",
     "clearFailed": "Failed to clear history",
+    "clearSuccess": "History cleared",
     "clear": "Clear",
     "loadingHistory": "Loading history...",
     "noHistory": "No sync history yet.",
@@ -69,6 +71,7 @@
     "emptyTitle": "No repositories managed yet.",
     "emptyHint": "Click + Add Repo, or drag a folder here to get started.",
     "removeConfirm": "Remove \"{{name}}\" from ForkSync? The local repo won't be deleted.",
+    "removeTitle": "Remove Repository",
     "dropOverlay": "Drop repository folder here",
     "origin": "origin:",
     "upstream": "upstream:",
@@ -285,7 +288,12 @@
     "syncFailed": "{{count}} repo(s) failed to sync",
     "loadConfigFailed": "Failed to load config",
     "updateConfigFailed": "Failed to update config",
-    "summaryRetryFailed": "Summary retry failed, please try again later"
+    "summaryRetryFailed": "Summary retry failed, please try again later",
+    "workflowContinueFailed": "Workflow continue failed",
+    "agentResolveFailed": "Agent resolve failed: {{message}}",
+    "retryCommitFailed": "Retry commit failed",
+    "acceptFailed": "Accept failed",
+    "rejectFailed": "Reject failed"
   },
   "notify": {
     "conflictsTitle": "Conflicts in {{count}} repo(s)",

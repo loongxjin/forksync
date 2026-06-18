@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import type { Repo, RepoStatus } from '@shared/types/engine'
@@ -36,7 +37,7 @@ export function RepoStatusBadge({ status, className }: RepoStatusBadgeProps): JS
 interface RepoRowProps {
   repo: Repo
   isExpanded: boolean
-  onToggle: () => void
+  onToggle: (repoId: string) => void
   onSync: (name: string) => void
   onRemove: (name: string) => void
   onSettings: (name: string) => void
@@ -44,7 +45,10 @@ interface RepoRowProps {
   removing: boolean
 }
 
-export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettings, removing }: RepoRowProps): JSX.Element {
+// Memoized: the parent (HomePage) re-renders on every 3s status poll, but only
+// the few repos whose status changed need to re-render. Stable callbacks
+// (toggleExpand, onSync, etc.) keep identity equal across renders.
+function RepoRowImpl({ repo, isExpanded, onToggle, onSync, onRemove, onSettings, removing }: RepoRowProps): JSX.Element {
   const { t } = useTranslation()
   const isConflict = isConflictStatus(repo.status)
   const isSyncing = repo.status === 'syncing'
@@ -52,16 +56,24 @@ export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettin
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-expanded={isExpanded}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onToggle(repo.id)
+        }
+      }}
       className={cn(
-        'group relative cursor-pointer rounded-lg border border-border bg-card shadow-card',
+        'group relative cursor-pointer rounded-lg border border-border bg-card shadow-card w-full text-left',
         'transition-all duration-200 hover:shadow-card-hover hover:-translate-y-px',
-        'hover:border-border/80'
+        'hover:border-border/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
       )}
       onClick={(e) => {
-        // Don't toggle if clicking action buttons
         const target = e.target as HTMLElement
         if (target.closest('[data-action]')) return
-        onToggle()
+        onToggle(repo.id)
       }}
     >
       {/* Left status indicator bar */}
@@ -154,5 +166,7 @@ export function RepoRow({ repo, isExpanded, onToggle, onSync, onRemove, onSettin
     </div>
   )
 }
+
+export const RepoRow = memo(RepoRowImpl)
 
 

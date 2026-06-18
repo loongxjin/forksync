@@ -97,6 +97,7 @@ export function repoReducer(state: RepoState, action: RepoAction): RepoState {
 
 interface RepoContextValue extends RepoState {
   refresh: () => Promise<void>
+  refreshSilent: () => Promise<void>
   syncAll: () => Promise<void>
   syncRepo: (name: string) => Promise<void>
   scan: (dir: string) => Promise<void>
@@ -126,38 +127,39 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
   // Guard against concurrent syncAll calls
   const syncingAllRef = useRef(false)
 
-  // Poll repos during sync so the UI shows workflow progress
-  const syncPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const syncPollCancelledRef = useRef(false)
+  // Status/conflict polling has been removed: the /stream/events push channel
+  // (useEngineEvents) refreshes the repo list on every state change, so the
+  // 3s status poll and 5s conflict poll are no longer needed.
+  //
+  // During active sync, the engine publishes repos_changed on every workflow
+  // step. useEngineEvents calls refresh() on each, but refresh() has a guard
+  // (refreshingRef) that drops concurrent calls while a GET /status is in
+  // flight. During sync (which can take minutes), the engine's GET /status is
+  // slow (git fetch + rev-list per repo), so events pile up and get dropped.
+  // refreshSilent() bypasses the guard to always update the repos array via
+  // SET_REPOS_SILENT, so workflow progress shows live.
+  // refreshSilent coalesces rapid repos_changed events into a single in-flight
+  // GET /status at a time. If a request is already running, a "pending" flag
+  // is set so one more refresh fires when it completes. This prevents the death
+  // spiral where every store.Update inside GET /status (e.g. CleanupStaleWorkflows)
+  // triggers another repos_changed → another refreshSilent → another GET /status.
+  const refreshSilentPending = useRef(false)
 
-  // Reference-counted polling: multiple operations (syncAll, syncRepo) may run
-  // concurrently. Only stop the interval when the last consumer calls stopSyncPoll.
-  const syncPollCountRef = useRef(0)
-
-  // Start polling repo status while sync is running (agent resolve can take minutes)
-  const startSyncPoll = useCallback(() => {
-    syncPollCountRef.current++
-    if (syncPollRef.current) return // already polling
-    syncPollCancelledRef.current = false
-    syncPollRef.current = setInterval(async () => {
-      try {
-        const res = await engineApi.status()
-        if (res.success && !syncPollCancelledRef.current) {
-          dispatch({ type: 'SET_REPOS_SILENT', repos: res.data.repos ?? [] })
-        }
-      } catch {
-        // silent — polling is best-effort
+  const refreshSilent = useCallback(async () => {
+    if (refreshSilentPending.current) {
+      // One is already in flight; coalesce this call into the pending flag.
+      return
+    }
+    refreshSilentPending.current = true
+    try {
+      const res = await engineApi.status()
+      if (res.success) {
+        dispatch({ type: 'SET_REPOS_SILENT', repos: res.data.repos ?? [] })
       }
-    }, 3000)
-  }, [])
-
-  const stopSyncPoll = useCallback(() => {
-    syncPollCountRef.current = Math.max(0, syncPollCountRef.current - 1)
-    if (syncPollCountRef.current > 0) return // other consumers still active
-    syncPollCancelledRef.current = true
-    if (syncPollRef.current) {
-      clearInterval(syncPollRef.current)
-      syncPollRef.current = null
+    } catch {
+      // silent — best-effort
+    } finally {
+      refreshSilentPending.current = false
     }
   }, [])
 
@@ -192,7 +194,8 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     }
 
     dispatch({ type: 'SET_LOADING', loading: true })
-    startSyncPoll() // poll repo status during sync to show workflow progress
+    // Status updates now arrive via the /stream/events push channel
+    // (useEngineEvents), so we no longer poll /status on an interval.
     try {
       const res = await engineApi.syncAll()
       if (res.success) {
@@ -235,10 +238,9 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       dispatch({ type: 'SET_ERROR', error: (err as Error).message })
       await refresh()
     } finally {
-      stopSyncPoll()
       syncingAllRef.current = false
     }
-  }, [state, refresh, engineConfig, showToast, startSyncPoll, stopSyncPoll])
+  }, [state, refresh, engineConfig, showToast])
 
   // Track syncing repos to prevent duplicate sync requests
   const syncingReposRef = useRef<Set<string>>(new Set())
@@ -268,7 +270,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
       }
 
       dispatch({ type: 'SET_LOADING', loading: true })
-      startSyncPoll() // poll repo status during sync to show workflow progress
+      // Status updates now arrive via /stream/events push (useEngineEvents).
       try {
         const res = await engineApi.syncRepo(name)
         if (res.success) {
@@ -296,11 +298,10 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
         dispatch({ type: 'SET_ERROR', error: (err as Error).message })
         await refresh()
       } finally {
-        stopSyncPoll()
         syncingReposRef.current.delete(name)
       }
     },
-    [state, refresh, showToast, engineConfig, startSyncPoll, stopSyncPoll]
+    [state, refresh, showToast, engineConfig]
   )
 
   const scan = useCallback(async (dir: string) => {
@@ -351,28 +352,10 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
     [state.repos]
   )
 
-  // Auto-poll while any repo is in conflict/waiting/resolving state
-  // so that external resolutions (e.g. manual git commit) are detected.
-  const conflictPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  useEffect(() => {
-    const hasConflict = state.repos.some((r) => isConflictStatus(r.status))
-    if (hasConflict && !conflictPollRef.current) {
-      conflictPollRef.current = setInterval(async () => {
-        try {
-          const res = await engineApi.status()
-          if (res.success) {
-            dispatch({ type: 'SET_REPOS_SILENT', repos: res.data.repos ?? [] })
-          }
-        } catch {
-          // silent — polling is best-effort
-        }
-      }, 5000)
-    } else if (!hasConflict && conflictPollRef.current) {
-      clearInterval(conflictPollRef.current)
-      conflictPollRef.current = null
-    }
-  }, [state.repos])
+  // Conflict-poll effect removed: external resolutions are still surfaced
+  // because any engine-side repo mutation publishes repos_changed, and
+  // /stream/events forwards it to refresh(). Manual git commits done outside
+  // the engine are refreshed on the next user-triggered sync/refresh.
 
   const markStartupSyncDone = useCallback(() => {
     startupSyncDoneRef.current = true
@@ -388,7 +371,7 @@ export function RepoProvider({ children }: { children: ReactNode }): JSX.Element
 
   return (
     <RepoContext.Provider
-      value={{ ...state, refresh, syncAll, syncRepo, scan, addRepo, removeRepo, updateRepoStatus, updateRepo, startupSyncDone: startupSyncDoneRef.current, markStartupSyncDone }}
+      value={{ ...state, refresh, refreshSilent, syncAll, syncRepo, scan, addRepo, removeRepo, updateRepoStatus, updateRepo, startupSyncDone: startupSyncDoneRef.current, markStartupSyncDone }}
     >
       {children}
     </RepoContext.Provider>

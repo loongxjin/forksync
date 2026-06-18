@@ -4,7 +4,7 @@
  * Extracted from HomePage to reduce its size and improve testability.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { CheckCircle2, Zap, XCircle } from 'lucide-react'
@@ -45,7 +45,10 @@ interface HistoryRowProps {
   onRetry: (record: SyncHistoryRecord) => void
 }
 
-export function HistoryRow({ record, onRetry }: HistoryRowProps): JSX.Element {
+// Memoized with a custom comparator: the parent rebuilds the history array on
+// every poll (new object identities), so default referential memo would never
+// skip. Re-render only when the displayed fields actually change.
+function HistoryRowImpl({ record, onRetry }: HistoryRowProps): JSX.Element {
   const { t } = useTranslation()
   const config = getHistoryConfig(record.status, t)
   const timeAgo = formatTimeAgo(record.createdAt, t)
@@ -146,3 +149,20 @@ export function HistoryRow({ record, onRetry }: HistoryRowProps): JSX.Element {
     </div>
   )
 }
+
+export const HistoryRow = memo(HistoryRowImpl, (prev, next) => {
+  // Skip re-render unless a displayed field changed. The parent rebuilds the
+  // history array on every poll, so identity is always new; this comparator is
+  // what actually prevents every row from re-rendering (and recomputing
+  // formatTimeAgo / new Date()) every 5s.
+  const a = prev.record
+  const b = next.record
+  return (
+    a.id === b.id &&
+    a.status === b.status &&
+    a.summaryStatus === b.summaryStatus &&
+    a.summary === b.summary &&
+    a.commitsPulled === b.commitsPulled &&
+    prev.onRetry === next.onRetry
+  )
+})

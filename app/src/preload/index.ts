@@ -91,6 +91,14 @@ const api = {
     ipcRenderer.on('engine:resolveStream:error', handler)
     return () => ipcRenderer.removeListener('engine:resolveStream:error', handler)
   },
+  // State-change events stream (replaces status/history polling)
+  eventsStart: (): void => ipcRenderer.send('engine:events:start'),
+  eventsStop: (): void => ipcRenderer.send('engine:events:stop'),
+  onEventsTick: (callback: (type: string) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, type: string): void => callback(type)
+    ipcRenderer.on('engine:events:tick', handler)
+    return () => ipcRenderer.removeListener('engine:events:tick', handler)
+  },
 	readAgentLog: (repoName: string, sessionId?: string): Promise<{ events: AgentStreamEvent[]; isRunning: boolean }> =>
 	    ipcRenderer.invoke('engine:readAgentLog', repoName, sessionId),
   repoDiff: (repoName: string): Promise<{ success: boolean; diff?: string; error?: string }> =>

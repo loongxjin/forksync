@@ -225,6 +225,10 @@ export class EngineClient {
     const params = new URLSearchParams()
     if (opts?.agent) params.set('agent', opts.agent)
     if (opts?.noConfirm) params.set('noConfirm', 'true')
+    // WS handshake can't set headers, so the auth token goes in the query
+    // string — the engine's auth middleware reads ?token= for /stream/ routes.
+    const tok = getEngineServer().getToken()
+    if (tok) params.set('token', tok)
     const qs = params.toString() ? `?${params.toString()}` : ''
 
     getEngineServer()
@@ -298,6 +302,64 @@ export class EngineClient {
     }
   }
 
+  /**
+   * eventsStreamStart opens the long-lived /stream/events WebSocket and pushes
+   * every state-change message (repos_changed | history_changed | ready) to
+   * the onMessage callback. The renderer opens this once on launch and reacts
+   * to push events instead of polling /status and /history on fixed intervals.
+   *
+   * Returns { onMessage, kill }: onMessage registers the handler, kill closes
+   * the socket. Mirrors resolveStream's emitter shape.
+   */
+  eventsStreamStart(): {
+    onMessage: (cb: (type: string) => void) => void
+    kill: () => void
+  } {
+    const messageCbs: Array<(type: string) => void> = []
+    let ws: WebSocket | null = null
+
+    const notify = (type: string): void => {
+      for (const cb of messageCbs) cb(type)
+    }
+
+    const params = new URLSearchParams()
+    const tok = getEngineServer().getToken()
+    if (tok) params.set('token', tok)
+    const qs = params.toString() ? `?${params.toString()}` : ''
+
+    getEngineServer()
+      .getWsUrl(`/stream/events${qs}`)
+      .then((url) => {
+        ws = new WebSocket(url)
+        ws.on('message', (data: { toString: () => string }) => {
+          const text = data.toString()
+          if (!text) return
+          try {
+            const parsed = JSON.parse(text) as { type?: string }
+            if (parsed.type) notify(parsed.type)
+          } catch {
+            // Ignore unparseable frames.
+          }
+        })
+        ws.on('error', (err: Error) => {
+          log.warn('[engine:eventsStream] error', err.message)
+        })
+        ws.on('close', () => {
+          log.info('[engine:eventsStream] closed')
+        })
+      })
+      .catch((err: Error) => {
+        log.error('[engine:eventsStream] failed to open', err.message)
+      })
+
+    return {
+      onMessage: (cb) => messageCbs.push(cb),
+      kill: () => {
+        try { ws?.close() } catch {}
+      }
+    }
+  }
+
   /** Read agent log for a repo. When sessionId is provided the exact session's
    *  log is read (by session name); otherwise the newest log is returned (backward
    *  compatibility with older agent logs that don't carry a session id). */
@@ -324,6 +386,11 @@ export class EngineClient {
     return getEngineServer().getBaseUrl()
   }
 
+  /** Returns the per-session auth token announced by the engine. */
+  private token(): string {
+    return getEngineServer().getToken()
+  }
+
   private async request<T>(
     method: string,
     path: string,
@@ -331,9 +398,15 @@ export class EngineClient {
     timeout = DEFAULT_TIMEOUT_MS
   ): Promise<ApiResponse<T>> {
     const url = (await this.baseUrl()) + path
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    // Inject the per-session bearer token so the engine's auth middleware
+    // accepts the request. getToken() is '' only before the announcement is
+    // read, in which case the engine rejects with 401 (expected).
+    const tok = this.token()
+    if (tok) headers['Authorization'] = `Bearer ${tok}`
     const init: RequestInit = {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       signal: AbortSignal.timeout(timeout)
     }
     if (body !== undefined) {
@@ -359,8 +432,11 @@ export class EngineClient {
   }
 
   private getRaw(path: string, timeout = DEFAULT_TIMEOUT_MS): Promise<Response> {
+    const tok = this.token()
+    const headers: Record<string, string> = {}
+    if (tok) headers['Authorization'] = `Bearer ${tok}`
     return this.baseUrl().then((base) =>
-      fetch(base + path, { signal: AbortSignal.timeout(timeout) })
+      fetch(base + path, { headers, signal: AbortSignal.timeout(timeout) })
     )
   }
 

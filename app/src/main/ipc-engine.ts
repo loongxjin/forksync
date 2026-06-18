@@ -2,7 +2,7 @@
  * IPC Engine Handlers — engine commands and streaming
  */
 
-import { ipcMain, app } from 'electron'
+import { ipcMain, app, BrowserWindow } from 'electron'
 import { resolve, normalize } from 'path'
 import { EngineClient } from './engine'
 import { notifySyncResults, updateNotificationConfig } from './notify'
@@ -201,6 +201,35 @@ export function registerEngineIpcHandlers(): void {
       event.sender.send('engine:resolveStream:error', name, err)
       activeStreams.delete(name)
     })
+  })
+
+  // --- State-change events stream (single long-lived WS, push events) ---
+  // Replaces the renderer's fixed-interval /status and /history polling. One
+  // socket per app session; messages are forwarded to all renderer windows.
+  let eventsStream: ReturnType<EngineClient['eventsStreamStart']> | null = null
+
+  ipcMain.on('engine:events:start', (event) => {
+    if (eventsStream) {
+      ipcLog('events:start already active')
+      return
+    }
+    ipcLog('events:start opening stream')
+    eventsStream = e.eventsStreamStart()
+    eventsStream.onMessage((type) => {
+      ipcLog(`events:tick type=${type}`)
+      // Broadcast to all windows so a settings-page open still gets updates.
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('engine:events:tick', type)
+      }
+    })
+  })
+
+  ipcMain.on('engine:events:stop', () => {
+    if (eventsStream) {
+      ipcLog('events:stop closing stream')
+      eventsStream.kill()
+      eventsStream = null
+    }
   })
 
 	ipcMain.handle('engine:readAgentLog', async (_event, repoName: string, sessionId?: string) => {

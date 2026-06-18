@@ -50,7 +50,9 @@
     "activeSessions": "{{count}} 个活跃会话",
     "syncHistory": "同步历史",
     "clearHistoryConfirm": "确认清除所有同步历史？",
+    "clearHistoryTitle": "清除历史",
     "clearFailed": "清除历史失败",
+    "clearSuccess": "历史已清除",
     "clear": "清除",
     "loadingHistory": "加载历史...",
     "noHistory": "暂无同步历史",
@@ -69,6 +71,7 @@
     "emptyTitle": "暂无管理的仓库",
     "emptyHint": "点击 + 添加仓库，或拖拽文件夹到此处开始。",
     "removeConfirm": "确认从 ForkSync 中移除 \"{{name}}\"？本地仓库不会被删除。",
+    "removeTitle": "移除仓库",
     "dropOverlay": "将仓库文件夹拖拽到此处",
     "origin": "origin:",
     "upstream": "upstream:",
@@ -285,7 +288,12 @@
     "syncFailed": "{{count}} 个仓库同步失败",
     "loadConfigFailed": "加载配置失败",
     "updateConfigFailed": "更新配置失败",
-    "summaryRetryFailed": "总结重试失败，请稍后再试"
+    "summaryRetryFailed": "总结重试失败，请稍后再试",
+    "workflowContinueFailed": "工作流继续失败",
+    "agentResolveFailed": "Agent 解析失败: {{message}}",
+    "retryCommitFailed": "重试提交失败",
+    "acceptFailed": "接受失败",
+    "rejectFailed": "拒绝失败"
   },
   "notify": {
     "conflictsTitle": "{{count}} 个仓库存在冲突",
