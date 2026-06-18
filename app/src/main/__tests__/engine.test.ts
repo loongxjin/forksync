@@ -56,6 +56,16 @@ describe('EngineClient error types', () => {
 // ---------------------------------------------------------------------------
 
 describe('EngineClient HTTP routes', () => {
+  it('injects Authorization: Bearer on every request', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ success: true, data: { results: [] } }))
+    const c = new EngineClient()
+    await c.syncAll()
+    const [, init] = mockFetch.mock.calls[0]
+    expect((init.headers as Record<string, string>)['Authorization']).toBe(
+      'Bearer test-token'
+    )
+  })
+
   it('GET /status with exclude query', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ success: true, data: { repos: [], agents: [], preferredAgent: '' } }))
     const c = new EngineClient()

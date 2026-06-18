@@ -225,6 +225,10 @@ export class EngineClient {
     const params = new URLSearchParams()
     if (opts?.agent) params.set('agent', opts.agent)
     if (opts?.noConfirm) params.set('noConfirm', 'true')
+    // WS handshake can't set headers, so the auth token goes in the query
+    // string — the engine's auth middleware reads ?token= for /stream/ routes.
+    const tok = getEngineServer().getToken()
+    if (tok) params.set('token', tok)
     const qs = params.toString() ? `?${params.toString()}` : ''
 
     getEngineServer()
@@ -324,6 +328,11 @@ export class EngineClient {
     return getEngineServer().getBaseUrl()
   }
 
+  /** Returns the per-session auth token announced by the engine. */
+  private token(): string {
+    return getEngineServer().getToken()
+  }
+
   private async request<T>(
     method: string,
     path: string,
@@ -331,9 +340,15 @@ export class EngineClient {
     timeout = DEFAULT_TIMEOUT_MS
   ): Promise<ApiResponse<T>> {
     const url = (await this.baseUrl()) + path
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    // Inject the per-session bearer token so the engine's auth middleware
+    // accepts the request. getToken() is '' only before the announcement is
+    // read, in which case the engine rejects with 401 (expected).
+    const tok = this.token()
+    if (tok) headers['Authorization'] = `Bearer ${tok}`
     const init: RequestInit = {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       signal: AbortSignal.timeout(timeout)
     }
     if (body !== undefined) {
@@ -359,8 +374,11 @@ export class EngineClient {
   }
 
   private getRaw(path: string, timeout = DEFAULT_TIMEOUT_MS): Promise<Response> {
+    const tok = this.token()
+    const headers: Record<string, string> = {}
+    if (tok) headers['Authorization'] = `Bearer ${tok}`
     return this.baseUrl().then((base) =>
-      fetch(base + path, { signal: AbortSignal.timeout(timeout) })
+      fetch(base + path, { headers, signal: AbortSignal.timeout(timeout) })
     )
   }
 
