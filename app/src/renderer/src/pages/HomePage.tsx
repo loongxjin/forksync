@@ -19,6 +19,7 @@ import { ScanDialog } from '@/components/ScanDialog'
 import { RepoSettingsDialog } from '@/components/RepoSettingsDialog'
 import { engineApi } from '@/lib/api'
 import { useAutoSummarize } from '@/hooks/useAutoSummarize'
+import { useDragDropAdd } from '@/hooks/useDragDropAdd'
 import { useLogger } from '@/hooks/useLogger'
 import { useToastContext } from '@/contexts/ToastContext'
 import { HistoryRow } from '@/components/HistoryRow'
@@ -69,9 +70,6 @@ export function HomePage(): JSX.Element {
 
   // Bump when RepoSettingsDialog closes so RepoDetailPanel reloads commands
   const [commandsVersion, setCommandsVersion] = useState(0)
-
-  // Drag-drop state
-  const [dragOver, setDragOver] = useState(false)
 
   // History list expanded: click title to toggle between showing all records vs 3 records
   const [historyExpanded, setHistoryExpanded] = useState(false)
@@ -418,53 +416,16 @@ export function HomePage(): JSX.Element {
     }
   }, [removeRepo, t])
 
-  // Drag-drop state — use counter to prevent flicker when entering child elements
-  const dragCounterRef = useRef(0)
-
-  const handleDragEnter = useCallback((e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.dataTransfer.types.includes('Files')) {
-      dragCounterRef.current++
-      setDragOver(true)
-    }
-  }, [])
-
-  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-  }, [])
-
-  const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCounterRef.current--
-    if (dragCounterRef.current === 0) setDragOver(false)
-  }, [])
-
-  const handleDrop = useCallback(async (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setDragOver(false)
-
-    const files = e.dataTransfer.files
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      const path = (file as File & { path?: string }).path
-      if (!path) continue
-      try {
-        const isGit = await engineApi.isGitRepo(path)
-        if (isGit) {
-          await addRepo(path)
-        } else {
-          setScanInitialDir(path)
-          setShowScan(true)
-        }
-      } catch {
-        // silent
-      }
-    }
-  }, [addRepo])
+  // Drag-drop add: folders dropped onto the repo list become repos (git) or
+  // open the scan dialog seeded with the directory (non-git).
+  const handleScanNeeded = useCallback(
+    (dir: string) => {
+      setScanInitialDir(dir)
+      setShowScan(true)
+    },
+    []
+  )
+  const { dragOver, handlers: dragHandlers } = useDragDropAdd(handleScanNeeded)
 
   // History display
   const displayHistory = historyExpanded ? history : history.slice(0, 3)
@@ -488,10 +449,10 @@ export function HomePage(): JSX.Element {
       {/* Repo List */}
       <div
         className={`relative ${dragOver ? 'ring-2 ring-primary ring-offset-2 ring-offset-background rounded-xl' : ''}`}
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+        onDragEnter={dragHandlers.onDragEnter}
+        onDragOver={dragHandlers.onDragOver}
+        onDragLeave={dragHandlers.onDragLeave}
+        onDrop={dragHandlers.onDrop}
       >
         {dragOver && (
           <div className="absolute inset-0 z-40 flex items-center justify-center rounded-xl bg-primary/5 border-2 border-dashed border-primary/30 animate-fade-in">
