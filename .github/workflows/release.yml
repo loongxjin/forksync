@@ -62,6 +62,7 @@ jobs:
       - name: Package NSIS (Windows)
         if: matrix.os == 'windows-latest'
         shell: bash
+        working-directory: ${{ github.workspace }}
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
           choco install nsis -y --no-progress 2>/dev/null || true
