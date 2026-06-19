@@ -7,7 +7,6 @@ dist/
 build/forksync
 build/bin/
 build/darwin/
-build/windows/
 build/appicon.png
 engine/bins/
 forksync

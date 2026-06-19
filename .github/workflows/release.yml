@@ -38,6 +38,12 @@ jobs:
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
+      # Windows: install NSIS (pre-installed on newer runners, but just in case)
+      - name: Install NSIS (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: choco install nsis -y --no-progress
+
       # Sync version from git tag (v0.6.0 → 0.6.0) into frontend/package.json
       - name: Sync version from git tag
         shell: bash
@@ -47,27 +53,32 @@ jobs:
           npm version "$TAG_VERSION" --no-git-tag-version --allow-same-version
 
       # Build frontend + Go binary via Wails
+      # All subsequent steps use absolute paths rooted at GITHUB_WORKSPACE
       - name: Build Wails app
-        run: wails build -clean
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          wails build -clean
 
       # macOS: package as DMG with drag-to-Applications layout
       - name: Package DMG (macOS)
         if: matrix.os == 'macos-latest'
+        shell: bash
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
+          cd "$GITHUB_WORKSPACE"
           chmod +x build/dmg.sh
           bash build/dmg.sh "$TAG_VERSION"
 
       # Windows: build NSIS installer
+      # NSIS needs: cwd=repo root, makensis in PATH
       - name: Package NSIS (Windows)
         if: matrix.os == 'windows-latest'
-        shell: bash
-        working-directory: ${{ github.workspace }}
+        shell: pwsh
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          choco install nsis -y --no-progress 2>/dev/null || true
-          export PATH="/c/Program Files (x86)/NSIS:$PATH"
-          makensis -DVERSION="${TAG_VERSION}" build/windows/installer.nsi
+          $env:TAG_VERSION = $env:GITHUB_REF_NAME -replace '^v',''
+          Set-Location $env:GITHUB_WORKSPACE
+          & "C:\Program Files (x86)\NSIS\makensis.exe" "-DVERSION=$env:TAG_VERSION" "build\windows\installer.nsi"
 
       # Upload artifacts to GitHub Release
       - name: Upload release assets
