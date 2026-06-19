@@ -58,7 +58,6 @@
 | 平台 | 格式 | 链接 |
 |------|------|------|
 | macOS | `.dmg` | [Releases](https://github.com/loongxjin/forksync/releases) |
-| Linux | `.AppImage` | [Releases](https://github.com/loongxjin/forksync/releases) |
 | Windows | `.exe` (NSIS) | [Releases](https://github.com/loongxjin/forksync/releases) |
 
 ### 从源码构建

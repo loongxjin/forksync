@@ -31,7 +31,7 @@ import type {
   AgentStreamEvent,
 } from '../shared/types/engine'
 import type { IDEInfo, IDEConfig, IDEOpenResult } from '../shared/types/ide'
-import { EventsOn, WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime'
+import { EventsOn } from '../wailsjs/runtime/runtime'
 import {
   Status as wailsStatus,
   SyncAll as wailsSyncAll,
@@ -272,4 +272,3 @@ const engineApi: EngineAPI = {
 }
 
 export { engineApi }
-export { WindowMinimise, WindowToggleMaximise, Quit }

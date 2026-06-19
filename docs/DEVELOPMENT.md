@@ -99,7 +99,7 @@ Agent 解决冲突的实时输出通过 **Wails Events** 推送：
 | Node.js | 18+ | 前端构建 |
 | Wails CLI | v2.12+ | `go install github.com/wailsapp/wails/v2/cmd/wails@latest` |
 
-Linux 额外需要：`libgtk-3-dev libwebkit2gtk-4.1-dev`
+Windows 额外需要：WebView2 运行时（Windows 10/11 通常已预装）
 
 可选（AI Agent 冲突解决功能需要）：
 

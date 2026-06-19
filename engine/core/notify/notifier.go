@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
-	"strings"
 
 	"github.com/loongxjin/forksync/engine/core/logger"
 )
@@ -88,15 +87,6 @@ func (n *Notifier) send(title, message string) {
 		if err := exec.Command("osascript", "-e", fmt.Sprintf(`display notification %q with title %q`, message, title)).Run(); err != nil {
 			logger.Warn("notify failed", "platform", "darwin", "error", err)
 		}
-	case "linux":
-		// Linux: use notify-send
-		if err := exec.Command("notify-send", escapeNotifySend(title), escapeNotifySend(message)).Run(); err != nil {
-			logger.Warn("notify failed", "platform", "linux", "error", err)
-		}
 	}
 }
 
-// escapeNotifySend escapes special shell characters for notify-send arguments.
-func escapeNotifySend(s string) string {
-	return strings.NewReplacer("\\", "\\\\", "'", "\\'").Replace(s)
-}

@@ -111,11 +111,6 @@ func detectSingleIDE(id, name, cli, appName string) IDEInfo {
 		if _, err := os.Stat(fmt.Sprintf("/Applications/%s.app", appName)); err == nil {
 			return IDEInfo{ID: id, Name: name, CLIICommand: cli, AppName: appName, Installed: true, OpenMethod: "app"}
 		}
-	case "linux":
-		snap := fmt.Sprintf("/snap/bin/%s", cli)
-		if _, err := os.Stat(snap); err == nil {
-			return IDEInfo{ID: id, Name: name, CLIICommand: snap, AppName: appName, Installed: true, OpenMethod: "cli"}
-		}
 	case "windows":
 		localApp := os.Getenv("LOCALAPPDATA")
 		progFiles := os.Getenv("PROGRAMFILES")
@@ -310,43 +305,11 @@ func (a *App) SetLocale(locale string) (map[string]bool, error) {
 // SetAutoLaunch enables or disables launch on system startup.
 func (a *App) SetAutoLaunch(enabled bool) (map[string]interface{}, error) {
 	switch goruntime.GOOS {
-	case "linux":
-		return setAutoLaunchLinux(enabled)
 	case "darwin":
 		return setAutoLaunchDarwin(enabled)
 	default:
 		return map[string]interface{}{"success": true}, nil
 	}
-}
-
-func setAutoLaunchLinux(enabled bool) (map[string]interface{}, error) {
-	configHome := os.Getenv("XDG_CONFIG_HOME")
-	if configHome == "" {
-		home, _ := os.UserHomeDir()
-		configHome = filepath.Join(home, ".config")
-	}
-	autoStartDir := filepath.Join(configHome, "autostart")
-	desktopFile := filepath.Join(autoStartDir, "forksync.desktop")
-	if enabled {
-		os.MkdirAll(autoStartDir, 0o755)
-		exe, _ := os.Executable()
-		content := fmt.Sprintf(`[Desktop Entry]
-Type=Application
-Name=ForkSync
-Comment=Fork Repository Sync Tool
-Exec=%s
-Icon=forksync
-Categories=Development;
-Terminal=false
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-`, exe)
-		os.WriteFile(desktopFile, []byte(content), 0o644)
-	} else {
-		os.Remove(desktopFile)
-	}
-	return map[string]interface{}{"success": true}, nil
 }
 
 func setAutoLaunchDarwin(enabled bool) (map[string]interface{}, error) {
