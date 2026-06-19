@@ -53,22 +53,11 @@ jobs:
           npm version "$TAG_VERSION" --no-git-tag-version --allow-same-version
 
       # Build frontend + Go binary via Wails
-      # All subsequent steps use absolute paths rooted at GITHUB_WORKSPACE
       - name: Build Wails app
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE"
           wails build -clean
-
-      # Debug: list what wails build actually produced
-      - name: List build output
-        shell: bash
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          echo "=== build/bin/ contents ==="
-          ls -laR build/bin/ || echo "build/bin/ not found"
-          echo "=== find *.exe ==="
-          find build/ -name "*.exe" || echo "no exe found"
 
       # macOS: package as DMG with drag-to-Applications layout
       - name: Package DMG (macOS)

@@ -2,14 +2,18 @@
 ; Build: makensis -DVERSION=0.6.0 build/windows/installer.nsi
 ; Output: build/bin/ForkSync-Setup-0.6.0.exe
 ;
-; This script must be run from the repository root directory.
-; All paths are relative to repo root.
+; NSIS File paths are relative to cwd at compile time, NOT relative
+; to the .nsi file. We use !cd to force cwd to repo root so the
+; script works regardless of where makensis is invoked from.
 
 !define APP_NAME "ForkSync"
 !define APP_PUBLISHER "ForkSync Team"
 !define APP_URL "https://github.com/loongxjin/forksync"
 !define APP_EXE "ForkSync.exe"
 !define APP_ID "com.forksync.app"
+
+; This .nsi lives at build/windows/installer.nsi, so ../.. = repo root
+!cd "..\.."
 
 Name "${APP_NAME}"
 OutFile "build\bin\ForkSync-Setup-${VERSION}.exe"
