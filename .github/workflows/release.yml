@@ -60,6 +60,16 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           wails build -clean
 
+      # Debug: list what wails build actually produced
+      - name: List build output
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          echo "=== build/bin/ contents ==="
+          ls -laR build/bin/ || echo "build/bin/ not found"
+          echo "=== find *.exe ==="
+          find build/ -name "*.exe" || echo "no exe found"
+
       # macOS: package as DMG with drag-to-Applications layout
       - name: Package DMG (macOS)
         if: matrix.os == 'macos-latest'
