@@ -64,8 +64,8 @@ jobs:
         shell: bash
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
-          # NSIS may not be pre-installed on windows-latest; use chocolatey
           choco install nsis -y --no-progress 2>/dev/null || true
+          export PATH="/c/Program Files (x86)/NSIS:$PATH"
           makensis -DVERSION="${TAG_VERSION}" build/windows/installer.nsi
 
       # Upload artifacts to GitHub Release
