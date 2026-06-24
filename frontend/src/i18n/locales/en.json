@@ -86,6 +86,10 @@
     "remove": "Remove",
     "branchMapping": "Branch Mapping",
     "branchMappingHint": "Map local branch to a different remote branch for sync.",
+    "branchMappingSaved": "Branch mapping saved",
+    "localBranch": "Local",
+    "remoteBranch": "Remote",
+    "repoSettings": "Repository Settings",
     "behind": "↓{{count}} behind"
   },
   "addRepo": {
