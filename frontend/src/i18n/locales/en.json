@@ -84,6 +84,12 @@
     "resolveConflicts": "Resolve conflicts",
     "resolve": "Resolve",
     "remove": "Remove",
+    "repoSettings": "Repository Settings",
+    "branchMapping": "Branch Mapping",
+    "branchMappingHint": "Map local branch to a different remote branch for sync.",
+    "branchMappingSaved": "Branch mapping saved",
+    "localBranch": "Local",
+    "remoteBranch": "Remote",
     "behind": "↓{{count}} behind"
   },
   "addRepo": {
