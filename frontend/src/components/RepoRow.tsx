@@ -123,7 +123,7 @@ function RepoRowImpl({ repo, isExpanded, onToggle, onSync, onRemove, onSettings,
               </p>
             )}
             {repo.errorMessage && (
-              <p className="mt-1 text-xs text-red-500">{repo.errorMessage}</p>
+              <p className="mt-1 text-xs text-error">{repo.errorMessage}</p>
             )}
           </div>
 
