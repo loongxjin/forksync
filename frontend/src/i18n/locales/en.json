@@ -58,6 +58,7 @@
     "clear": "Clear",
     "loadingHistory": "Loading history...",
     "noHistory": "No sync history yet.",
+    "commitsPulled": "+{{count}} commits",
     "conflictAlert": "{{count}} repo(s) with conflicts",
     "justNow": "just now",
     "minutesAgo": "{{count}}m ago",

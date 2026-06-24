@@ -58,6 +58,7 @@
     "clear": "清除",
     "loadingHistory": "加载历史...",
     "noHistory": "暂无同步历史",
+    "commitsPulled": "+{{count}} 个提交",
     "conflictAlert": "{{count}} 个仓库存在冲突",
     "justNow": "刚刚",
     "minutesAgo": "{{count}} 分钟前",
