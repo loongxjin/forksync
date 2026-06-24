@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { engineApi } from '@/lib/api'
 import type { Repo, PostSyncCommand } from '@shared/types/engine'
+import { ArrowRight } from 'lucide-react'
 
 interface RepoDetailPanelProps {
   repo: Repo
@@ -35,30 +36,38 @@ export function RepoDetailPanel({ repo, onEditCommands, commandsVersion }: RepoD
 
   return (
     <div className="px-4 pb-4 space-y-4">
-      <div className="border-t border-border pt-4">
-        {/* Post-Sync Commands */}
+      <div className="border-t border-border pt-4 space-y-4">
+
+        {/* Branch Mapping (read-only) */}
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-medium text-muted-foreground mb-1">{t('repos.branchMapping')}</p>
+          {repo.branchMapping?.localBranch && repo.branchMapping?.remoteBranch ? (
+            <div className="flex items-center gap-1.5 text-sm">
+              <code className="rounded bg-secondary px-1.5 py-0.5 text-xs font-mono">{repo.branchMapping.localBranch}</code>
+              <ArrowRight size={12} className="text-muted-foreground" />
+              <code className="rounded bg-secondary px-1.5 py-0.5 text-xs font-mono">{repo.branchMapping.remoteBranch}</code>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {repo.branch}{' '}
+              <ArrowRight size={10} className="inline text-muted-foreground" />{' '}
+              {repo.branch} <span className="text-muted-foreground">({t('addRepo.branchMappingHint')})</span>
+            </p>
+          )}
+        </div>
+
+        {/* Post-Sync Commands (read-only) */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
             <p className="text-xs font-medium text-muted-foreground">
               {t('home.postSyncCommands')} ({commands.length})
             </p>
-            <button
-              onClick={onEditCommands}
-              className="text-xs text-primary hover:underline"
-            >
-              {commands.length > 0 ? t('home.editCommands') : t('home.addCommand')}
-            </button>
           </div>
 
           {loading ? (
             <p className="text-xs text-muted-foreground">{t('common.loading')}</p>
           ) : commands.length === 0 ? (
-            <button
-              onClick={onEditCommands}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {t('home.addCommand')}
-            </button>
+            <p className="text-xs text-muted-foreground">{t('postSync.empty')}</p>
           ) : (
             <div className="space-y-1">
               {commands.map((cmd) => (
@@ -70,6 +79,15 @@ export function RepoDetailPanel({ repo, onEditCommands, commandsVersion }: RepoD
             </div>
           )}
         </div>
+
+        {/* Edit shortcut */}
+        <button
+          onClick={onEditCommands}
+          className="w-full rounded border border-border px-3 py-1.5 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+        >
+          {t('repos.repoSettings')}...
+        </button>
+
       </div>
     </div>
   )
