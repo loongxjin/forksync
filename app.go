@@ -357,6 +357,45 @@ func (a *App) RepoDiff(name string) (DiffResult, error) {
 	return DiffResult{Success: true, Diff: string(diff)}, nil
 }
 
+// SetBranchMappingRequest is the parameter for SetBranchMapping.
+type SetBranchMappingRequest struct {
+	RepoName     string `json:"repoName"`
+	LocalBranch  string `json:"localBranch"`
+	RemoteBranch string `json:"remoteBranch"`
+}
+
+// SetBranchMappingResult mirrors the HTTP response shape.
+type SetBranchMappingResult struct {
+	Success       bool                `json:"success"`
+	BranchMapping *types.BranchMapping `json:"branchMapping,omitempty"`
+	Error         string              `json:"error,omitempty"`
+}
+
+func (a *App) SetBranchMapping(req SetBranchMappingRequest) (SetBranchMappingResult, error) {
+	if a.deps == nil {
+		return SetBranchMappingResult{}, nil
+	}
+	r2, ok := a.deps.Store.GetByName(req.RepoName)
+	if !ok {
+		return SetBranchMappingResult{}, fmt.Errorf("repo %q not found", req.RepoName)
+	}
+
+	if req.LocalBranch != "" && req.RemoteBranch != "" {
+		r2.BranchMapping = &types.BranchMapping{
+			LocalBranch:  req.LocalBranch,
+			RemoteBranch: req.RemoteBranch,
+		}
+	} else {
+		r2.BranchMapping = nil
+	}
+
+	if err := a.deps.Store.Update(r2); err != nil {
+		return SetBranchMappingResult{}, err
+	}
+
+	return SetBranchMappingResult{Success: true, BranchMapping: r2.BranchMapping}, nil
+}
+
 // ---------------------------------------------------------------------------
 // Resolve
 // ---------------------------------------------------------------------------

@@ -26,6 +26,7 @@ func (s *Server) registerRepoRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /repos", s.handleAddRepo)
 	mux.HandleFunc("DELETE /repos/{name}", s.handleRemoveRepo)
 	mux.HandleFunc("GET /repos/{name}/diff", s.handleRepoDiff)
+	mux.HandleFunc("PUT /repos/{name}/branch-mapping", s.handleSetBranchMapping)
 }
 
 // statusTimeout is the per-repo timeout for status operations (fetch + rev-list).
@@ -353,6 +354,47 @@ func (s *Server) handleRepoDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeBare(w, repoDiffResult{Success: true, Diff: string(out)})
+}
+
+// branchMappingUpdateRequest is the body for PUT /repos/{name}/branch-mapping.
+type branchMappingUpdateRequest struct {
+	LocalBranch  string `json:"localBranch"`
+	RemoteBranch string `json:"remoteBranch"`
+}
+
+type branchMappingUpdateResult struct {
+	Success       bool                `json:"success"`
+	BranchMapping *types.BranchMapping `json:"branchMapping,omitempty"`
+}
+
+func (s *Server) handleSetBranchMapping(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	req, ok := decodeJSON[branchMappingUpdateRequest](w, r)
+	if !ok {
+		return
+	}
+
+	r2, ok := s.deps.Store.GetByName(name)
+	if !ok {
+		writeErr[branchMappingUpdateResult](w, fmt.Errorf("repository %q not found", name))
+		return
+	}
+
+	if req.LocalBranch != "" && req.RemoteBranch != "" {
+		r2.BranchMapping = &types.BranchMapping{
+			LocalBranch:  req.LocalBranch,
+			RemoteBranch: req.RemoteBranch,
+		}
+	} else {
+		r2.BranchMapping = nil
+	}
+
+	if err := s.deps.Store.Update(r2); err != nil {
+		writeErr[branchMappingUpdateResult](w, err)
+		return
+	}
+
+	writeOK(w, branchMappingUpdateResult{Success: true, BranchMapping: r2.BranchMapping})
 }
 
 // splitCSV parses a comma-separated query value into a slice, trimming spaces

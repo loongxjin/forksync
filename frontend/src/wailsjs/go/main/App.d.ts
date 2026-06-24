@@ -60,6 +60,8 @@ export function Scan(arg1:string):Promise<types.ScanData>;
 
 export function SetAutoLaunch(arg1:boolean):Promise<Record<string, any>>;
 
+export function SetBranchMapping(arg1:main.SetBranchMappingRequest):Promise<main.SetBranchMappingResult>;
+
 export function SetLocale(arg1:string):Promise<Record<string, boolean>>;
 
 export function Status(arg1:Array<string>):Promise<types.StatusData>;

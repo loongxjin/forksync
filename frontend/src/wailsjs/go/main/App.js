@@ -114,6 +114,10 @@ export function SetAutoLaunch(arg1) {
   return window['go']['main']['App']['SetAutoLaunch'](arg1);
 }
 
+export function SetBranchMapping(arg1) {
+  return window['go']['main']['App']['SetBranchMapping'](arg1);
+}
+
 export function SetLocale(arg1) {
   return window['go']['main']['App']['SetLocale'](arg1);
 }
