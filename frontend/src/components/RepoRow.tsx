@@ -5,7 +5,7 @@ import type { Repo, RepoStatus } from '@shared/types/engine'
 import { useStatusConfig, StatusIcon, getStatusColor } from '@/components/StatusCard'
 import { IDEOpenButton } from '@/components/IDEOpenButton'
 import { isConflictStatus, cn } from '@/lib/utils'
-import { ChevronRight, Settings, RotateCw, Trash2 } from 'lucide-react'
+import { ChevronRight, Settings, RotateCw, Trash2, Terminal } from 'lucide-react'
 
 interface RepoStatusBadgeProps {
   status: RepoStatus
@@ -100,6 +100,18 @@ function RepoRowImpl({ repo, isExpanded, onToggle, onSync, onRemove, onSettings,
               </code>
             )}
             <RepoStatusBadge status={repo.status} />
+            {repo.postSyncCommands && repo.postSyncCommands.length > 0 && (
+              <button
+                data-action
+                onClick={() => onSettings(repo.name)}
+                className="inline-flex items-center gap-0.5 rounded-full border border-border bg-secondary px-1.5 py-0 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors tabular-nums"
+                title={t('postSync.countBadge', { count: repo.postSyncCommands.length })}
+                aria-label={t('postSync.countBadge', { count: repo.postSyncCommands.length })}
+              >
+                <Terminal size={10} />
+                <span>{repo.postSyncCommands.length}</span>
+              </button>
+            )}
             {(repo.aheadBy > 0 || repo.behindBy > 0) && (
               <span className="text-xs text-muted-foreground whitespace-nowrap tabular-nums">
                 {repo.aheadBy > 0 && `↑${repo.aheadBy}`}

@@ -317,7 +317,8 @@
     "empty": "暂无 post-sync 命令",
     "addCommand": "添加命令",
     "commandPlaceholder": "输入命令，如 npm link",
-    "settings": "设置"
+    "settings": "设置",
+    "countBadge": "{{count}} 条同步后命令"
   },
   "home": {
     "viewMore": "查看更多 (还有 {{count}} 条)",

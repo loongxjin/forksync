@@ -317,7 +317,8 @@
     "empty": "No post-sync commands configured",
     "addCommand": "Add Command",
     "commandPlaceholder": "e.g., npm link",
-    "settings": "Settings"
+    "settings": "Settings",
+    "countBadge": "{{count}} post-sync commands"
   },
   "home": {
     "viewMore": "View more ({{count}} more)",
