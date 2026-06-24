@@ -83,7 +83,7 @@ function HistoryRowImpl({ record, onRetry }: HistoryRowProps): JSX.Element {
           <span className="font-medium truncate">{record.repoName}</span>
           <span className="text-muted-foreground">{config.label}</span>
           {record.commitsPulled > 0 && (
-            <span className="text-xs text-muted-foreground tabular-nums">+{record.commitsPulled} commits</span>
+            <span className="text-xs text-muted-foreground tabular-nums">{t('dashboard.commitsPulled', { count: record.commitsPulled })}</span>
           )}
           {record.agentUsed && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-secondary text-secondary-foreground font-mono">

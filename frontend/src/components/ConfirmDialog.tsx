@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/ui/modal'
 
 interface ConfirmDialogProps {
@@ -20,12 +21,13 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   confirmVariant = 'default',
   onConfirm,
   onCancel
 }: ConfirmDialogProps): JSX.Element {
+  const { t } = useTranslation()
   const isDestructive = confirmVariant === 'destructive'
 
   return (
@@ -38,7 +40,7 @@ export function ConfirmDialog({
             onClick={onCancel}
             className="rounded-md border border-border px-4 py-2 text-sm text-foreground hover:bg-muted transition-colors"
           >
-            {cancelLabel}
+            {cancelLabel ?? t('common.cancel')}
           </button>
           <button
             onClick={onConfirm}
@@ -48,7 +50,7 @@ export function ConfirmDialog({
                 : 'bg-primary hover:bg-primary/90'
             }`}
           >
-            {confirmLabel}
+            {confirmLabel ?? t('common.confirm')}
           </button>
         </div>
       </div>

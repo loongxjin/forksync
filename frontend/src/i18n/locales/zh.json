@@ -15,7 +15,8 @@
     "select": "选择...",
     "confirm": "确认",
     "delete": "删除",
-    "back": "返回"
+    "back": "返回",
+    "dismiss": "忽略"
   },
   "nav": {
     "dashboard": "仪表盘",
@@ -57,6 +58,7 @@
     "clear": "清除",
     "loadingHistory": "加载历史...",
     "noHistory": "暂无同步历史",
+    "commitsPulled": "+{{count}} 个提交",
     "conflictAlert": "{{count}} 个仓库存在冲突",
     "justNow": "刚刚",
     "minutesAgo": "{{count}} 分钟前",
@@ -345,6 +347,15 @@
     "retryResolve": "重试解决冲突",
     "completed": "工作流已完成",
     "failed": "工作流失败",
-    "eventsCount": "{{count}} 条事件"
+    "eventsCount": "{{count}} 条事件",
+    "step": {
+      "fetch": "拉取上游",
+      "merge": "合并上游",
+      "checkConflicts": "检查冲突",
+      "resolveStrategy": "解决策略",
+      "agentResolve": "Agent 解决",
+      "acceptChanges": "接受变更",
+      "commit": "提交并完成"
+    }
   }
 }

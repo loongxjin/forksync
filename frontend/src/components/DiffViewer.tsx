@@ -56,11 +56,11 @@ function getDiffLineType(line: string): DiffLineType {
 function getLineClasses(type: DiffLineType): string {
   switch (type) {
     case 'add':
-      return 'bg-emerald-500/10 text-emerald-400'
+      return 'bg-success-muted text-foreground'
     case 'remove':
-      return 'bg-red-500/10 text-red-400'
+      return 'bg-error-muted text-foreground'
     case 'header':
-      return 'bg-blue-500/10 text-blue-400'
+      return 'bg-brand-muted text-foreground font-semibold'
     default:
       return ''
   }

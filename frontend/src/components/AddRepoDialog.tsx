@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { RefreshCw } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -139,7 +140,12 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
                   disabled={loadingBranches}
                   className="h-6 text-xs"
                 >
-                  {loadingBranches ? t('common.loading') : `↻ ${t('common.refresh')}`}
+                  {loadingBranches ? t('common.loading') : (
+                    <>
+                      <RefreshCw size={12} className="mr-1" />
+                      {t('common.refresh')}
+                    </>
+                  )}
                 </Button>
               )}
             </div>
@@ -154,7 +160,7 @@ export function AddRepoDialog({ open, onClose, onAdd }: AddRepoDialogProps): JSX
             </p>
           </div>
 
-          {/* 单个可选的分支映射配置 */}
+          {/* Optional single branch mapping configuration */}
           {path && (
             <div className="space-y-3 border-t border-border pt-4">
               <div className="flex items-center justify-between">

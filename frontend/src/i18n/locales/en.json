@@ -15,7 +15,8 @@
     "select": "Select...",
     "confirm": "Confirm",
     "delete": "Delete",
-    "back": "Back"
+    "back": "Back",
+    "dismiss": "Dismiss"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -57,6 +58,7 @@
     "clear": "Clear",
     "loadingHistory": "Loading history...",
     "noHistory": "No sync history yet.",
+    "commitsPulled": "+{{count}} commits",
     "conflictAlert": "{{count}} repo(s) with conflicts",
     "justNow": "just now",
     "minutesAgo": "{{count}}m ago",
@@ -345,6 +347,15 @@
     "retryResolve": "Retry Resolve",
     "completed": "Workflow completed successfully",
     "failed": "Workflow failed",
-    "eventsCount": "{{count}} events"
+    "eventsCount": "{{count}} events",
+    "step": {
+      "fetch": "Fetch upstream",
+      "merge": "Merge upstream",
+      "checkConflicts": "Check conflicts",
+      "resolveStrategy": "Resolve strategy",
+      "agentResolve": "Agent resolve",
+      "acceptChanges": "Accept changes",
+      "commit": "Commit & finalize"
+    }
   }
 }
