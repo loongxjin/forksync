@@ -100,7 +100,7 @@
     "upstreamUrl": "Upstream URL (optional)",
     "autoDetected": "Auto-detected for GitHub forks.",
     "branchMapping": "Custom Branch Mapping",
-    "branchMappingHint": "Default: sync branches with the same name (e.g., main → origin/main)",
+    "branchMappingHint": "Default: sync branches with the same name (e.g., main → upstream/main)",
     "branchMappingDesc": "Map a local branch to a different remote branch name.",
     "localBranch": "Local Branch",
     "remoteBranch": "Remote Branch",
