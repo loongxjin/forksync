@@ -74,6 +74,7 @@ export function HomePage(): JSX.Element {
   // perform on confirm.
   const [confirmAction, setConfirmAction] = useState<'remove' | 'clearHistory' | null>(null)
   const [settingsRepo, setSettingsRepo] = useState<string | null>(null)
+  const [settingsSection, setSettingsSection] = useState<'all' | 'postSync'>('all')
   const [scanInitialDir, setScanInitialDir] = useState('')
 
   // Bump when RepoSettingsDialog closes so RepoDetailPanel reloads commands
@@ -310,7 +311,7 @@ export function HomePage(): JSX.Element {
                   onToggle={toggleExpand}
                   onSync={syncRepo}
                   onRemove={handleRemove}
-                  onSettings={setSettingsRepo}
+                  onSettings={(name, section) => { setSettingsRepo(name); setSettingsSection(section ?? 'all') }}
                   removing={removingRepo === repo.name}
                 />
                 <Collapsible open={isExpanded}>
@@ -425,7 +426,8 @@ export function HomePage(): JSX.Element {
       <RepoSettingsDialog
         repoName={settingsRepo ?? ''}
         open={settingsRepo !== null}
-        onClose={() => { setSettingsRepo(null); setCommandsVersion((v) => v + 1) }}
+        section={settingsSection}
+        onClose={() => { setSettingsRepo(null); setSettingsSection('all'); setCommandsVersion((v) => v + 1) }}
       />
 
       {/* Agent Terminal Drawer */}

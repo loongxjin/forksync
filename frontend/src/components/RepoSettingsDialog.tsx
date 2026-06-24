@@ -14,6 +14,8 @@ interface RepoSettingsDialogProps {
   repoName: string
   open: boolean
   onClose: () => void
+  /** 'all' (default): branch mapping + post-sync. 'postSync': post-sync only. */
+  section?: 'all' | 'postSync'
 }
 
 function autoName(cmd: string): string {
@@ -21,7 +23,7 @@ function autoName(cmd: string): string {
   return parts[0] || cmd.trim()
 }
 
-export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDialogProps): JSX.Element | null {
+export function RepoSettingsDialog({ repoName, open, onClose, section = 'all' }: RepoSettingsDialogProps): JSX.Element | null {
   const { t } = useTranslation()
   const { repos, updateRepo } = useRepos()
   const { showToast } = useToastContext()
@@ -121,7 +123,7 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
   return (
     <Modal open={open} onClose={onClose} maxWidth="max-w-lg">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">{t('repos.repoSettings')}</h2>
+        <h2 className="text-lg font-semibold">{section === 'postSync' ? t('postSync.title') : t('repos.repoSettings')}</h2>
         <button
           onClick={onClose}
           className="rounded px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -130,7 +132,8 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
         </button>
       </div>
 
-      {/* Branch Mapping */}
+      {/* Branch Mapping — only in full settings */}
+      {section !== 'postSync' && (
       <div className="mb-6">
         <h3 className="mb-2 text-sm font-medium">{t('repos.branchMapping')}</h3>
         <p className="mb-3 text-xs text-muted-foreground">{t('repos.branchMappingHint')}</p>
@@ -163,8 +166,9 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
           </button>
         </div>
       </div>
+      )}
 
-      <Separator />
+      {section !== 'postSync' && <Separator />}
 
       {/* Post-Sync Commands */}
       <div className="mt-4">
