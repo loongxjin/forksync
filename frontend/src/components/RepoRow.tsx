@@ -127,7 +127,7 @@ function RepoRowImpl({ repo, isExpanded, onToggle, onSync, onRemove, onSettings,
             )}
           </div>
 
-          <div className="flex items-center gap-0.5 opacity-30 transition-opacity duration-150 group-hover:opacity-100 ml-2 shrink-0">
+          <div className="flex items-center gap-0.5 opacity-60 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 ml-2 shrink-0">
               <button
                 data-action
                 onClick={() => onSettings(repo.name)}
