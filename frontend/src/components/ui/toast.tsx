@@ -35,13 +35,28 @@ const TOAST_CONFIG: Record<string, {
   }
 }
 
+type ToastType = 'info' | 'success' | 'warning' | 'error'
+
+/** Duration (ms) per toast type — errors/warnings linger longer so users can read them. */
+const TOAST_DURATION: Record<ToastType, number> = {
+  info: 2500,
+  success: 3000,
+  warning: 4000,
+  error: 5000
+}
+
+function resolveDuration(type: ToastType, duration?: number): number {
+  return duration && duration > 0 ? duration : TOAST_DURATION[type] ?? 2500
+}
+
 export function Toast({
   message,
   visible,
   onClose,
-  duration = 2000,
+  duration,
   type = 'info'
 }: ToastProps): JSX.Element | null {
+  const effectiveDuration = resolveDuration(type, duration)
   const [mounted, setMounted] = useState(false)
   const [exiting, setExiting] = useState(false)
 
@@ -57,11 +72,11 @@ export function Toast({
   }, [visible, mounted])
 
   useEffect(() => {
-    if (visible && duration > 0) {
-      const timer = setTimeout(onClose, duration)
+    if (visible && effectiveDuration > 0) {
+      const timer = setTimeout(onClose, effectiveDuration)
       return () => clearTimeout(timer)
     }
-  }, [visible, duration, onClose])
+  }, [visible, effectiveDuration, onClose])
 
   if (!mounted) return null
 
@@ -71,7 +86,7 @@ export function Toast({
     <div
       role="alert"
       aria-live="assertive"
-      className={`fixed left-1/2 top-4 z-[60] -translate-x-1/2 transition-all duration-200 ${
+      className={`fixed left-1/2 top-[calc(var(--titlebar-height)+12px)] z-[60] -translate-x-1/2 transition-all duration-200 ${
         exiting ? 'opacity-0 -translate-y-1' : 'opacity-0 translate-y-[-8px]'
       }`}
       style={!exiting ? { opacity: 1, transform: 'translateX(-50%) translateY(0)' } : undefined}
@@ -111,11 +126,12 @@ export function useToast() {
   })
 
   const showToast = useCallback(
-    (message: string, type: ToastState['type'] = 'info', duration = 2000) => {
+    (message: string, type: ToastState['type'] = 'info', duration?: number) => {
+      const ms = resolveDuration(type, duration)
       setToast({ message, visible: true, type })
       setTimeout(() => {
         setToast((prev) => ({ ...prev, visible: false }))
-      }, duration)
+      }, ms)
     },
     []
   )

@@ -123,7 +123,6 @@ export function Layout(): JSX.Element {
         visible={toast.visible}
         type={toast.type}
         onClose={hideToast}
-        duration={2000}
       />
     </div>
   )
