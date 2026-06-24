@@ -67,6 +67,7 @@ import {
   SetLocale as wailsSetLocale,
   SetAutoLaunch as wailsSetAutoLaunch,
   SetBranchMapping as wailsSetBranchMapping,
+  RepoBranches as wailsRepoBranches,
 } from '../wailsjs/go/main/App'
 
 export interface EngineAPI {
@@ -106,6 +107,7 @@ export interface EngineAPI {
   setAutoLaunch(enabled: boolean): Promise<{ success: boolean; error?: string }>
   repoDiff(repoName: string): Promise<{ success: boolean; diff?: string; error?: string }>
   setBranchMapping(repoName: string, localBranch: string, remoteBranch: string): Promise<ApiResponse<{ success: boolean; branchMapping?: BranchMapping }>>
+  repoBranches(repoName: string): Promise<ApiResponse<{ localBranches: string[]; remoteBranches: string[] }>>
   resolveStreamStart(name: string, opts?: { agent?: string; noConfirm?: boolean }): void
   onResolveStreamTick(callback: (repoName: string) => void): () => void
   onResolveStreamDone(callback: (repoName: string, result: ApiResponse<ResolveData>) => void): () => void
@@ -241,6 +243,9 @@ const engineApi: EngineAPI = {
   },
   async setBranchMapping(repoName, localBranch, remoteBranch) {
     try { return ok(await wailsSetBranchMapping({ repoName, localBranch, remoteBranch })) } catch (e) { return fail(e) }
+  },
+  async repoBranches(repoName) {
+    try { return ok(await wailsRepoBranches(repoName)) } catch (e) { return fail(e) }
   },
   // Streaming via Wails Events
   resolveStreamStart(name, opts) {

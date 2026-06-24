@@ -437,6 +437,20 @@ export namespace main {
 	        this.removed = source["removed"];
 	    }
 	}
+	export class RepoBranchesResult {
+	    localBranches: string[];
+	    remoteBranches: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new RepoBranchesResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.localBranches = source["localBranches"];
+	        this.remoteBranches = source["remoteBranches"];
+	    }
+	}
 	export class ResolveRequest {
 	    mode?: string;
 	    agent?: string;

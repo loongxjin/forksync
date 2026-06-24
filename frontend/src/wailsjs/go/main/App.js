@@ -94,6 +94,10 @@ export function RemoveRepo(arg1) {
   return window['go']['main']['App']['RemoveRepo'](arg1);
 }
 
+export function RepoBranches(arg1) {
+  return window['go']['main']['App']['RepoBranches'](arg1);
+}
+
 export function RepoDiff(arg1) {
   return window['go']['main']['App']['RepoDiff'](arg1);
 }

@@ -5,8 +5,7 @@ import { engineApi } from '@/lib/api'
 import { useRepos } from '@/contexts/RepoContext'
 import { Trash2, X } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { BranchMappingInput } from '@/components/BranchMappingInput'
 import { Separator } from '@/components/ui/separator'
 import { useToastContext } from '@/contexts/ToastContext'
 
@@ -35,8 +34,9 @@ export function RepoSettingsDialog({ repoName, open, onClose, section = 'all' }:
   const [saving, setSaving] = useState(false)
 
   const repo = repos.find((r) => r.name === repoName)
-  const [localBranch, setLocalBranch] = useState(repo?.branchMapping?.localBranch ?? '')
-  const [remoteBranch, setRemoteBranch] = useState(repo?.branchMapping?.remoteBranch ?? '')
+  const [mapping, setMapping] = useState<BranchMapping | undefined>(repo?.branchMapping)
+  const [localBranches, setLocalBranches] = useState<string[]>([])
+  const [remoteBranches, setRemoteBranches] = useState<string[]>([])
   const [savingMapping, setSavingMapping] = useState(false)
 
   const loadCommands = useCallback(async () => {
@@ -59,8 +59,13 @@ export function RepoSettingsDialog({ repoName, open, onClose, section = 'all' }:
       setShowAddForm(false)
       setNewCmd('')
       const r = repos.find((r) => r.name === repoName)
-      setLocalBranch(r?.branchMapping?.localBranch ?? '')
-      setRemoteBranch(r?.branchMapping?.remoteBranch ?? '')
+      setMapping(r?.branchMapping)
+      engineApi.repoBranches(repoName).then((res) => {
+        if (res.success) {
+          setLocalBranches(res.data.localBranches ?? [])
+          setRemoteBranches(res.data.remoteBranches ?? [])
+        }
+      })
     }
   }, [open, loadCommands, repoName, repos])
 
@@ -96,19 +101,14 @@ export function RepoSettingsDialog({ repoName, open, onClose, section = 'all' }:
   }
 
   const handleSaveMapping = async (): Promise<void> => {
+    if (!mapping?.localBranch || !mapping?.remoteBranch) return
     setSavingMapping(true)
     try {
-      const res = await engineApi.setBranchMapping(repoName, localBranch.trim(), remoteBranch.trim())
-      if (res.success) {
-        if (repo) {
-          const newMapping: BranchMapping | undefined =
-            localBranch.trim() && remoteBranch.trim()
-              ? { localBranch: localBranch.trim(), remoteBranch: remoteBranch.trim() }
-              : undefined
-          updateRepo({ ...repo, branchMapping: newMapping })
-        }
-        showToast?.(t('repos.branchMappingSaved'), 'success')
+      const res = await engineApi.setBranchMapping(repoName, mapping.localBranch, mapping.remoteBranch)
+      if (res.success && repo) {
+        updateRepo({ ...repo, branchMapping: mapping })
       }
+      showToast?.(t('repos.branchMappingSaved'), 'success')
     } catch {
       // silent
     } finally {
@@ -117,8 +117,8 @@ export function RepoSettingsDialog({ repoName, open, onClose, section = 'all' }:
   }
 
   const mappingChanged =
-    localBranch !== (repo?.branchMapping?.localBranch ?? '') ||
-    remoteBranch !== (repo?.branchMapping?.remoteBranch ?? '')
+    (mapping?.localBranch ?? '') !== (repo?.branchMapping?.localBranch ?? '') ||
+    (mapping?.remoteBranch ?? '') !== (repo?.branchMapping?.remoteBranch ?? '')
 
   return (
     <Modal open={open} onClose={onClose} maxWidth="max-w-lg">
@@ -137,34 +137,19 @@ export function RepoSettingsDialog({ repoName, open, onClose, section = 'all' }:
       <div className="mb-6">
         <h3 className="mb-2 text-sm font-medium">{t('repos.branchMapping')}</h3>
         <p className="mb-3 text-xs text-muted-foreground">{t('repos.branchMappingHint')}</p>
-        <div className="flex items-end gap-2">
-          <div className="flex-1 space-y-1">
-            <Label className="text-xs">{t('repos.localBranch')}</Label>
-            <Input
-              placeholder={repo?.branch ?? 'main'}
-              value={localBranch}
-              onChange={(e) => setLocalBranch(e.target.value)}
-              className="text-sm font-mono h-8"
-            />
-          </div>
-          <span className="pb-1.5 text-xs text-muted-foreground">{'->'}</span>
-          <div className="flex-1 space-y-1">
-            <Label className="text-xs">{t('repos.remoteBranch')}</Label>
-            <Input
-              placeholder={repo?.branch ?? 'main'}
-              value={remoteBranch}
-              onChange={(e) => setRemoteBranch(e.target.value)}
-              className="text-sm font-mono h-8"
-            />
-          </div>
-          <button
-            onClick={handleSaveMapping}
-            disabled={!mappingChanged || savingMapping}
-            className="h-8 shrink-0 rounded bg-primary px-3 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {t('common.save')}
-          </button>
-        </div>
+        <BranchMappingInput
+          value={mapping}
+          onChange={setMapping}
+          localBranches={localBranches}
+          remoteBranches={remoteBranches}
+        />
+        <button
+          onClick={handleSaveMapping}
+          disabled={!mappingChanged || savingMapping}
+          className="mt-3 h-8 rounded bg-primary px-3 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {t('common.save')}
+        </button>
       </div>
       )}
 

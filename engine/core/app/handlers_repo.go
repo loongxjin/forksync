@@ -26,6 +26,7 @@ func (s *Server) registerRepoRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /repos", s.handleAddRepo)
 	mux.HandleFunc("DELETE /repos/{name}", s.handleRemoveRepo)
 	mux.HandleFunc("GET /repos/{name}/diff", s.handleRepoDiff)
+	mux.HandleFunc("GET /repos/{name}/branches", s.handleRepoBranches)
 	mux.HandleFunc("PUT /repos/{name}/branch-mapping", s.handleSetBranchMapping)
 }
 
@@ -395,6 +396,31 @@ func (s *Server) handleSetBranchMapping(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeOK(w, branchMappingUpdateResult{Success: true, BranchMapping: r2.BranchMapping})
+}
+
+type repoBranchesResult struct {
+	LocalBranches  []string `json:"localBranches"`
+	RemoteBranches []string `json:"remoteBranches"`
+}
+
+func (s *Server) handleRepoBranches(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	r2, ok := s.deps.Store.GetByName(name)
+	if !ok {
+		writeErr[repoBranchesResult](w, fmt.Errorf("repository %q not found", name))
+		return
+	}
+
+	localBranches, _ := s.deps.GitOps.GetLocalBranches(r.Context(), r2.Path)
+	remoteBranches, _ := s.deps.GitOps.GetRemoteBranches(r.Context(), r2.Path, "origin")
+	if localBranches == nil {
+		localBranches = []string{}
+	}
+	if remoteBranches == nil {
+		remoteBranches = []string{}
+	}
+
+	writeOK(w, repoBranchesResult{LocalBranches: localBranches, RemoteBranches: remoteBranches})
 }
 
 // splitCSV parses a comma-separated query value into a slice, trimming spaces

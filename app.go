@@ -396,6 +396,33 @@ func (a *App) SetBranchMapping(req SetBranchMappingRequest) (SetBranchMappingRes
 	return SetBranchMappingResult{Success: true, BranchMapping: r2.BranchMapping}, nil
 }
 
+// RepoBranchesResult lists local and remote branches for a repo.
+type RepoBranchesResult struct {
+	LocalBranches  []string `json:"localBranches"`
+	RemoteBranches []string `json:"remoteBranches"`
+}
+
+func (a *App) RepoBranches(name string) (RepoBranchesResult, error) {
+	if a.deps == nil {
+		return RepoBranchesResult{}, nil
+	}
+	r2, ok := a.deps.Store.GetByName(name)
+	if !ok {
+		return RepoBranchesResult{}, fmt.Errorf("repo %q not found", name)
+	}
+
+	localBranches, _ := a.deps.GitOps.GetLocalBranches(a.ctx, r2.Path)
+	remoteBranches, _ := a.deps.GitOps.GetRemoteBranches(a.ctx, r2.Path, "origin")
+	if localBranches == nil {
+		localBranches = []string{}
+	}
+	if remoteBranches == nil {
+		remoteBranches = []string{}
+	}
+
+	return RepoBranchesResult{LocalBranches: localBranches, RemoteBranches: remoteBranches}, nil
+}
+
 // ---------------------------------------------------------------------------
 // Resolve
 // ---------------------------------------------------------------------------

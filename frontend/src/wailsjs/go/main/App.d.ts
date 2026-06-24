@@ -50,6 +50,8 @@ export function ReadAgentLog(arg1:string,arg2:string):Promise<main.AgentLogResul
 
 export function RemoveRepo(arg1:string):Promise<main.RemoveResult>;
 
+export function RepoBranches(arg1:string):Promise<main.RepoBranchesResult>;
+
 export function RepoDiff(arg1:string):Promise<main.DiffResult>;
 
 export function Resolve(arg1:string,arg2:main.ResolveRequest):Promise<types.ResolveData>;
