@@ -345,6 +345,15 @@
     "retryResolve": "Retry Resolve",
     "completed": "Workflow completed successfully",
     "failed": "Workflow failed",
-    "eventsCount": "{{count}} events"
+    "eventsCount": "{{count}} events",
+    "step": {
+      "fetch": "Fetch upstream",
+      "merge": "Merge upstream",
+      "checkConflicts": "Check conflicts",
+      "resolveStrategy": "Resolve strategy",
+      "agentResolve": "Agent resolve",
+      "acceptChanges": "Accept changes",
+      "commit": "Commit & finalize"
+    }
   }
 }

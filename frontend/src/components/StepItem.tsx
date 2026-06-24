@@ -20,14 +20,14 @@ interface StepItemProps {
   children?: React.ReactNode
 }
 
-const STEP_LABELS: Record<WorkflowStep, string> = {
-  fetch: 'Fetch upstream',
-  merge: 'Merge upstream',
-  check_conflicts: 'Check conflicts',
-  resolve_strategy: 'Resolve strategy',
-  agent_resolve: 'Agent resolve',
-  accept_changes: 'Accept changes',
-  commit: 'Commit & finalize'
+const STEP_LABEL_KEYS: Record<WorkflowStep, string> = {
+  fetch: 'workflow.step.fetch',
+  merge: 'workflow.step.merge',
+  check_conflicts: 'workflow.step.checkConflicts',
+  resolve_strategy: 'workflow.step.resolveStrategy',
+  agent_resolve: 'workflow.step.agentResolve',
+  accept_changes: 'workflow.step.acceptChanges',
+  commit: 'workflow.step.commit'
 }
 
 export function StepItem({
@@ -100,7 +100,7 @@ export function StepItem({
               status === 'waiting' && 'text-warning'
             )}
           >
-            {STEP_LABELS[step] ?? step}
+            {t(STEP_LABEL_KEYS[step] ?? 'workflow.step.fetch')}
           </span>
           {status === 'running' && (
             <span className="text-xs text-muted-foreground animate-pulse">
