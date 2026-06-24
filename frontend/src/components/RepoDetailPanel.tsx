@@ -58,11 +58,9 @@ export function RepoDetailPanel({ repo, onEditCommands, commandsVersion }: RepoD
 
         {/* Post-Sync Commands (read-only) */}
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-muted-foreground">
-              {t('home.postSyncCommands')} ({commands.length})
-            </p>
-          </div>
+          <p className="text-xs font-medium text-muted-foreground mb-1">
+            {t('home.postSyncCommands')} ({commands.length})
+          </p>
 
           {loading ? (
             <p className="text-xs text-muted-foreground">{t('common.loading')}</p>
@@ -79,14 +77,6 @@ export function RepoDetailPanel({ repo, onEditCommands, commandsVersion }: RepoD
             </div>
           )}
         </div>
-
-        {/* Edit shortcut */}
-        <button
-          onClick={onEditCommands}
-          className="w-full rounded border border-border px-3 py-1.5 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
-        >
-          {t('repos.repoSettings')}...
-        </button>
 
       </div>
     </div>

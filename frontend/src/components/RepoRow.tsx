@@ -144,8 +144,8 @@ function RepoRowImpl({ repo, isExpanded, onToggle, onSync, onRemove, onSettings,
                 data-action
                 onClick={() => onSettings(repo.name)}
                 className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                title={t('repos.repoSettings')}
-                aria-label={t('repos.repoSettings')}
+                title={t('postSync.settings')}
+                aria-label={t('postSync.settings')}
               >
               <Settings size={14} />
             </button>

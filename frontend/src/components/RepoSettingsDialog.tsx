@@ -1,14 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { PostSyncCommand, Repo, BranchMapping } from '@shared/types/engine'
+import type { PostSyncCommand } from '@shared/types/engine'
 import { engineApi } from '@/lib/api'
-import { useRepos } from '@/contexts/RepoContext'
 import { Trash2, X } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
-import { useToastContext } from '@/contexts/ToastContext'
 
 interface RepoSettingsDialogProps {
   repoName: string
@@ -23,20 +18,11 @@ function autoName(cmd: string): string {
 
 export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDialogProps): JSX.Element | null {
   const { t } = useTranslation()
-  const { repos, updateRepo } = useRepos()
-  const { showToast } = useToastContext()
-
   const [commands, setCommands] = useState<PostSyncCommand[]>([])
   const [loading, setLoading] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newCmd, setNewCmd] = useState('')
   const [saving, setSaving] = useState(false)
-
-  // Branch mapping state
-  const repo = repos.find((r) => r.name === repoName)
-  const [localBranch, setLocalBranch] = useState(repo?.branchMapping?.localBranch ?? '')
-  const [remoteBranch, setRemoteBranch] = useState(repo?.branchMapping?.remoteBranch ?? '')
-  const [savingMapping, setSavingMapping] = useState(false)
 
   const loadCommands = useCallback(async () => {
     setLoading(true)
@@ -57,11 +43,8 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
       loadCommands()
       setShowAddForm(false)
       setNewCmd('')
-      const r = repos.find((r) => r.name === repoName)
-      setLocalBranch(r?.branchMapping?.localBranch ?? '')
-      setRemoteBranch(r?.branchMapping?.remoteBranch ?? '')
     }
-  }, [open, loadCommands, repoName, repos])
+  }, [open, loadCommands])
 
   const handleAdd = async (): Promise<void> => {
     if (!newCmd.trim()) return
@@ -94,86 +77,21 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
     }
   }
 
-  const handleSaveMapping = async (): Promise<void> => {
-    setSavingMapping(true)
-    try {
-      const res = await engineApi.setBranchMapping(repoName, localBranch.trim(), remoteBranch.trim())
-      if (res.success) {
-        if (repo) {
-          const newMapping: BranchMapping | undefined =
-            localBranch.trim() && remoteBranch.trim()
-              ? { localBranch: localBranch.trim(), remoteBranch: remoteBranch.trim() }
-              : undefined
-          updateRepo({ ...repo, branchMapping: newMapping })
-        }
-        showToast?.(t('repos.branchMappingSaved'), 'success')
-      }
-    } catch {
-      // silent
-    } finally {
-      setSavingMapping(false)
-    }
-  }
-
-  const mappingChanged =
-    localBranch !== (repo?.branchMapping?.localBranch ?? '') ||
-    remoteBranch !== (repo?.branchMapping?.remoteBranch ?? '')
-
   return (
     <Modal open={open} onClose={onClose} maxWidth="max-w-lg">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">{t('repos.repoSettings')}</h2>
-        <button
-          onClick={onClose}
-          className="rounded px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <X size={16} />
-        </button>
-      </div>
-
-      {/* Branch Mapping */}
-      <div className="mb-6">
-        <h3 className="mb-2 text-sm font-medium">{t('repos.branchMapping')}</h3>
-        <p className="mb-3 text-xs text-muted-foreground">{t('repos.branchMappingHint')}</p>
-        <div className="flex items-end gap-2">
-          <div className="flex-1 space-y-1">
-            <Label className="text-xs">{t('repos.localBranch')}</Label>
-            <Input
-              placeholder={repo?.branch ?? 'main'}
-              value={localBranch}
-              onChange={(e) => setLocalBranch(e.target.value)}
-              className="text-sm font-mono h-8"
-            />
-          </div>
-          <span className="pb-1.5 text-xs text-muted-foreground">{'->'}</span>
-          <div className="flex-1 space-y-1">
-            <Label className="text-xs">{t('repos.remoteBranch')}</Label>
-            <Input
-              placeholder={repo?.branch ?? 'main'}
-              value={remoteBranch}
-              onChange={(e) => setRemoteBranch(e.target.value)}
-              className="text-sm font-mono h-8"
-            />
-          </div>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">{t('postSync.title')}</h2>
           <button
-            onClick={handleSaveMapping}
-            disabled={!mappingChanged || savingMapping}
-            className="h-8 shrink-0 rounded bg-primary px-3 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            onClick={onClose}
+            className="rounded px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
           >
-            {t('common.save')}
+            <X size={16} />
           </button>
         </div>
-      </div>
 
-      <Separator />
+        <p className="mb-4 text-sm text-muted-foreground">{t('postSync.description')}</p>
 
-      {/* Post-Sync Commands */}
-      <div className="mt-4">
-        <h3 className="mb-2 text-sm font-medium">
-          {t('postSync.title')} ({commands.length})
-        </h3>
-        <p className="mb-3 text-xs text-muted-foreground">{t('postSync.description')}</p>
-
+        {/* Command list */}
         {loading ? (
           <p className="py-4 text-center text-sm text-muted-foreground">{t('common.loading')}</p>
         ) : commands.length === 0 ? (
@@ -198,6 +116,7 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
           </div>
         )}
 
+        {/* Add command form */}
         {showAddForm ? (
           <div className="flex items-center gap-2">
             <input
@@ -240,7 +159,6 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
             + {t('postSync.addCommand')}
           </button>
         )}
-      </div>
-    </Modal>
+      </Modal>
   )
 }
