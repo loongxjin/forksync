@@ -412,7 +412,21 @@ func (s *Server) handleRepoBranches(w http.ResponseWriter, r *http.Request) {
 	}
 
 	localBranches, _ := s.deps.GitOps.GetLocalBranches(r.Context(), r2.Path)
-	remoteBranches, _ := s.deps.GitOps.GetRemoteBranches(r.Context(), r2.Path, "origin")
+
+	// Remote branches: prefer the upstream fork source, fall back to origin tracking branches.
+	var remoteBranches []string
+	remoteURL := r2.Upstream
+	if remoteURL == "" {
+		remoteURL = r2.Origin
+	}
+	if remoteURL != "" {
+		remoteBranches, _ = s.deps.GitOps.GetRemoteBranchesFromURL(r.Context(), r2.Path, remoteURL)
+	}
+	// If ls-remote on the URL failed, fall back to local tracking branches from origin.
+	if len(remoteBranches) == 0 {
+		remoteBranches, _ = s.deps.GitOps.GetRemoteBranches(r.Context(), r2.Path, "origin")
+	}
+
 	if localBranches == nil {
 		localBranches = []string{}
 	}

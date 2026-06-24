@@ -412,7 +412,20 @@ func (a *App) RepoBranches(name string) (RepoBranchesResult, error) {
 	}
 
 	localBranches, _ := a.deps.GitOps.GetLocalBranches(a.ctx, r2.Path)
-	remoteBranches, _ := a.deps.GitOps.GetRemoteBranches(a.ctx, r2.Path, "origin")
+
+	// Remote branches: prefer the upstream fork source, fall back to origin.
+	var remoteBranches []string
+	remoteURL := r2.Upstream
+	if remoteURL == "" {
+		remoteURL = r2.Origin
+	}
+	if remoteURL != "" {
+		remoteBranches, _ = a.deps.GitOps.GetRemoteBranchesFromURL(a.ctx, r2.Path, remoteURL)
+	}
+	if len(remoteBranches) == 0 {
+		remoteBranches, _ = a.deps.GitOps.GetRemoteBranches(a.ctx, r2.Path, "origin")
+	}
+
 	if localBranches == nil {
 		localBranches = []string{}
 	}

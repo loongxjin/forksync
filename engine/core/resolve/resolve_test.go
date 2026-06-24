@@ -144,6 +144,9 @@ func (f *fakeGitOps) GetLocalBranches(context.Context, string) ([]string, error)
 func (f *fakeGitOps) GetRemoteBranches(context.Context, string, string) ([]string, error) {
 	panic("not used")
 }
+func (f *fakeGitOps) GetRemoteBranchesFromURL(context.Context, string, string) ([]string, error) {
+	panic("not used")
+}
 func (f *fakeGitOps) GetCommitLog(context.Context, string, string, string) ([]git.CommitInfo, error) {
 	panic("not used")
 }
