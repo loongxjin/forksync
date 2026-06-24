@@ -427,7 +427,7 @@ export function HomePage(): JSX.Element {
         repoName={settingsRepo ?? ''}
         open={settingsRepo !== null}
         section={settingsSection}
-        onClose={() => { setSettingsRepo(null); setSettingsSection('all'); setCommandsVersion((v) => v + 1) }}
+        onClose={() => { setSettingsRepo(null); setCommandsVersion((v) => v + 1) }}
       />
 
       {/* Agent Terminal Drawer */}
