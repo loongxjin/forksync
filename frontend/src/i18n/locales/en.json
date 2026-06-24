@@ -15,7 +15,8 @@
     "select": "Select...",
     "confirm": "Confirm",
     "delete": "Delete",
-    "back": "Back"
+    "back": "Back",
+    "dismiss": "Dismiss"
   },
   "nav": {
     "dashboard": "Dashboard",

@@ -15,7 +15,8 @@
     "select": "选择...",
     "confirm": "确认",
     "delete": "删除",
-    "back": "返回"
+    "back": "返回",
+    "dismiss": "忽略"
   },
   "nav": {
     "dashboard": "仪表盘",

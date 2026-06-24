@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { X, RefreshCw } from 'lucide-react'
 
 interface ErrorBannerProps {
@@ -12,6 +13,7 @@ interface ErrorBannerProps {
  * action, as opposed to ephemeral operation errors shown via toast.
  */
 export function ErrorBanner({ message, onRetry, onDismiss }: ErrorBannerProps): JSX.Element {
+  const { t } = useTranslation()
   return (
     <div
       role="alert"
@@ -23,17 +25,17 @@ export function ErrorBanner({ message, onRetry, onDismiss }: ErrorBannerProps): 
           <button
             onClick={onRetry}
             className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-error hover:bg-error/10 transition-colors"
-            aria-label="Retry"
+            aria-label={t('common.retry')}
           >
             <RefreshCw size={14} />
-            Retry
+            {t('common.retry')}
           </button>
         )}
         {onDismiss && (
           <button
             onClick={onDismiss}
             className="inline-flex items-center rounded p-1 text-error/70 hover:text-error hover:bg-error/10 transition-colors"
-            aria-label="Dismiss"
+            aria-label={t('common.dismiss')}
           >
             <X size={14} />
           </button>
