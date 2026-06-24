@@ -358,17 +358,17 @@ export function HomePage(): JSX.Element {
       {/* Sync History Timeline */}
       <div>
         <div
-          className="flex items-center justify-between mb-3 cursor-pointer select-none"
+          className={`flex items-center justify-between mb-3 select-none ${
+            history.length > 3 ? 'cursor-pointer' : ''
+          }`}
           onClick={() => history.length > 3 && setHistoryExpanded((v) => !v)}
         >
           <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">
-              {history.length > 3 ? (
-                historyExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />
-              ) : (
-                <ChevronDown size={12} />
-              )}
-            </span>
+            {history.length > 3 && (
+              <span className="text-muted-foreground">
+                {historyExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              </span>
+            )}
             <h3 className="text-sm font-medium text-muted-foreground">{t('dashboard.syncHistory')}</h3>
             {history.length > 0 && (
               <span className="text-xs text-muted-foreground tabular-nums">({history.length})</span>
