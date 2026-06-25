@@ -94,6 +94,10 @@ export function RemoveRepo(arg1) {
   return window['go']['main']['App']['RemoveRepo'](arg1);
 }
 
+export function RepoBranches(arg1) {
+  return window['go']['main']['App']['RepoBranches'](arg1);
+}
+
 export function RepoDiff(arg1) {
   return window['go']['main']['App']['RepoDiff'](arg1);
 }
@@ -112,6 +116,10 @@ export function Scan(arg1) {
 
 export function SetAutoLaunch(arg1) {
   return window['go']['main']['App']['SetAutoLaunch'](arg1);
+}
+
+export function SetBranchMapping(arg1) {
+  return window['go']['main']['App']['SetBranchMapping'](arg1);
 }
 
 export function SetLocale(arg1) {

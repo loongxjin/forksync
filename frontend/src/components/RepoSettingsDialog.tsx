@@ -1,14 +1,20 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { PostSyncCommand } from '@shared/types/engine'
+import type { PostSyncCommand, BranchMapping } from '@shared/types/engine'
 import { engineApi } from '@/lib/api'
+import { useRepos } from '@/contexts/RepoContext'
 import { Trash2, X } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
+import { BranchMappingInput } from '@/components/BranchMappingInput'
+import { Separator } from '@/components/ui/separator'
+import { useToastContext } from '@/contexts/ToastContext'
 
 interface RepoSettingsDialogProps {
   repoName: string
   open: boolean
   onClose: () => void
+  /** 'all' (default): branch mapping + post-sync. 'postSync': post-sync only. */
+  section?: 'all' | 'postSync'
 }
 
 function autoName(cmd: string): string {
@@ -16,13 +22,22 @@ function autoName(cmd: string): string {
   return parts[0] || cmd.trim()
 }
 
-export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDialogProps): JSX.Element | null {
+export function RepoSettingsDialog({ repoName, open, onClose, section = 'all' }: RepoSettingsDialogProps): JSX.Element | null {
   const { t } = useTranslation()
+  const { repos, updateRepo } = useRepos()
+  const { showToast } = useToastContext()
+
   const [commands, setCommands] = useState<PostSyncCommand[]>([])
   const [loading, setLoading] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newCmd, setNewCmd] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const repo = repos.find((r) => r.name === repoName)
+  const [mapping, setMapping] = useState<BranchMapping | undefined>(repo?.branchMapping)
+  const [localBranches, setLocalBranches] = useState<string[]>([])
+  const [remoteBranches, setRemoteBranches] = useState<string[]>([])
+  const [savingMapping, setSavingMapping] = useState(false)
 
   const loadCommands = useCallback(async () => {
     setLoading(true)
@@ -31,8 +46,8 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
       if (res.success) {
         setCommands(res.data.commands ?? [])
       }
-    } catch (err) {
-      console.error('[RepoSettingsDialog] Failed to load commands:', err)
+    } catch {
+      // silent
     } finally {
       setLoading(false)
     }
@@ -43,8 +58,16 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
       loadCommands()
       setShowAddForm(false)
       setNewCmd('')
+      const r = repos.find((r) => r.name === repoName)
+      setMapping(r?.branchMapping)
+      engineApi.repoBranches(repoName).then((res) => {
+        if (res.success) {
+          setLocalBranches(res.data.localBranches ?? [])
+          setRemoteBranches(res.data.remoteBranches ?? [])
+        }
+      })
     }
-  }, [open, loadCommands])
+  }, [open, loadCommands, repoName, repos])
 
   const handleAdd = async (): Promise<void> => {
     if (!newCmd.trim()) return
@@ -56,8 +79,8 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
         setNewCmd('')
         setShowAddForm(false)
       }
-    } catch (err) {
-      console.error('[RepoSettingsDialog] Failed to add command:', err)
+    } catch {
+      // silent
     } finally {
       setSaving(false)
     }
@@ -70,28 +93,75 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
       if (res.success) {
         setCommands(res.data.commands ?? [])
       }
-    } catch (err) {
-      console.error('[RepoSettingsDialog] Failed to remove command:', err)
+    } catch {
+      // silent
     } finally {
       setSaving(false)
     }
   }
 
+  const handleSaveMapping = async (): Promise<void> => {
+    if (!mapping?.localBranch || !mapping?.remoteBranch) return
+    setSavingMapping(true)
+    try {
+      const res = await engineApi.setBranchMapping(repoName, mapping.localBranch, mapping.remoteBranch)
+      if (res.success && repo) {
+        updateRepo({ ...repo, branchMapping: mapping })
+      }
+      showToast?.(t('repos.branchMappingSaved'), 'success')
+    } catch {
+      // silent
+    } finally {
+      setSavingMapping(false)
+    }
+  }
+
+  const mappingChanged =
+    (mapping?.localBranch ?? '') !== (repo?.branchMapping?.localBranch ?? '') ||
+    (mapping?.remoteBranch ?? '') !== (repo?.branchMapping?.remoteBranch ?? '')
+
   return (
     <Modal open={open} onClose={onClose} maxWidth="max-w-lg">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{t('postSync.title')}</h2>
-          <button
-            onClick={onClose}
-            className="rounded px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <X size={16} />
-          </button>
-        </div>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">{section === 'postSync' ? t('postSync.title') : t('repos.repoSettings')}</h2>
+        <button
+          onClick={onClose}
+          className="rounded px-2 py-1 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <X size={16} />
+        </button>
+      </div>
 
-        <p className="mb-4 text-sm text-muted-foreground">{t('postSync.description')}</p>
+      {/* Branch Mapping — only in full settings */}
+      {section !== 'postSync' && (
+      <div className="mb-6">
+        <h3 className="mb-2 text-sm font-medium">{t('repos.branchMapping')}</h3>
+        <p className="mb-3 text-xs text-muted-foreground">{t('repos.branchMappingHint')}</p>
+        <BranchMappingInput
+          value={mapping}
+          onChange={setMapping}
+          localBranches={localBranches}
+          remoteBranches={remoteBranches}
+        />
+        <button
+          onClick={handleSaveMapping}
+          disabled={!mappingChanged || savingMapping}
+          className="mt-3 h-8 rounded bg-primary px-3 text-xs text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {t('common.save')}
+        </button>
+      </div>
+      )}
 
-        {/* Command list */}
+      {section !== 'postSync' && <Separator />}
+
+      {/* Post-Sync Commands */}
+      <div className="mt-4">
+        <h3 className="mb-2 text-sm font-medium">
+          {t('postSync.title')} ({commands.length})
+        </h3>
+        <p className="mb-3 text-xs text-muted-foreground">{t('postSync.description')}</p>
+
         {loading ? (
           <p className="py-4 text-center text-sm text-muted-foreground">{t('common.loading')}</p>
         ) : commands.length === 0 ? (
@@ -116,7 +186,6 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
           </div>
         )}
 
-        {/* Add command form */}
         {showAddForm ? (
           <div className="flex items-center gap-2">
             <input
@@ -159,6 +228,7 @@ export function RepoSettingsDialog({ repoName, open, onClose }: RepoSettingsDial
             + {t('postSync.addCommand')}
           </button>
         )}
-      </Modal>
+      </div>
+    </Modal>
   )
 }

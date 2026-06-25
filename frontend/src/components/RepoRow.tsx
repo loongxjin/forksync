@@ -40,7 +40,7 @@ interface RepoRowProps {
   onToggle: (repoId: string) => void
   onSync: (name: string) => void
   onRemove: (name: string) => void
-  onSettings: (name: string) => void
+  onSettings: (name: string, section?: 'all' | 'postSync') => void
   /** Whether a remove operation is in progress for this repo */
   removing: boolean
 }
@@ -103,7 +103,7 @@ function RepoRowImpl({ repo, isExpanded, onToggle, onSync, onRemove, onSettings,
             {repo.postSyncCommands && repo.postSyncCommands.length > 0 && (
               <button
                 data-action
-                onClick={() => onSettings(repo.name)}
+                onClick={() => onSettings(repo.name, 'postSync')}
                 className="inline-flex items-center gap-0.5 rounded-full border border-border bg-secondary px-1.5 py-0 text-[10px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors tabular-nums"
                 title={t('postSync.countBadge', { count: repo.postSyncCommands.length })}
                 aria-label={t('postSync.countBadge', { count: repo.postSyncCommands.length })}
@@ -142,10 +142,10 @@ function RepoRowImpl({ repo, isExpanded, onToggle, onSync, onRemove, onSettings,
           <div className="flex items-center gap-0.5 opacity-60 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 ml-2 shrink-0">
               <button
                 data-action
-                onClick={() => onSettings(repo.name)}
+                onClick={() => onSettings(repo.name, 'all')}
                 className="press-scale rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                title={t('postSync.settings')}
-                aria-label={t('postSync.settings')}
+                title={t('repos.repoSettings')}
+                aria-label={t('repos.repoSettings')}
               >
               <Settings size={14} />
             </button>

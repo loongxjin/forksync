@@ -58,6 +58,7 @@ type OperationsProvider interface {
 	FindRemoteURL(ctx context.Context, repoPath, remoteName string) string
 	GetLocalBranches(ctx context.Context, repoPath string) ([]string, error)
 	GetRemoteBranches(ctx context.Context, repoPath string, remoteName string) ([]string, error)
+	GetRemoteBranchesFromURL(ctx context.Context, repoPath string, remoteURL string) ([]string, error)
 	GetCommitLog(ctx context.Context, repoPath, oldHEAD, upstreamRef string) ([]CommitInfo, error)
 }
 
@@ -771,6 +772,12 @@ func (o *Operations) GetRemoteBranches(ctx context.Context, repoPath string, rem
 		}
 	}
 	return branches, nil
+}
+
+// GetRemoteBranchesFromURL fetches branch names from a remote URL via ls-remote.
+// This bypasses local tracking branches and fetches directly from the remote.
+func (o *Operations) GetRemoteBranchesFromURL(ctx context.Context, repoPath string, remoteURL string) ([]string, error) {
+	return o.getRemoteBranchesViaLsRemote(ctx, repoPath, remoteURL)
 }
 
 // getRemoteBranchesViaLsRemote fetches remote branches via ls-remote as a fallback

@@ -84,6 +84,12 @@
     "resolveConflicts": "解决冲突",
     "resolve": "解决",
     "remove": "移除",
+    "branchMapping": "分支映射",
+    "branchMappingHint": "将本地分支映射到不同的远程分支进行同步。",
+    "branchMappingSaved": "分支映射已保存",
+    "localBranch": "本地",
+    "remoteBranch": "远程",
+    "repoSettings": "仓库设置",
     "behind": "落后 {{count}}"
   },
   "addRepo": {
@@ -94,7 +100,7 @@
     "upstreamUrl": "上游仓库 URL（可选）",
     "autoDetected": "自动检测 GitHub fork 的上游仓库。",
     "branchMapping": "自定义分支映射",
-    "branchMappingHint": "默认：同名分支同步（如 main → origin/main）",
+    "branchMappingHint": "默认：同名分支同步（如 main → upstream/main）",
     "branchMappingDesc": "将本地分支映射到不同的远程分支名。",
     "localBranch": "本地分支",
     "remoteBranch": "远程分支",

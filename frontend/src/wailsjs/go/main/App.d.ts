@@ -50,6 +50,8 @@ export function ReadAgentLog(arg1:string,arg2:string):Promise<main.AgentLogResul
 
 export function RemoveRepo(arg1:string):Promise<main.RemoveResult>;
 
+export function RepoBranches(arg1:string):Promise<main.RepoBranchesResult>;
+
 export function RepoDiff(arg1:string):Promise<main.DiffResult>;
 
 export function Resolve(arg1:string,arg2:main.ResolveRequest):Promise<types.ResolveData>;
@@ -59,6 +61,8 @@ export function ResolveStreamStart(arg1:string,arg2:string,arg3:boolean):Promise
 export function Scan(arg1:string):Promise<types.ScanData>;
 
 export function SetAutoLaunch(arg1:boolean):Promise<Record<string, any>>;
+
+export function SetBranchMapping(arg1:main.SetBranchMappingRequest):Promise<main.SetBranchMappingResult>;
 
 export function SetLocale(arg1:string):Promise<Record<string, boolean>>;
 

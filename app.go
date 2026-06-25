@@ -357,6 +357,85 @@ func (a *App) RepoDiff(name string) (DiffResult, error) {
 	return DiffResult{Success: true, Diff: string(diff)}, nil
 }
 
+// SetBranchMappingRequest is the parameter for SetBranchMapping.
+type SetBranchMappingRequest struct {
+	RepoName     string `json:"repoName"`
+	LocalBranch  string `json:"localBranch"`
+	RemoteBranch string `json:"remoteBranch"`
+}
+
+// SetBranchMappingResult mirrors the HTTP response shape.
+type SetBranchMappingResult struct {
+	Success       bool                `json:"success"`
+	BranchMapping *types.BranchMapping `json:"branchMapping,omitempty"`
+	Error         string              `json:"error,omitempty"`
+}
+
+func (a *App) SetBranchMapping(req SetBranchMappingRequest) (SetBranchMappingResult, error) {
+	if a.deps == nil {
+		return SetBranchMappingResult{}, nil
+	}
+	r2, ok := a.deps.Store.GetByName(req.RepoName)
+	if !ok {
+		return SetBranchMappingResult{}, fmt.Errorf("repo %q not found", req.RepoName)
+	}
+
+	if req.LocalBranch != "" && req.RemoteBranch != "" {
+		r2.BranchMapping = &types.BranchMapping{
+			LocalBranch:  req.LocalBranch,
+			RemoteBranch: req.RemoteBranch,
+		}
+	} else {
+		r2.BranchMapping = nil
+	}
+
+	if err := a.deps.Store.Update(r2); err != nil {
+		return SetBranchMappingResult{}, err
+	}
+
+	return SetBranchMappingResult{Success: true, BranchMapping: r2.BranchMapping}, nil
+}
+
+// RepoBranchesResult lists local and remote branches for a repo.
+type RepoBranchesResult struct {
+	LocalBranches  []string `json:"localBranches"`
+	RemoteBranches []string `json:"remoteBranches"`
+}
+
+func (a *App) RepoBranches(name string) (RepoBranchesResult, error) {
+	if a.deps == nil {
+		return RepoBranchesResult{}, nil
+	}
+	r2, ok := a.deps.Store.GetByName(name)
+	if !ok {
+		return RepoBranchesResult{}, fmt.Errorf("repo %q not found", name)
+	}
+
+	localBranches, _ := a.deps.GitOps.GetLocalBranches(a.ctx, r2.Path)
+
+	// Remote branches: prefer the upstream fork source, fall back to origin.
+	var remoteBranches []string
+	remoteURL := r2.Upstream
+	if remoteURL == "" {
+		remoteURL = r2.Origin
+	}
+	if remoteURL != "" {
+		remoteBranches, _ = a.deps.GitOps.GetRemoteBranchesFromURL(a.ctx, r2.Path, remoteURL)
+	}
+	if len(remoteBranches) == 0 {
+		remoteBranches, _ = a.deps.GitOps.GetRemoteBranches(a.ctx, r2.Path, "origin")
+	}
+
+	if localBranches == nil {
+		localBranches = []string{}
+	}
+	if remoteBranches == nil {
+		remoteBranches = []string{}
+	}
+
+	return RepoBranchesResult{LocalBranches: localBranches, RemoteBranches: remoteBranches}, nil
+}
+
 // ---------------------------------------------------------------------------
 // Resolve
 // ---------------------------------------------------------------------------
