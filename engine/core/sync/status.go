@@ -36,13 +36,35 @@ func NewStatusRefresher(
 	}
 }
 
+// perRepoStatusTimeout is the timeout budget granted to each repo's status
+// check (fetch + rev-list), independent of other repos. Previously all repos
+// shared a single timeout: one slow upstream fetch consumed the whole budget
+// and every other repo's git commands were killed with "context deadline
+// exceeded". A per-repo budget isolates slow repos so they fail alone.
+const perRepoStatusTimeout = 20 * time.Second
+
 // RefreshAll refreshes the status of all repos concurrently.
 // Handles: ahead/behind update, stale workflow cleanup,
 // crash recovery, conflict state reconciliation.
+//
+// Each repo gets its own timeout budget (perRepoStatusTimeout) derived from
+// ctx, so a slow upstream fetch on one repo cannot starve the others. The
+// parent ctx still controls overall cancellation (app quit, request cancel).
 func (sf *StatusRefresher) RefreshAll(
 	ctx context.Context,
 	repos []types.Repo,
 	excludeNames []string,
+) ([]types.Repo, error) {
+	return sf.RefreshAllWithPerRepoTimeout(ctx, repos, excludeNames, perRepoStatusTimeout)
+}
+
+// RefreshAllWithPerRepoTimeout is like RefreshAll but with a caller-supplied
+// per-repo timeout. Exposed for tests.
+func (sf *StatusRefresher) RefreshAllWithPerRepoTimeout(
+	ctx context.Context,
+	repos []types.Repo,
+	excludeNames []string,
+	perRepo time.Duration,
 ) ([]types.Repo, error) {
 	// Build exclude set for quick lookup
 	excludeSet := make(map[string]bool, len(excludeNames))
@@ -53,7 +75,9 @@ func (sf *StatusRefresher) RefreshAll(
 	// Clean up stale workflows before refreshing
 	workflow.CleanupStaleWorkflows(repos, sf.store)
 
-	// Update ahead/behind for each repo concurrently and refresh stale conflict statuses
+	// Update ahead/behind for each repo concurrently and refresh stale conflict statuses.
+	// Each repo runs under its own per-repo timeout so a slow fetch on one repo
+	// cannot cancel the others' status checks.
 	var wg stdsync.WaitGroup
 	sem := make(chan struct{}, types.DefaultMaxConcurrency)
 	for i := range repos {
@@ -65,7 +89,9 @@ func (sf *StatusRefresher) RefreshAll(
 		go func(idx int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			repos[idx] = sf.RefreshRepo(ctx, repos[idx])
+			repoCtx, cancel := context.WithTimeout(ctx, perRepo)
+			defer cancel()
+			repos[idx] = sf.RefreshRepo(repoCtx, repos[idx])
 		}(i)
 	}
 	wg.Wait()

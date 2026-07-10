@@ -30,9 +30,10 @@ func (s *Server) registerRepoRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /repos/{name}/branch-mapping", s.handleSetBranchMapping)
 }
 
-// statusTimeout is the per-repo timeout for status operations (fetch + rev-list).
-// Mirrors cmd/status.go statusTimeout.
-const statusTimeout = 30 * time.Second
+// statusTimeout caps the whole status call. Per-repo isolation is handled
+// inside RefreshAll (each repo gets its own timeout), so this only needs to
+// allow for the slowest single repo plus slack.
+const statusTimeout = 45 * time.Second
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	exclude := splitCSV(r.URL.Query().Get("exclude"))
@@ -364,7 +365,7 @@ type branchMappingUpdateRequest struct {
 }
 
 type branchMappingUpdateResult struct {
-	Success       bool                `json:"success"`
+	Success       bool                 `json:"success"`
 	BranchMapping *types.BranchMapping `json:"branchMapping,omitempty"`
 }
 
