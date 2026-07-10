@@ -91,7 +91,12 @@ func NewOperations() *Operations {
 
 // NewOperationsWithProxy creates a new Operations instance with proxy support.
 // The proxyURL is applied to both go-git (via environment) and CLI git commands.
+//
+// For socks5 proxies, InitTransport installs a custom go-git transport that
+// routes through a socks5 dialer — without it go-git treats socks5 as an HTTP
+// CONNECT proxy and every fetch fails with EOF.
 func NewOperationsWithProxy(proxyURL string) *Operations {
+	InitTransport(proxyURL)
 	return &Operations{
 		proxyURL:    proxyURL,
 		fetchTTL:    defaultFetchTTL,
