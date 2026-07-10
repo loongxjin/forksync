@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -120,7 +121,9 @@ func TestRefreshAllSlowRepoDoesNotStarveOthers(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	out, err := sf.RefreshAllWithPerRepoTimeout(ctx, repos, nil, 100*time.Millisecond)
+	// per-repo budget 300ms, fetch sub-budget 100ms. The slow repo's fetch is
+	// cut at 100ms, leaving ~200ms for its Status (local rev-list) to run.
+	out, err := sf.RefreshAllWithPerRepoTimeout(ctx, repos, nil, 300*time.Millisecond, 100*time.Millisecond)
 	elapsed := time.Since(start)
 
 	assertNoErr(t, err)
@@ -132,11 +135,11 @@ func TestRefreshAllSlowRepoDoesNotStarveOthers(t *testing.T) {
 	fastA := findRepoByName(t, out, "fast-a")
 	assert.Equal(t, 2, fastA.BehindBy, "fast repo must complete despite slow repo")
 
-	// The slow repo's per-repo ctx expired during its 800ms fetch, so its
-	// Status() call ran under an already-dead context and did not contribute
-	// a fresh result. Only the 2 fast repos successfully reached Status.
-	assert.Equal(t, int32(2), atomic.LoadInt32(&gitOps.statusCnt),
-		"only the fast repos should complete Status; the slow repo's ctx expired")
+	// The slow repo's fetch exceeded its per-repo timeout, but because fetch
+	// runs under its own sub-timeout, the repo's Status() should still run
+	// against local refs. All three repos reach Status.
+	assert.Equal(t, int32(3), atomic.LoadInt32(&gitOps.statusCnt),
+		"all repos should reach Status; fetch timeout must not exhaust the repo ctx")
 
 	// The whole batch must return well under the slow repo's 800ms, proving
 	// the slow repo did not block the others (it was cut off at 100ms).
@@ -162,12 +165,46 @@ func TestRefreshAllParentCancelPropagates(t *testing.T) {
 	}()
 
 	start := time.Now()
-	_, _ = sf.RefreshAllWithPerRepoTimeout(ctx, repos, nil, 10*time.Second)
+	_, _ = sf.RefreshAllWithPerRepoTimeout(ctx, repos, nil, 10*time.Second, 5*time.Second)
 	elapsed := time.Since(start)
 
 	if elapsed > 500*time.Millisecond {
 		t.Fatalf("parent cancel should abort quickly, took %v", elapsed)
 	}
+}
+
+// fetchFailGitOps always fails Fetch but succeeds Status, simulating "network
+// is down but local refs are present and usable".
+type fetchFailGitOps struct{ slowFakeGitOps }
+
+func (f *fetchFailGitOps) Fetch(context.Context, types.Repo) error {
+	return errSimulatedNetwork
+}
+
+var errSimulatedNetwork = errors.New("simulated network failure")
+
+// TestRefreshRepoStillComputesStatusWhenFetchFails verifies that a failed
+// fetch does not prevent ahead/behind from being computed from local refs.
+// Previously fetch and Status shared one ctx: a fetch timeout exhausted it and
+// the subsequent Status call failed with "context deadline exceeded", leaving
+// the repo with no status update at all.
+func TestRefreshRepoStillComputesStatusWhenFetchFails(t *testing.T) {
+	gitOps := &fetchFailGitOps{}
+	repo := types.Repo{ID: "1", Name: "r1", Path: "/r1", Status: types.RepoStatusUpToDate}
+	store := newMockStore(repo)
+	sf := NewStatusRefresher(gitOps, store, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	out, err := sf.RefreshAll(ctx, []types.Repo{repo}, nil)
+	assertNoErr(t, err)
+
+	got := findRepoByName(t, out, "r1")
+	assert.Equal(t, 2, got.BehindBy,
+		"Status should be computed from local refs even when fetch fails")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&gitOps.statusCnt),
+		"Status should have run once")
 }
 
 func assertNoErr(t *testing.T, err error) {
