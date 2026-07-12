@@ -156,13 +156,22 @@ func (o *Operations) IsGitRepo(_ context.Context, path string) bool {
 
 // Fetch fetches from the specified remote for the given repo.
 //
-// The status check's whole purpose is to detect new upstream commits, so every
-// call fetches unconditionally — caching would hide upstream changes for the
-// TTL window, which defeats the check. Fetch storms from event-driven refreshes
-// are bounded upstream instead: eventsStore coalesces bursts (300ms window) and
-// the frontend dedupes in-flight status calls, so once ahead/behind stop
-// changing the refreshes naturally settle.
+// The status check's whole purpose is to detect new upstream commits, so a real
+// fetch runs whenever upstream may have changed. To avoid re-transferring the
+// same large set of objects when upstream hasn't moved (e.g. a repo already
+// 181 commits behind, refreshed repeatedly), an ls-remote preflight compares
+// the upstream's current branch hash against the locally-tracked ref: if they
+// match, the fetch is skipped. The preflight is best-effort — any failure
+// falls through to a normal fetch. Event-driven refresh storms are also
+// bounded: eventsStore coalesces bursts (300ms window) and the frontend
+// dedupes in-flight status calls.
 func (o *Operations) Fetch(ctx context.Context, repo types.Repo) error {
+	if o.upstreamUnchanged(ctx, repo) {
+		logger.Debug("git: skipping fetch, upstream HEAD matches local tracking ref",
+			"repo", repo.Name)
+		return nil
+	}
+
 	// Try go-git first
 	err := o.fetchGoGit(ctx, repo)
 	if err == nil {
@@ -175,6 +184,18 @@ func (o *Operations) Fetch(ctx context.Context, repo types.Repo) error {
 		"error", err,
 	)
 	return o.fetchCLI(ctx, repo)
+}
+
+// upstreamUnchanged returns true if an ls-remote of the upstream's branch hash
+// equals the locally-tracked ref hash, meaning a full fetch would transfer no
+// new objects. It is best-effort: on any error or unknown hash it returns
+// false so a real fetch always runs.
+func (o *Operations) upstreamUnchanged(ctx context.Context, repo types.Repo) bool {
+	remoteHash := o.remoteHeadHash(ctx, repo)
+	if remoteHash == "" {
+		return false
+	}
+	return shouldSkipFetch(remoteHash, o.localTrackingHash(repo))
 }
 
 // proxyOptions returns transport.ProxyOptions if a proxy is configured.
