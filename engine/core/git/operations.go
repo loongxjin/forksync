@@ -62,31 +62,17 @@ type OperationsProvider interface {
 	GetCommitLog(ctx context.Context, repoPath, oldHEAD, upstreamRef string) ([]CommitInfo, error)
 }
 
-// defaultFetchTTL is how long a successful fetch result is considered fresh.
-// Within this window, repeated status refreshes skip the network fetch and
-// reuse the already-fetched refs. This prevents the "death spiral" where every
-// store.Update triggers a repos_changed event → a new GET /status → another
-// full batch of upstream fetches.
-const defaultFetchTTL = 60 * time.Second
-
 // Operations provides git operations with go-git primary and CLI fallback.
 var _ OperationsProvider = (*Operations)(nil)
 
 type Operations struct {
 	proxyURL string
 	mu       sync.Mutex // protects os.Setenv calls for go-git proxy
-
-	// fetchTTL is how long a fetched repo's refs are considered fresh.
-	fetchTTL time.Duration
-	// lastFetched maps repo path → time of the last successful fetch.
-	// Guarded by fetchMu.
-	lastFetched map[string]time.Time
-	fetchMu     sync.Mutex
 }
 
 // NewOperations creates a new Operations instance.
 func NewOperations() *Operations {
-	return &Operations{fetchTTL: defaultFetchTTL, lastFetched: make(map[string]time.Time)}
+	return &Operations{}
 }
 
 // NewOperationsWithProxy creates a new Operations instance with proxy support.
@@ -97,38 +83,7 @@ func NewOperations() *Operations {
 // CONNECT proxy and every fetch fails with EOF.
 func NewOperationsWithProxy(proxyURL string) *Operations {
 	InitTransport(proxyURL)
-	return &Operations{
-		proxyURL:    proxyURL,
-		fetchTTL:    defaultFetchTTL,
-		lastFetched: make(map[string]time.Time),
-	}
-}
-
-// NewOperationsWithTTL creates a new Operations instance with a custom fetch
-// dedup TTL. Intended for tests; production uses the default.
-func NewOperationsWithTTL(ttl time.Duration) *Operations {
-	return &Operations{fetchTTL: ttl, lastFetched: make(map[string]time.Time)}
-}
-
-// fetchKey derives the cache key for a repo. The path is the stable identity.
-func fetchKey(r types.Repo) string { return r.Path }
-
-// shouldFetch reports whether the repo should be fetched now, i.e. it has not
-// been successfully fetched within the TTL window.
-func (o *Operations) shouldFetch(repoPath string) bool {
-	o.fetchMu.Lock()
-	defer o.fetchMu.Unlock()
-	if t, ok := o.lastFetched[repoPath]; ok {
-		return time.Since(t) >= o.fetchTTL
-	}
-	return true
-}
-
-// markFetched records that a repo was successfully fetched at the given time.
-func (o *Operations) markFetched(repoPath string, at time.Time) {
-	o.fetchMu.Lock()
-	defer o.fetchMu.Unlock()
-	o.lastFetched[repoPath] = at
+	return &Operations{proxyURL: proxyURL}
 }
 
 // proxyEnv returns environment variables with proxy settings for CLI git commands.
@@ -201,20 +156,16 @@ func (o *Operations) IsGitRepo(_ context.Context, path string) bool {
 
 // Fetch fetches from the specified remote for the given repo.
 //
-// To avoid hammering the upstream on every status refresh (each GET /status
-// refreshes all repos, and store.Update re-triggers /status via events), a
-// repo is only fetched if its refs are older than the fetch TTL. A failed
-// fetch does not refresh the cache, so retries are not suppressed.
+// The status check's whole purpose is to detect new upstream commits, so every
+// call fetches unconditionally — caching would hide upstream changes for the
+// TTL window, which defeats the check. Fetch storms from event-driven refreshes
+// are bounded upstream instead: eventsStore coalesces bursts (300ms window) and
+// the frontend dedupes in-flight status calls, so once ahead/behind stop
+// changing the refreshes naturally settle.
 func (o *Operations) Fetch(ctx context.Context, repo types.Repo) error {
-	if !o.shouldFetch(fetchKey(repo)) {
-		return nil
-	}
-
-	start := time.Now()
 	// Try go-git first
 	err := o.fetchGoGit(ctx, repo)
 	if err == nil {
-		o.markFetched(fetchKey(repo), start)
 		return nil
 	}
 	// Fallback to CLI
@@ -223,11 +174,7 @@ func (o *Operations) Fetch(ctx context.Context, repo types.Repo) error {
 		"path", repo.Path,
 		"error", err,
 	)
-	if err := o.fetchCLI(ctx, repo); err != nil {
-		return err
-	}
-	o.markFetched(fetchKey(repo), start)
-	return nil
+	return o.fetchCLI(ctx, repo)
 }
 
 // proxyOptions returns transport.ProxyOptions if a proxy is configured.
