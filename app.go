@@ -74,7 +74,10 @@ func (a *App) shutdown(_ context.Context) {
 // Status
 // ---------------------------------------------------------------------------
 
-const statusTimeout = 30 * time.Second
+// statusTimeout caps the whole Status call. Per-repo isolation is handled
+// inside RefreshAll (each repo gets its own perRepoStatusTimeout), so this
+// only needs to allow for the slowest single repo plus slack — not N×per-repo.
+const statusTimeout = 45 * time.Second
 
 func (a *App) Status(exclude []string) (types.StatusData, error) {
 	if a.deps == nil {
@@ -366,9 +369,9 @@ type SetBranchMappingRequest struct {
 
 // SetBranchMappingResult mirrors the HTTP response shape.
 type SetBranchMappingResult struct {
-	Success       bool                `json:"success"`
+	Success       bool                 `json:"success"`
 	BranchMapping *types.BranchMapping `json:"branchMapping,omitempty"`
-	Error         string              `json:"error,omitempty"`
+	Error         string               `json:"error,omitempty"`
 }
 
 func (a *App) SetBranchMapping(req SetBranchMappingRequest) (SetBranchMappingResult, error) {
