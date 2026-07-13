@@ -192,9 +192,6 @@ func (o *Operations) Fetch(ctx context.Context, repo types.Repo) error {
 // false so a real fetch always runs.
 func (o *Operations) upstreamUnchanged(ctx context.Context, repo types.Repo) bool {
 	remoteHash := o.remoteHeadHash(ctx, repo)
-	if remoteHash == "" {
-		return false
-	}
 	return shouldSkipFetch(remoteHash, o.localTrackingHash(repo))
 }
 

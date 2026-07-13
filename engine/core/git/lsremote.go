@@ -3,10 +3,10 @@ package git
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/loongxjin/forksync/engine/core/logger"
 	"github.com/loongxjin/forksync/engine/pkg/types"
 )
 
@@ -24,14 +24,19 @@ func shouldSkipFetch(remoteHash, localHash string) bool {
 // remoteHeadHash queries the upstream (via ls-remote, no object transfer) for
 // the current hash of the repo's target branch. Returns "" if the query fails
 // or the ref is absent — callers must treat "" as "unknown, proceed to fetch".
+//
+// The CLI is tried first: git reads the user's global http.proxy config and
+// libcurl manages the connection more robustly than go-git's HTTP transport,
+// which is unreliable on large ref advertisements and does not read git config.
+// go-git ls-remote is the fallback for environments where the CLI is unavailable.
 func (o *Operations) remoteHeadHash(ctx context.Context, repo types.Repo) string {
-	hash, err := o.lsRemoteGoGit(ctx, repo)
-	if err != nil {
-		logger.Debug("git: ls-remote preflight failed, will fetch normally",
-			"repo", repo.Name, "error", err)
-		return ""
+	if hash, err := o.lsRemoteCLI(ctx, repo); err == nil {
+		return hash
 	}
-	return hash
+	if hash, err := o.lsRemoteGoGit(ctx, repo); err == nil {
+		return hash
+	}
+	return ""
 }
 
 // lsRemoteGoGit performs a go-git ls-remote against the upstream and returns
@@ -103,4 +108,40 @@ func (o *Operations) localTrackingHash(repo types.Repo) string {
 		return ""
 	}
 	return ref.Hash().String()
+}
+
+// lsRemoteCLI runs `git ls-remote <remote> refs/heads/<branch>` and returns the
+// advertised hash. Used as a fallback when go-git's ls-remote fails.
+func (o *Operations) lsRemoteCLI(ctx context.Context, repo types.Repo) (string, error) {
+	r, err := git.PlainOpen(repo.Path)
+	if err != nil {
+		return "", fmt.Errorf("open repo: %w", err)
+	}
+	branch := repo.Branch
+	if branch == "" {
+		head, headErr := r.Head()
+		if headErr != nil {
+			return "", fmt.Errorf("get HEAD for branch inference: %w", headErr)
+		}
+		branch = head.Name().Short()
+	}
+	remoteName := repo.RemoteName()
+	refSpec := "refs/heads/" + branch
+
+	output, err := o.runGit(ctx, repo.Path, "ls-remote", remoteName, refSpec)
+	if err != nil {
+		return "", fmt.Errorf("git ls-remote: %w", err)
+	}
+	// Output format: "<40-hex-hash>\trefs/heads/<branch>\n". Take the first
+	// field of the first line.
+	for _, line := range strings.Split(string(output), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[1] == refSpec {
+			return fields[0], nil
+		}
+	}
+	return "", fmt.Errorf("branch %s not advertised by %s", branch, remoteName)
 }
